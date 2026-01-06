@@ -401,8 +401,8 @@
       };
 
       const findHeaderRowIndex = (rows) => {
-        const headerRegex = /standard job|period\\s*\\d+/i;
-        const maxScan = Math.min(rows.length, 10);
+        const headerRegex = /standard job|period\\s*\\d+|work order closed period|units complete|work order closed year/i;
+        const maxScan = Math.min(rows.length, 25);
 
         for (let i = 0; i < maxScan; i += 1) {
           const row = rows[i] || [];
