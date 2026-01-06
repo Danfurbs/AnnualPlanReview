@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Annual Plan Review Tool</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #f5f6f8;
+        color: #1c1f23;
+      }
+
+      header {
+        margin-bottom: 16px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+
+      .controls label {
+        font-weight: 600;
+      }
+
+      .controls input[type="file"] {
+        background: #fff;
+        border-radius: 6px;
+        padding: 6px;
+        border: 1px solid #d0d4da;
+      }
+
+      .controls select,
+      .controls input[type="search"] {
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid #c9ced6;
+        min-width: 180px;
+      }
+
+      .table-wrapper {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+        overflow: auto;
+        max-height: 70vh;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 900px;
+      }
+
+      th,
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid #e2e6ec;
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      th {
+        position: sticky;
+        top: 0;
+        background: #d8e6fb;
+        z-index: 1;
+      }
+
+      tbody tr:nth-child(even) {
+        background: #fafbfc;
+      }
+
+      .empty-state {
+        padding: 40px;
+        text-align: center;
+        color: #657080;
+      }
+
+      .helper {
+        font-size: 13px;
+        color: #5b6775;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Annual Plan Review</h1>
+      <p class="helper">
+        Upload an Excel file to generate a table with the Standard Job number,
+        description, and Periods 1–13. Use the filters to focus on a specific
+        period or search within the data.
+      </p>
+    </header>
+
+    <section class="controls">
+      <label>
+        Upload file
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+      </label>
+
+      <label>
+        Period filter
+        <select id="periodFilter">
+          <option value="all">All periods</option>
+        </select>
+      </label>
+
+      <label>
+        Search
+        <input type="search" id="tableSearch" placeholder="Filter rows..." />
+      </label>
+    </section>
+
+    <div class="table-wrapper" id="tableWrapper">
+      <div class="empty-state" id="emptyState">
+        Upload a file to view Periods 1–13.
+      </div>
+      <table id="dataTable" hidden>
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+      const fileInput = document.getElementById("fileInput");
+      const periodFilter = document.getElementById("periodFilter");
+      const tableSearch = document.getElementById("tableSearch");
+      const dataTable = document.getElementById("dataTable");
+      const tableHead = dataTable.querySelector("thead");
+      const tableBody = dataTable.querySelector("tbody");
+      const emptyState = document.getElementById("emptyState");
+
+      const periodOptions = Array.from({ length: 13 }, (_, index) => `Period ${index + 1}`);
+      periodOptions.forEach((period) => {
+        const option = document.createElement("option");
+        option.value = period;
+        option.textContent = period;
+        periodFilter.appendChild(option);
+      });
+
+      let currentHeaders = [];
+      let currentRows = [];
+
+      const resetTable = () => {
+        tableHead.innerHTML = "";
+        tableBody.innerHTML = "";
+        dataTable.hidden = true;
+        emptyState.hidden = false;
+      };
+
+      const normalizeHeader = (value) => String(value || "").trim();
+
+      const preferredPeriods = Array.from({ length: 13 }, (_, index) => `Period ${index + 1}`);
+      const standardJobNumberHeaders = ["Standard Job No", "Standard Job Number"];
+      const standardJobDescriptionHeaders = ["Standard Job Description"];
+
+      const pickRelevantHeaders = (headers) => {
+        const lookup = new Map();
+
+        headers.forEach((header, index) => {
+          lookup.set(header.toLowerCase(), headers[index]);
+        });
+
+        const standardJobNumber = standardJobNumberHeaders
+          .map((candidate) => lookup.get(candidate.toLowerCase()))
+          .find(Boolean);
+
+        const standardJobDescription = standardJobDescriptionHeaders
+          .map((candidate) => lookup.get(candidate.toLowerCase()))
+          .find(Boolean);
+
+        const periodMatches = preferredPeriods
+          .map((period) => lookup.get(period.toLowerCase()))
+          .filter(Boolean);
+
+        const ordered = [
+          standardJobNumber,
+          standardJobDescription,
+          ...periodMatches,
+        ].filter(Boolean);
+
+        if (ordered.length) {
+          return ordered;
+        }
+
+        return headers.filter((header) => /^Period\\s*\\d+$/i.test(header));
+      };
+
+      const renderTable = (headers, rows) => {
+        currentHeaders = headers;
+        currentRows = rows;
+
+        const headerRow = document.createElement("tr");
+        headers.forEach((header) => {
+          const th = document.createElement("th");
+          th.textContent = header;
+          th.dataset.column = header;
+          headerRow.appendChild(th);
+        });
+        tableHead.innerHTML = "";
+        tableHead.appendChild(headerRow);
+
+        tableBody.innerHTML = "";
+        rows.forEach((row) => {
+          const tr = document.createElement("tr");
+          headers.forEach((header) => {
+            const td = document.createElement("td");
+            td.textContent = row[header] ?? "";
+            td.dataset.column = header;
+            tr.appendChild(td);
+          });
+          tableBody.appendChild(tr);
+        });
+
+        dataTable.hidden = false;
+        emptyState.hidden = true;
+        applyFilters();
+      };
+
+      const applyFilters = () => {
+        const searchValue = tableSearch.value.toLowerCase();
+        const selectedPeriod = periodFilter.value;
+
+        const periodColumns = currentHeaders.filter((header) =>
+          /^Period\s*\d+$/i.test(header)
+        );
+
+        const visibleColumns =
+          selectedPeriod === "all"
+            ? currentHeaders
+            : currentHeaders.filter(
+                (header) => header.toLowerCase() === selectedPeriod.toLowerCase() || !periodColumns.includes(header)
+              );
+
+        const headersToHide = currentHeaders.filter(
+          (header) => !visibleColumns.includes(header)
+        );
+
+        dataTable.querySelectorAll("th, td").forEach((cell) => {
+          const column = cell.dataset.column;
+          if (headersToHide.includes(column)) {
+            cell.style.display = "none";
+          } else {
+            cell.style.display = "table-cell";
+          }
+        });
+
+        Array.from(tableBody.rows).forEach((row) => {
+          const rowText = Array.from(row.cells)
+            .map((cell) => cell.textContent.toLowerCase())
+            .join(" ");
+          row.style.display = rowText.includes(searchValue) ? "" : "none";
+        });
+      };
+
+      const findHeaderRowIndex = (rows) => {
+        const headerRegex = /standard job|period\\s*\\d+/i;
+        const maxScan = Math.min(rows.length, 10);
+
+        for (let i = 0; i < maxScan; i += 1) {
+          const row = rows[i] || [];
+          const normalizedRow = row.map(normalizeHeader);
+          const hasHeader = normalizedRow.some((cell) => headerRegex.test(cell));
+          if (hasHeader) {
+            return i;
+          }
+        }
+        return 0;
+      };
+
+      const parseSheetToJSON = (sheet) => {
+        const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+        if (!raw.length) return { headers: [], rows: [] };
+
+        const headerRowIndex = findHeaderRowIndex(raw);
+        const headerRow = raw[headerRowIndex];
+        const dataRows = raw.slice(headerRowIndex + 1);
+        if (!headerRow) return { headers: [], rows: [] };
+
+        const headers = headerRow.map(normalizeHeader);
+        const rows = dataRows.map((row) => {
+          const rowData = {};
+          headers.forEach((header, index) => {
+            rowData[header] = row?.[index] ?? "";
+          });
+          return rowData;
+        });
+        return { headers, rows };
+      };
+
+      fileInput.addEventListener("change", (event) => {
+        const file = event.target.files?.[0];
+        if (!file) {
+          resetTable();
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const { headers, rows } = parseSheetToJSON(firstSheet);
+
+          if (!headers.length) {
+            resetTable();
+            return;
+          }
+
+          const filteredHeaders = pickRelevantHeaders(headers);
+          const filteredRows = rows.map((row) => {
+            const filtered = {};
+            filteredHeaders.forEach((header) => {
+              filtered[header] = row[header] ?? "";
+            });
+            return filtered;
+          });
+
+          renderTable(filteredHeaders, filteredRows);
+        };
+        reader.readAsArrayBuffer(file);
+      });
+
+      periodFilter.addEventListener("change", applyFilters);
+      tableSearch.addEventListener("input", applyFilters);
+    </script>
+  </body>
+</html>
