@@ -38,13 +38,6 @@
         font-weight: 600;
       }
 
-      .controls input[type="file"] {
-        background: #fff;
-        border-radius: 6px;
-        padding: 6px;
-        border: 1px solid #d0d4da;
-      }
-
       .controls select,
       .controls input[type="search"] {
         padding: 8px 10px;
@@ -96,6 +89,135 @@
         font-size: 13px;
         color: #5b6775;
       }
+
+      .primary-button {
+        border: none;
+        border-radius: 6px;
+        padding: 10px 16px;
+        background: #2563eb;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+      }
+
+      .primary-button:hover {
+        background: #1d4ed8;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+
+      .modal-backdrop.is-open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .modal {
+        background: #fff;
+        border-radius: 12px;
+        max-width: 520px;
+        width: 100%;
+        padding: 20px 22px;
+        box-shadow: 0 16px 32px rgba(15, 23, 42, 0.2);
+      }
+
+      .modal header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+      }
+
+      .modal h2 {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .modal button.close-button {
+        border: none;
+        background: transparent;
+        font-size: 20px;
+        cursor: pointer;
+        color: #475569;
+      }
+
+      .modal label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-weight: 600;
+      }
+
+      .modal input[type="file"] {
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 10px;
+        border: 1px solid #d0d4da;
+      }
+
+      .modal .helper {
+        margin-top: 2px;
+      }
+
+      .modal .file-group {
+        display: grid;
+        gap: 14px;
+      }
+
+      .debug-panel {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+        padding: 16px;
+        margin-top: 16px;
+      }
+
+      .debug-panel textarea {
+        width: 100%;
+        min-height: 160px;
+        resize: vertical;
+        border-radius: 8px;
+        border: 1px solid #d0d4da;
+        padding: 10px;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 13px;
+        background: #f8fafc;
+      }
+
+      .debug-panel header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+
+      .debug-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .debug-actions button {
+        border: 1px solid #cbd5f5;
+        background: #eef2ff;
+        color: #334155;
+        border-radius: 6px;
+        padding: 6px 10px;
+        cursor: pointer;
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>
@@ -109,10 +231,9 @@
     </header>
 
     <section class="controls">
-      <label>
-        Upload file
-        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
-      </label>
+      <button type="button" class="primary-button" id="openUploadModal">
+        Upload files
+      </button>
 
       <label>
         Period filter
@@ -127,9 +248,40 @@
       </label>
     </section>
 
+    <div class="modal-backdrop" id="uploadModal" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
+        <header>
+          <div>
+            <h2 id="uploadModalTitle">Upload files</h2>
+            <p class="helper">
+              Add your standard jobs file and the work done export to build the
+              Period 1–13 summary table.
+            </p>
+          </div>
+          <button type="button" class="close-button" id="closeUploadModal" aria-label="Close">
+            &times;
+          </button>
+        </header>
+        <div class="file-group">
+          <label>
+            Standard jobs file
+            <input type="file" id="standardJobsInput" accept=".xlsx,.xls,.csv" />
+            <span class="helper">Includes Standard Job No, description, and Period columns.</span>
+          </label>
+          <label>
+            Work done file
+            <input type="file" id="workDoneInput" accept=".xlsx,.xls,.csv" />
+            <span class="helper">
+              Uses Work Order Closed Period, Units Complete, and Standard Job Number &amp; Desc.
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
+
     <div class="table-wrapper" id="tableWrapper">
       <div class="empty-state" id="emptyState">
-        Upload a file to view Periods 1–13.
+        Upload files to view Periods 1–13.
       </div>
       <table id="dataTable" hidden>
         <thead></thead>
@@ -137,15 +289,39 @@
       </table>
     </div>
 
+    <section class="debug-panel">
+      <header>
+        <div>
+          <h2>Debug log</h2>
+          <p class="helper">Use this to verify detected sheets, headers, and parsed totals.</p>
+        </div>
+        <div class="debug-actions">
+          <label>
+            <input type="checkbox" id="debugToggle" />
+            Enable logging
+          </label>
+          <button type="button" id="clearDebug">Clear</button>
+        </div>
+      </header>
+      <textarea id="debugOutput" readonly placeholder="Debug output will appear here when logging is enabled."></textarea>
+    </section>
+
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
-      const fileInput = document.getElementById("fileInput");
+      const openUploadModal = document.getElementById("openUploadModal");
+      const uploadModal = document.getElementById("uploadModal");
+      const closeUploadModal = document.getElementById("closeUploadModal");
+      const standardJobsInput = document.getElementById("standardJobsInput");
+      const workDoneInput = document.getElementById("workDoneInput");
       const periodFilter = document.getElementById("periodFilter");
       const tableSearch = document.getElementById("tableSearch");
       const dataTable = document.getElementById("dataTable");
       const tableHead = dataTable.querySelector("thead");
       const tableBody = dataTable.querySelector("tbody");
       const emptyState = document.getElementById("emptyState");
+      const debugToggle = document.getElementById("debugToggle");
+      const debugOutput = document.getElementById("debugOutput");
+      const clearDebug = document.getElementById("clearDebug");
 
       const periodOptions = Array.from({ length: 13 }, (_, index) => `Period ${index + 1}`);
       periodOptions.forEach((period) => {
@@ -157,6 +333,25 @@
 
       let currentHeaders = [];
       let currentRows = [];
+      let debugEnabled = false;
+
+      const logDebug = (message) => {
+        if (!debugEnabled) return;
+        const timestamp = new Date().toLocaleTimeString();
+        debugOutput.value += `[${timestamp}] ${message}\n`;
+        debugOutput.scrollTop = debugOutput.scrollHeight;
+      };
+
+      debugToggle.addEventListener("change", (event) => {
+        debugEnabled = event.target.checked;
+        if (debugEnabled) {
+          logDebug("Debug logging enabled.");
+        }
+      });
+
+      clearDebug.addEventListener("click", () => {
+        debugOutput.value = "";
+      });
 
       const resetTable = () => {
         tableHead.innerHTML = "";
@@ -203,6 +398,24 @@
         return headers.filter((header) => /^Period\\s*\\d+$/i.test(header));
       };
 
+      const showModal = () => {
+        uploadModal.classList.add("is-open");
+        uploadModal.setAttribute("aria-hidden", "false");
+      };
+
+      const hideModal = () => {
+        uploadModal.classList.remove("is-open");
+        uploadModal.setAttribute("aria-hidden", "true");
+      };
+
+      openUploadModal.addEventListener("click", showModal);
+      closeUploadModal.addEventListener("click", hideModal);
+      uploadModal.addEventListener("click", (event) => {
+        if (event.target === uploadModal) {
+          hideModal();
+        }
+      });
+
       const renderTable = (headers, rows) => {
         currentHeaders = headers;
         currentRows = rows;
@@ -231,6 +444,7 @@
 
         dataTable.hidden = false;
         emptyState.hidden = true;
+        logDebug(`Rendered table with ${headers.length} columns and ${rows.length} rows.`);
         applyFilters();
       };
 
@@ -271,8 +485,8 @@
       };
 
       const findHeaderRowIndex = (rows) => {
-        const headerRegex = /standard job|period\\s*\\d+/i;
-        const maxScan = Math.min(rows.length, 10);
+        const headerRegex = /standard job|period\\s*\\d+|work order closed period|units complete|work order closed year/i;
+        const maxScan = Math.min(rows.length, 25);
 
         for (let i = 0; i < maxScan; i += 1) {
           const row = rows[i] || [];
@@ -295,6 +509,8 @@
         if (!headerRow) return { headers: [], rows: [] };
 
         const headers = headerRow.map(normalizeHeader);
+        logDebug(`Detected header row at index ${headerRowIndex}.`);
+        logDebug(`Headers found: ${headers.filter(Boolean).join(", ")}`);
         const rows = dataRows.map((row) => {
           const rowData = {};
           headers.forEach((header, index) => {
@@ -305,22 +521,241 @@
         return { headers, rows };
       };
 
-      fileInput.addEventListener("change", (event) => {
-        const file = event.target.files?.[0];
-        if (!file) {
+      const workDoneHeaders = {
+        period: ["Work Order Closed Period"],
+        units: ["Units Complete"],
+        year: ["Work Order Closed Year"],
+        job: [
+          "Standard Job Number & Desc",
+          "Standard Job Number & Description",
+          "Standard Job # & Desc",
+        ],
+      };
+
+      const normalizeHeaderKey = (value) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "");
+
+      const normalizedStandardJobNumberHeaders = standardJobNumberHeaders.map(normalizeHeaderKey);
+
+      const isConvertedHeader = (value) => normalizeHeaderKey(value).includes("converted");
+
+      const getHeaderMatch = (headers, candidates) => {
+        const normalizedHeaders = headers.map((header) => ({
+          raw: header,
+          key: normalizeHeaderKey(header),
+        }));
+
+        for (const candidate of candidates) {
+          const candidateKey = normalizeHeaderKey(candidate);
+          const exactMatch = normalizedHeaders.find(
+            (header) => header.key === candidateKey && !isConvertedHeader(header.raw)
+          );
+          if (exactMatch) return exactMatch.raw;
+
+          const partialMatch = normalizedHeaders.find(
+            (header) => header.key.includes(candidateKey) && !isConvertedHeader(header.raw)
+          );
+          if (partialMatch) return partialMatch.raw;
+        }
+
+        return null;
+      };
+
+      const parseJobNumberAndDescription = (value) => {
+        const text = String(value || "").trim();
+        if (!text) return { number: "", description: "" };
+        const leadingDigits = text.match(/^\\s*(\\d{6})\\b/);
+        if (leadingDigits) {
+          const description = text
+            .slice(leadingDigits[0].length)
+            .trim()
+            .replace(/^[-–]\\s*/, "");
+          return { number: leadingDigits[1], description };
+        }
+        const dashMatch = text.match(/^\\s*([A-Za-z0-9]+)\\s*[-–]\\s*(.+)$/);
+        if (dashMatch) {
+          return { number: dashMatch[1].trim(), description: dashMatch[2].trim() };
+        }
+        const parts = text.split(/\s+/);
+        if (parts.length > 1) {
+          return { number: parts[0], description: parts.slice(1).join(" ") };
+        }
+        return { number: text, description: "" };
+      };
+
+      const normalizeJobNumber = (value) => {
+        const raw = String(value || "").trim();
+        if (!raw) return "";
+        if (/^\\d+$/.test(raw)) {
+          return raw.padStart(6, "0");
+        }
+        return raw;
+      };
+
+      const normalizePeriodLabel = (value) => {
+        const raw = String(value || "").trim();
+        if (!raw) return null;
+        if (/^Period\\s*\\d+/i.test(raw)) return raw.replace(/\\s+/g, " ");
+        if (/^\\d+(\\.\\d+)?$/.test(raw)) {
+          const periodNumber = Number(raw);
+          if (Number.isNaN(periodNumber)) return null;
+          if (periodNumber < 1 || periodNumber > 13) return null;
+          return `Period ${periodNumber}`;
+        }
+        const match = raw.match(/(\\d+)/);
+        if (!match) return null;
+        const periodNumber = Number(match[1]);
+        if (Number.isNaN(periodNumber)) return null;
+        if (periodNumber < 1 || periodNumber > 13) return null;
+        return `Period ${periodNumber}`;
+      };
+
+      const parseUnitsValue = (value) => {
+        if (value === null || value === undefined) return 0;
+        const cleaned = String(value).replace(/,/g, "").trim();
+        const parsed = Number(cleaned);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      };
+
+      const buildWorkDoneSummary = (headers, rows) => {
+        const periodHeader = getHeaderMatch(headers, workDoneHeaders.period);
+        const unitsHeader = getHeaderMatch(headers, workDoneHeaders.units);
+        const jobHeader = getHeaderMatch(headers, workDoneHeaders.job);
+
+        logDebug(
+          `Work-done header matches → period: ${periodHeader || "missing"}, units: ${
+            unitsHeader || "missing"
+          }, job: ${jobHeader || "missing"}`
+        );
+
+        if (!periodHeader || !unitsHeader || !jobHeader) {
+          return { headers: [], rows: [] };
+        }
+
+        const summaryMap = new Map();
+
+        rows.forEach((row) => {
+          const periodLabel = normalizePeriodLabel(row[periodHeader]);
+          if (!periodLabel) return;
+          const units = parseUnitsValue(row[unitsHeader]);
+          const { number, description } = parseJobNumberAndDescription(row[jobHeader]);
+          const normalizedNumber = normalizeJobNumber(number);
+          if (!number) return;
+
+          const key = normalizedNumber;
+          if (!summaryMap.has(key)) {
+            summaryMap.set(key, {
+              "Standard Job Number": normalizedNumber,
+              "Standard Job Description": description,
+              ...Object.fromEntries(preferredPeriods.map((period) => [period, 0])),
+            });
+          }
+
+          const entry = summaryMap.get(key);
+          if (entry && preferredPeriods.includes(periodLabel)) {
+            entry[periodLabel] += Number.isNaN(units) ? 0 : units;
+          }
+        });
+
+        logDebug(`Work-done summary rows: ${summaryMap.size}.`);
+
+        const headersToRender = [
+          "Standard Job Number",
+          "Standard Job Description",
+          ...preferredPeriods,
+        ];
+
+        return { headers: headersToRender, rows: Array.from(summaryMap.values()) };
+      };
+
+      let standardJobsData = null;
+      let workDoneData = null;
+
+      const updateTableFromUploads = () => {
+        if (!standardJobsData && !workDoneData) {
           resetTable();
           return;
         }
+
+        if (workDoneData && standardJobsData) {
+          const workDoneMap = new Map(
+            workDoneData.rows.map((row) => [row["Standard Job Number"], row])
+          );
+          const standardJobKeys = new Set(
+            standardJobsData.rows.map((row) => {
+              const rawNumber = row["Standard Job No"] ?? row["Standard Job Number"] ?? "";
+              const normalizedNumber = normalizeJobNumber(rawNumber);
+              return normalizedNumber;
+            })
+          );
+
+          const mergedRows = standardJobsData.rows.map((row) => {
+            const number =
+              normalizeJobNumber(
+                row["Standard Job No"] ??
+                  row["Standard Job Number"] ??
+                  row["Standard Job Number"] ??
+                  ""
+              );
+            const description = row["Standard Job Description"] ?? "";
+            const key = number;
+            const workRow = workDoneMap.get(key);
+            const merged = {
+              "Standard Job Number": number,
+              "Standard Job Description": description,
+            };
+            preferredPeriods.forEach((period) => {
+              merged[period] = workRow ? workRow[period] : row[period] ?? 0;
+            });
+            return merged;
+          });
+
+          const missingRows = workDoneData.rows.filter((row) => {
+            const key = row["Standard Job Number"];
+            return !standardJobKeys.has(key);
+          });
+
+          logDebug(
+            `Merged standard jobs (${standardJobsData.rows.length}) with work done (${workDoneData.rows.length}).`
+          );
+          renderTable(workDoneData.headers, [...mergedRows, ...missingRows]);
+          return;
+        }
+
+        if (workDoneData) {
+          logDebug("Rendering work-done-only table (standard jobs not uploaded).");
+          renderTable(workDoneData.headers, workDoneData.rows);
+          return;
+        }
+
+        if (standardJobsData) {
+          logDebug("Rendering standard-jobs-only table (work done not uploaded).");
+          renderTable(standardJobsData.headers, standardJobsData.rows);
+        }
+      };
+
+      const handleStandardJobsUpload = (file) => {
+        if (!file) {
+          standardJobsData = null;
+          updateTableFromUploads();
+          return;
+        }
+
+        logDebug(`Standard jobs file selected: ${file.name}`);
 
         const reader = new FileReader();
         reader.onload = (e) => {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: "array" });
+          logDebug(`Standard jobs sheets: ${workbook.SheetNames.join(", ")}`);
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const { headers, rows } = parseSheetToJSON(firstSheet);
 
           if (!headers.length) {
-            resetTable();
+            standardJobsData = null;
+            updateTableFromUploads();
             return;
           }
 
@@ -328,14 +763,66 @@
           const filteredRows = rows.map((row) => {
             const filtered = {};
             filteredHeaders.forEach((header) => {
-              filtered[header] = row[header] ?? "";
+              if (normalizedStandardJobNumberHeaders.includes(normalizeHeaderKey(header))) {
+                filtered[header] = normalizeJobNumber(row[header]);
+              } else {
+                filtered[header] = row[header] ?? "";
+              }
             });
             return filtered;
           });
 
-          renderTable(filteredHeaders, filteredRows);
+          standardJobsData = { headers: filteredHeaders, rows: filteredRows };
+          logDebug(`Standard jobs rows loaded: ${filteredRows.length}.`);
+          updateTableFromUploads();
         };
         reader.readAsArrayBuffer(file);
+      };
+
+      const handleWorkDoneUpload = (file) => {
+        if (!file) {
+          workDoneData = null;
+          updateTableFromUploads();
+          return;
+        }
+
+        logDebug(`Work done file selected: ${file.name}`);
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          logDebug(`Work done sheets: ${workbook.SheetNames.join(", ")}`);
+          const workDoneSheet =
+            workbook.Sheets["Detail"] ||
+            workbook.Sheets["detail"] ||
+            workbook.Sheets[workbook.SheetNames[0]];
+          logDebug(
+            `Work done sheet used: ${
+              workbook.SheetNames.find((name) => workbook.Sheets[name] === workDoneSheet) ||
+              workbook.SheetNames[0]
+            }`
+          );
+          const { headers, rows } = parseSheetToJSON(workDoneSheet);
+
+          if (!headers.length) {
+            workDoneData = null;
+            updateTableFromUploads();
+            return;
+          }
+
+          workDoneData = buildWorkDoneSummary(headers, rows);
+          updateTableFromUploads();
+        };
+        reader.readAsArrayBuffer(file);
+      };
+
+      standardJobsInput.addEventListener("change", (event) => {
+        handleStandardJobsUpload(event.target.files?.[0]);
+      });
+
+      workDoneInput.addEventListener("change", (event) => {
+        handleWorkDoneUpload(event.target.files?.[0]);
       });
 
       periodFilter.addEventListener("change", applyFilters);
