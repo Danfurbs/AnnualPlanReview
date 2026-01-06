@@ -537,6 +537,8 @@
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "");
 
+      const normalizedStandardJobNumberHeaders = standardJobNumberHeaders.map(normalizeHeaderKey);
+
       const isConvertedHeader = (value) => normalizeHeaderKey(value).includes("converted");
 
       const getHeaderMatch = (headers, candidates) => {
@@ -685,12 +687,12 @@
             ])
           );
           const standardJobKeys = new Set(
-            standardJobsData.rows.map(
-              (row) =>
-                `${row["Standard Job No"] ?? row["Standard Job Number"] ?? ""}||${
-                  row["Standard Job Description"] ?? ""
-                }`
-            )
+            standardJobsData.rows.map((row) => {
+              const rawNumber = row["Standard Job No"] ?? row["Standard Job Number"] ?? "";
+              const normalizedNumber = normalizeJobNumber(rawNumber);
+              const description = row["Standard Job Description"] ?? "";
+              return `${normalizedNumber}||${description}`;
+            })
           );
 
           const mergedRows = standardJobsData.rows.map((row) => {
@@ -765,7 +767,7 @@
           const filteredRows = rows.map((row) => {
             const filtered = {};
             filteredHeaders.forEach((header) => {
-              if (standardJobNumberHeaders.includes(header)) {
+              if (normalizedStandardJobNumberHeaders.includes(normalizeHeaderKey(header))) {
                 filtered[header] = normalizeJobNumber(row[header]);
               } else {
                 filtered[header] = row[header] ?? "";
