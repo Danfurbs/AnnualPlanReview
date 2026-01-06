@@ -466,6 +466,15 @@
         return { number: text, description: "" };
       };
 
+      const normalizeJobNumber = (value) => {
+        const raw = String(value || "").trim();
+        if (!raw) return "";
+        if (/^\\d+$/.test(raw)) {
+          return raw.padStart(6, "0");
+        }
+        return raw;
+      };
+
       const normalizePeriodLabel = (value) => {
         const raw = String(value || "").trim();
         if (!raw) return null;
@@ -501,12 +510,13 @@
           if (!periodLabel) return;
           const units = parseUnitsValue(row[unitsHeader]);
           const { number, description } = parseJobNumberAndDescription(row[jobHeader]);
+          const normalizedNumber = normalizeJobNumber(number);
           if (!number) return;
 
-          const key = `${number}||${description}`;
+          const key = `${normalizedNumber}||${description}`;
           if (!summaryMap.has(key)) {
             summaryMap.set(key, {
-              "Standard Job Number": number,
+              "Standard Job Number": normalizedNumber,
               "Standard Job Description": description,
               ...Object.fromEntries(preferredPeriods.map((period) => [period, 0])),
             });
@@ -554,10 +564,12 @@
 
           const mergedRows = standardJobsData.rows.map((row) => {
             const number =
-              row["Standard Job No"] ??
-              row["Standard Job Number"] ??
-              row["Standard Job Number"] ??
-              "";
+              normalizeJobNumber(
+                row["Standard Job No"] ??
+                  row["Standard Job Number"] ??
+                  row["Standard Job Number"] ??
+                  ""
+              );
             const description = row["Standard Job Description"] ?? "";
             const key = `${number}||${description}`;
             const workRow = workDoneMap.get(key);
@@ -614,7 +626,11 @@
           const filteredRows = rows.map((row) => {
             const filtered = {};
             filteredHeaders.forEach((header) => {
-              filtered[header] = row[header] ?? "";
+              if (standardJobNumberHeaders.includes(header)) {
+                filtered[header] = normalizeJobNumber(row[header]);
+              } else {
+                filtered[header] = row[header] ?? "";
+              }
             });
             return filtered;
           });
