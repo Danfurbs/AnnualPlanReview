@@ -644,7 +644,7 @@
           const normalizedNumber = normalizeJobNumber(number);
           if (!number) return;
 
-          const key = `${normalizedNumber}||${description}`;
+          const key = normalizedNumber;
           if (!summaryMap.has(key)) {
             summaryMap.set(key, {
               "Standard Job Number": normalizedNumber,
@@ -681,17 +681,13 @@
 
         if (workDoneData && standardJobsData) {
           const workDoneMap = new Map(
-            workDoneData.rows.map((row) => [
-              `${row["Standard Job Number"]}||${row["Standard Job Description"]}`,
-              row,
-            ])
+            workDoneData.rows.map((row) => [row["Standard Job Number"], row])
           );
           const standardJobKeys = new Set(
             standardJobsData.rows.map((row) => {
               const rawNumber = row["Standard Job No"] ?? row["Standard Job Number"] ?? "";
               const normalizedNumber = normalizeJobNumber(rawNumber);
-              const description = row["Standard Job Description"] ?? "";
-              return `${normalizedNumber}||${description}`;
+              return normalizedNumber;
             })
           );
 
@@ -704,7 +700,7 @@
                   ""
               );
             const description = row["Standard Job Description"] ?? "";
-            const key = `${number}||${description}`;
+            const key = number;
             const workRow = workDoneMap.get(key);
             const merged = {
               "Standard Job Number": number,
@@ -717,7 +713,7 @@
           });
 
           const missingRows = workDoneData.rows.filter((row) => {
-            const key = `${row["Standard Job Number"]}||${row["Standard Job Description"]}`;
+            const key = row["Standard Job Number"];
             return !standardJobKeys.has(key);
           });
 
