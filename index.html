@@ -636,8 +636,11 @@
         reader.onload = (e) => {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: "array" });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const { headers, rows } = parseSheetToJSON(firstSheet);
+          const workDoneSheet =
+            workbook.Sheets["Detail"] ||
+            workbook.Sheets["detail"] ||
+            workbook.Sheets[workbook.SheetNames[0]];
+          const { headers, rows } = parseSheetToJSON(workDoneSheet);
 
           if (!headers.length) {
             workDoneData = null;
