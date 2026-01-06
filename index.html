@@ -102,8 +102,9 @@
     <header>
       <h1>Annual Plan Review</h1>
       <p class="helper">
-        Upload an Excel file to generate the table. Use the filters to focus on
-        Periods 1–13 or to search within the data.
+        Upload an Excel file to generate a table with the Standard Job number,
+        description, and Periods 1–13. Use the filters to focus on a specific
+        period or search within the data.
       </p>
     </header>
 
@@ -165,6 +166,42 @@
       };
 
       const normalizeHeader = (value) => String(value || "").trim();
+
+      const preferredColumns = [
+        "Standard Job No",
+        "Standard Job Number",
+        "Standard Job Description",
+        "Period 1",
+        "Period 2",
+        "Period 3",
+        "Period 4",
+        "Period 5",
+        "Period 6",
+        "Period 7",
+        "Period 8",
+        "Period 9",
+        "Period 10",
+        "Period 11",
+        "Period 12",
+        "Period 13",
+      ];
+
+      const pickRelevantHeaders = (headers) => {
+        const normalized = headers.map((header) => header.toLowerCase());
+        const matches = preferredColumns
+          .map((preferred) => {
+            const index = normalized.indexOf(preferred.toLowerCase());
+            if (index === -1) return null;
+            return headers[index];
+          })
+          .filter(Boolean);
+
+        if (matches.length) {
+          return matches;
+        }
+
+        return headers.filter((header) => /^Period\\s*\\d+$/i.test(header));
+      };
 
       const renderTable = (headers, rows) => {
         currentHeaders = headers;
@@ -261,16 +298,25 @@
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: "array" });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const { headers, rows } = parseSheetToJSON(firstSheet);
+        const { headers, rows } = parseSheetToJSON(firstSheet);
 
-          if (!headers.length) {
-            resetTable();
-            return;
-          }
+        if (!headers.length) {
+          resetTable();
+          return;
+        }
 
-          renderTable(headers, rows);
-        };
-        reader.readAsArrayBuffer(file);
+        const filteredHeaders = pickRelevantHeaders(headers);
+        const filteredRows = rows.map((row) => {
+          const filtered = {};
+          filteredHeaders.forEach((header) => {
+            filtered[header] = row[header] ?? "";
+          });
+          return filtered;
+        });
+
+        renderTable(filteredHeaders, filteredRows);
+      };
+      reader.readAsArrayBuffer(file);
       });
 
       periodFilter.addEventListener("change", applyFilters);
