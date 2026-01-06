@@ -167,37 +167,37 @@
 
       const normalizeHeader = (value) => String(value || "").trim();
 
-      const preferredColumns = [
-        "Standard Job No",
-        "Standard Job Number",
-        "Standard Job Description",
-        "Period 1",
-        "Period 2",
-        "Period 3",
-        "Period 4",
-        "Period 5",
-        "Period 6",
-        "Period 7",
-        "Period 8",
-        "Period 9",
-        "Period 10",
-        "Period 11",
-        "Period 12",
-        "Period 13",
-      ];
+      const preferredPeriods = Array.from({ length: 13 }, (_, index) => `Period ${index + 1}`);
+      const standardJobNumberHeaders = ["Standard Job No", "Standard Job Number"];
+      const standardJobDescriptionHeaders = ["Standard Job Description"];
 
       const pickRelevantHeaders = (headers) => {
-        const normalized = headers.map((header) => header.toLowerCase());
-        const matches = preferredColumns
-          .map((preferred) => {
-            const index = normalized.indexOf(preferred.toLowerCase());
-            if (index === -1) return null;
-            return headers[index];
-          })
+        const lookup = new Map();
+
+        headers.forEach((header, index) => {
+          lookup.set(header.toLowerCase(), headers[index]);
+        });
+
+        const standardJobNumber = standardJobNumberHeaders
+          .map((candidate) => lookup.get(candidate.toLowerCase()))
+          .find(Boolean);
+
+        const standardJobDescription = standardJobDescriptionHeaders
+          .map((candidate) => lookup.get(candidate.toLowerCase()))
+          .find(Boolean);
+
+        const periodMatches = preferredPeriods
+          .map((period) => lookup.get(period.toLowerCase()))
           .filter(Boolean);
 
-        if (matches.length) {
-          return matches;
+        const ordered = [
+          standardJobNumber,
+          standardJobDescription,
+          ...periodMatches,
+        ].filter(Boolean);
+
+        if (ordered.length) {
+          return ordered;
         }
 
         return headers.filter((header) => /^Period\\s*\\d+$/i.test(header));
@@ -270,9 +270,28 @@
         });
       };
 
+      const findHeaderRowIndex = (rows) => {
+        const headerRegex = /standard job|period\\s*\\d+/i;
+        const maxScan = Math.min(rows.length, 10);
+
+        for (let i = 0; i < maxScan; i += 1) {
+          const row = rows[i] || [];
+          const normalizedRow = row.map(normalizeHeader);
+          const hasHeader = normalizedRow.some((cell) => headerRegex.test(cell));
+          if (hasHeader) {
+            return i;
+          }
+        }
+        return 0;
+      };
+
       const parseSheetToJSON = (sheet) => {
         const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-        const [headerRow, ...dataRows] = raw;
+        if (!raw.length) return { headers: [], rows: [] };
+
+        const headerRowIndex = findHeaderRowIndex(raw);
+        const headerRow = raw[headerRowIndex];
+        const dataRows = raw.slice(headerRowIndex + 1);
         if (!headerRow) return { headers: [], rows: [] };
 
         const headers = headerRow.map(normalizeHeader);
@@ -298,25 +317,25 @@
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: "array" });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const { headers, rows } = parseSheetToJSON(firstSheet);
+          const { headers, rows } = parseSheetToJSON(firstSheet);
 
-        if (!headers.length) {
-          resetTable();
-          return;
-        }
+          if (!headers.length) {
+            resetTable();
+            return;
+          }
 
-        const filteredHeaders = pickRelevantHeaders(headers);
-        const filteredRows = rows.map((row) => {
-          const filtered = {};
-          filteredHeaders.forEach((header) => {
-            filtered[header] = row[header] ?? "";
+          const filteredHeaders = pickRelevantHeaders(headers);
+          const filteredRows = rows.map((row) => {
+            const filtered = {};
+            filteredHeaders.forEach((header) => {
+              filtered[header] = row[header] ?? "";
+            });
+            return filtered;
           });
-          return filtered;
-        });
 
-        renderTable(filteredHeaders, filteredRows);
-      };
-      reader.readAsArrayBuffer(file);
+          renderTable(filteredHeaders, filteredRows);
+        };
+        reader.readAsArrayBuffer(file);
       });
 
       periodFilter.addEventListener("change", applyFilters);
