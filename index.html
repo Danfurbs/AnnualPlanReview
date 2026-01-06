@@ -437,7 +437,7 @@
 
       const workDoneHeaders = {
         period: ["Work Order Closed Period"],
-        units: ["Units Complete", "Units Completed", "Units"],
+        units: ["Units Complete"],
         year: ["Work Order Closed Year"],
         job: [
           "Standard Job Number & Desc",
@@ -446,10 +446,33 @@
         ],
       };
 
+      const normalizeHeaderKey = (value) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "");
+
+      const isConvertedHeader = (value) => normalizeHeaderKey(value).includes("converted");
+
       const getHeaderMatch = (headers, candidates) => {
-        const lookup = new Map();
-        headers.forEach((header) => lookup.set(header.toLowerCase(), header));
-        return candidates.map((candidate) => lookup.get(candidate.toLowerCase())).find(Boolean);
+        const normalizedHeaders = headers.map((header) => ({
+          raw: header,
+          key: normalizeHeaderKey(header),
+        }));
+
+        for (const candidate of candidates) {
+          const candidateKey = normalizeHeaderKey(candidate);
+          const exactMatch = normalizedHeaders.find(
+            (header) => header.key === candidateKey && !isConvertedHeader(header.raw)
+          );
+          if (exactMatch) return exactMatch.raw;
+
+          const partialMatch = normalizedHeaders.find(
+            (header) => header.key.includes(candidateKey) && !isConvertedHeader(header.raw)
+          );
+          if (partialMatch) return partialMatch.raw;
+        }
+
+        return null;
       };
 
       const parseJobNumberAndDescription = (value) => {
@@ -479,6 +502,12 @@
         const raw = String(value || "").trim();
         if (!raw) return null;
         if (/^Period\\s*\\d+/i.test(raw)) return raw.replace(/\\s+/g, " ");
+        if (/^\\d+(\\.\\d+)?$/.test(raw)) {
+          const periodNumber = Number(raw);
+          if (Number.isNaN(periodNumber)) return null;
+          if (periodNumber < 1 || periodNumber > 13) return null;
+          return `Period ${periodNumber}`;
+        }
         const match = raw.match(/(\\d+)/);
         if (!match) return null;
         const periodNumber = Number(match[1]);
