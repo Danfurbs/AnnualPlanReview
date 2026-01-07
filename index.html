@@ -376,8 +376,10 @@
     <header>
       <h1>Annual Plan Review</h1>
       <p class="helper">
-        Compare forecast versus work done by period. Standard job metadata is
-        built in, so only upload your forecast and work done exports.
+        Compare forecast versus work done per standard job. Units vary by job,
+        so variances are shown within each job rather than rolled up across
+        different units. Standard job metadata is built in, so only upload your
+        forecast and work done exports.
       </p>
     </header>
 
@@ -468,16 +470,6 @@
       </div>
     </section>
 
-    <section class="overview">
-      <div class="overview-header">
-        <h2>Period variance overview</h2>
-        <p class="helper">Totals across all jobs for each period.</p>
-      </div>
-      <div class="period-grid" id="periodOverview">
-        <div class="empty-state">Upload files to see period variances.</div>
-      </div>
-    </section>
-
     <section class="job-section">
       <div class="job-header">
         <div>
@@ -525,7 +517,6 @@
       const forecastInput = document.getElementById("forecastInput");
       const periodFilter = document.getElementById("periodFilter");
       const tableSearch = document.getElementById("tableSearch");
-      const periodOverview = document.getElementById("periodOverview");
       const jobList = document.getElementById("jobList");
       const emptyState = document.getElementById("emptyState");
       const forecastCount = document.getElementById("forecastCount");
@@ -587,11 +578,22 @@
       const normalizeHeader = (value) => String(value || "").trim();
 
       const preferredPeriods = Array.from({ length: 13 }, (_, index) => `Period ${index + 1}`);
-      const standardJobNumberHeaders = ["Standard Job No", "Standard Job Number"];
-      const standardJobDescriptionHeaders = ["Standard Job Description"];
       const forecastHeaders = {
-        job: ["STD_JOB_NO", "Standard Job No", "Standard Job Number"],
-        description: ["STD_JOB_DESC", "Standard Job Description"],
+        job: [
+          "STD_JOB_NO",
+          "STD JOB NO",
+          "STD_JOB_NUMBER",
+          "STD JOB NUMBER",
+          "Standard Job No",
+          "Standard Job Number",
+        ],
+        description: [
+          "STD_JOB_DESC",
+          "STD JOB DESC",
+          "STD_JOB_DESCRIPTION",
+          "STD JOB DESCRIPTION",
+          "Standard Job Description",
+        ],
         workGroupSet: ["WGST_DESC", "Work Group Set", "Workgroup Set"],
       };
 
@@ -907,7 +909,12 @@
           (workDoneData?.rows || []).map((row) => [row["Standard Job Number"], row])
         );
 
-        const jobKeys = new Set([...forecastMap.keys(), ...workDoneMap.keys()]);
+        const allowedKeys = new Set(standardJobsMap.keys());
+        const jobKeys = new Set(
+          [...forecastMap.keys(), ...workDoneMap.keys()].filter((key) =>
+            allowedKeys.has(key)
+          )
+        );
 
         return Array.from(jobKeys)
           .filter(Boolean)
@@ -951,42 +958,6 @@
               totals,
             };
           });
-      };
-
-      const renderPeriodOverview = (jobs) => {
-        periodOverview.innerHTML = "";
-        if (!jobs.length) {
-          periodOverview.innerHTML =
-            '<div class="empty-state">Upload files to see period variances.</div>';
-          return;
-        }
-
-        preferredPeriods.forEach((period) => {
-          const totals = jobs.reduce(
-            (acc, job) => {
-              const periodData = job.periods.find((entry) => entry.period === period);
-              if (!periodData) return acc;
-              acc.forecast += periodData.forecast;
-              acc.actual += periodData.actual;
-              return acc;
-            },
-            { forecast: 0, actual: 0 }
-          );
-          const variance = totals.actual - totals.forecast;
-          const card = document.createElement("div");
-          card.className = "period-card";
-          card.innerHTML = `
-            <strong>${period}</strong>
-            <div class="metrics">
-              <span><span>Forecast</span><span>${formatUnits(totals.forecast)}</span></span>
-              <span><span>Actual</span><span>${formatUnits(totals.actual)}</span></span>
-              <span class="${getVarianceClass(variance)}"><span>Variance</span><span>${formatUnits(
-            variance
-          )}</span></span>
-            </div>
-          `;
-          periodOverview.appendChild(card);
-        });
       };
 
       const buildMetricPill = (label, value, varianceClass = "") => {
@@ -1112,7 +1083,6 @@
 
       const updateView = () => {
         const jobs = getJobRecords();
-        renderPeriodOverview(jobs);
         renderJobList(jobs);
         updateSummaryCards(jobs.length);
       };
