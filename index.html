@@ -610,6 +610,9 @@
       ) => {
         const card = document.createElement("div");
         card.className = "detail-card";
+        const title = document.createElement("h3");
+        title.textContent = "Work Group Set breakdown";
+        card.appendChild(title);
 
         if (!details.length) {
           const empty = document.createElement("p");
@@ -621,18 +624,23 @@
 
         const detailTable = document.createElement("table");
         detailTable.className = "detail-table";
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        ["Work Group Set", "Units Completed"].forEach((label) => {
+          const th = document.createElement("th");
+          th.textContent = label;
+          headRow.appendChild(th);
+        });
+        thead.appendChild(headRow);
+        detailTable.appendChild(thead);
 
         const tbody = document.createElement("tbody");
         details.forEach((detail) => {
           const row = document.createElement("tr");
-          const spacerCell = document.createElement("td");
-          spacerCell.dataset.column = firstColumnKey;
-          row.appendChild(spacerCell);
           const nameCell = document.createElement("td");
           nameCell.textContent = detail.name;
-          if (secondColumnKey) {
-            nameCell.dataset.column = secondColumnKey;
-          }
+          const unitsCell = document.createElement("td");
+          unitsCell.textContent = formatUnits(detail.units);
           row.appendChild(nameCell);
           (periodHeaders || preferredPeriods).forEach((header) => {
             const unitsCell = document.createElement("td");
@@ -1194,11 +1202,7 @@
                 breakdownMap.set(key, new Map());
               }
               const groupMap = breakdownMap.get(key);
-              if (!groupMap.has(workGroupSet)) {
-                groupMap.set(workGroupSet, new Map(preferredPeriods.map((period) => [period, 0])));
-              }
-              const periodMap = groupMap.get(workGroupSet);
-              periodMap.set(periodLabel, (periodMap.get(periodLabel) || 0) + units);
+              groupMap.set(workGroupSet, (groupMap.get(workGroupSet) || 0) + units);
             }
           }
         });
@@ -1218,12 +1222,8 @@
         const breakdowns = new Map();
         breakdownMap.forEach((groupMap, jobKey) => {
           const details = Array.from(groupMap.entries())
-            .map(([name, periodMap]) => {
-              const periods = Object.fromEntries(preferredPeriods.map((period) => [period, periodMap.get(period) || 0]));
-              const total = Object.values(periods).reduce((sum, value) => sum + value, 0);
-              return { name, periods, total };
-            })
-            .sort((a, b) => b.total - a.total);
+            .map(([name, units]) => ({ name, units }))
+            .sort((a, b) => b.units - a.units);
           breakdowns.set(jobKey, details);
         });
 
@@ -1366,6 +1366,12 @@
           logDebug("Rendering forecast-only table (work done not uploaded).");
           renderTable(forecastData.headers, forecastData.rows, forecastData.breakdowns);
           updateSummaryCards();
+          return;
+        }
+
+        if (forecastData) {
+          logDebug("Rendering forecast-only table (work done not uploaded).");
+          renderTable(forecastData.headers, forecastData.rows, forecastData.breakdowns);
           return;
         }
 
