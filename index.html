@@ -79,6 +79,67 @@
         background: #fafbfc;
       }
 
+      tbody tr.expandable-row {
+        cursor: default;
+      }
+
+      tbody tr.expandable-row:hover {
+        background: #f1f5f9;
+      }
+
+      tbody tr.detail-row td {
+        padding: 0;
+        background: #f8fafc;
+      }
+
+      .detail-card {
+        padding: 12px 14px 14px;
+      }
+
+      .detail-card h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        color: #1f2937;
+      }
+
+      .detail-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .detail-table th,
+      .detail-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 13px;
+      }
+
+      .detail-table th {
+        background: #e2e8f0;
+      }
+
+      .expand-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        margin-right: 6px;
+        border: 1px solid #cbd5f5;
+        border-radius: 4px;
+        background: #eef2ff;
+        color: #1e3a8a;
+        font-weight: 700;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .expand-toggle[aria-expanded="true"] {
+        background: #1d4ed8;
+        border-color: #1d4ed8;
+        color: #fff;
+      }
+
       .empty-state {
         padding: 40px;
         text-align: center;
@@ -333,7 +394,9 @@
 
       let currentHeaders = [];
       let currentRows = [];
+      let currentDetailMap = new Map();
       let debugEnabled = false;
+      const expandedRows = new Set();
 
       const logDebug = (message) => {
         if (!debugEnabled) return;
@@ -416,9 +479,84 @@
         }
       });
 
-      const renderTable = (headers, rows) => {
+      const escapeSelectorValue = (value) => {
+        if (window.CSS && typeof window.CSS.escape === "function") {
+          return window.CSS.escape(value);
+        }
+        return String(value).replace(/["\\]/g, "\\$&");
+      };
+
+      const formatUnits = (value) => {
+        if (value === null || value === undefined || value === "") return "0.00";
+        const numberValue = Number(value);
+        if (Number.isNaN(numberValue)) return String(value);
+        return numberValue.toFixed(2);
+      };
+
+      const buildWorkGroupSetDetail = (details, firstColumnKey) => {
+        const card = document.createElement("div");
+        card.className = "detail-card";
+        const title = document.createElement("h3");
+        title.textContent = "Work Group Set breakdown";
+        card.appendChild(title);
+
+        if (!details.length) {
+          const empty = document.createElement("p");
+          empty.className = "helper";
+          empty.textContent = "No work group set details were found for this job.";
+          card.appendChild(empty);
+          return card;
+        }
+
+        const detailTable = document.createElement("table");
+        detailTable.className = "detail-table";
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        ["Work Group Set", ...preferredPeriods].forEach((label, index) => {
+          const th = document.createElement("th");
+          th.textContent = label;
+          th.dataset.column = index === 0 ? firstColumnKey : label;
+          headRow.appendChild(th);
+        });
+        thead.appendChild(headRow);
+        detailTable.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        details.forEach((detail) => {
+          const row = document.createElement("tr");
+          const nameCell = document.createElement("td");
+          nameCell.textContent = detail.name;
+          row.appendChild(nameCell);
+          nameCell.dataset.column = firstColumnKey;
+          preferredPeriods.forEach((period) => {
+            const unitsCell = document.createElement("td");
+            unitsCell.textContent = formatUnits(detail.periods[period] || 0);
+            unitsCell.dataset.column = period;
+            row.appendChild(unitsCell);
+          });
+          tbody.appendChild(row);
+        });
+        detailTable.appendChild(tbody);
+        card.appendChild(detailTable);
+        return card;
+      };
+
+      const buildExpandToggle = (jobNumber, expanded) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "expand-toggle";
+        button.setAttribute("aria-expanded", expanded ? "true" : "false");
+        button.setAttribute("aria-label", expanded ? "Collapse work group set details" : "Expand work group set details");
+        button.dataset.jobNumber = jobNumber;
+        button.textContent = expanded ? "−" : "+";
+        return button;
+      };
+
+      const renderTable = (headers, rows, detailMap = new Map()) => {
         currentHeaders = headers;
         currentRows = rows;
+        currentDetailMap = detailMap instanceof Map ? detailMap : new Map();
+        expandedRows.clear();
 
         const headerRow = document.createElement("tr");
         headers.forEach((header) => {
@@ -433,13 +571,46 @@
         tableBody.innerHTML = "";
         rows.forEach((row) => {
           const tr = document.createElement("tr");
-          headers.forEach((header) => {
+          const jobNumber = normalizeJobNumber(
+            row["Standard Job Number"] ?? row["Standard Job No"] ?? ""
+          );
+          const details = jobNumber ? currentDetailMap.get(jobNumber) : null;
+          if (details && details.length) {
+            tr.classList.add("expandable-row");
+            tr.setAttribute("aria-expanded", "false");
+          }
+          headers.forEach((header, index) => {
             const td = document.createElement("td");
-            td.textContent = formatPeriodValue(header, row[header]);
+            const value = formatPeriodValue(header, row[header]);
+            if (index === 0 && details && details.length) {
+              const wrapper = document.createElement("span");
+              wrapper.appendChild(buildExpandToggle(jobNumber, false));
+              const label = document.createElement("span");
+              label.textContent = value;
+              wrapper.appendChild(label);
+              td.appendChild(wrapper);
+            } else {
+              td.textContent = value;
+            }
             td.dataset.column = header;
             tr.appendChild(td);
           });
+          if (jobNumber) {
+            tr.dataset.jobNumber = jobNumber;
+          }
           tableBody.appendChild(tr);
+
+          if (details && details.length) {
+            const detailRow = document.createElement("tr");
+            detailRow.className = "detail-row";
+            detailRow.dataset.parentKey = jobNumber;
+            const detailCell = document.createElement("td");
+            detailCell.colSpan = headers.length;
+            detailCell.appendChild(buildWorkGroupSetDetail(details, headers[0]));
+            detailRow.appendChild(detailCell);
+            detailRow.style.display = "none";
+            tableBody.appendChild(detailRow);
+          }
         });
 
         dataTable.hidden = false;
@@ -477,11 +648,54 @@
         });
 
         Array.from(tableBody.rows).forEach((row) => {
+          if (row.classList.contains("detail-row")) {
+            return;
+          }
           const rowText = Array.from(row.cells)
             .map((cell) => cell.textContent.toLowerCase())
             .join(" ");
           row.style.display = rowText.includes(searchValue) ? "" : "none";
         });
+
+        Array.from(tableBody.querySelectorAll("tr.detail-row")).forEach((detailRow) => {
+          const parentKey = detailRow.dataset.parentKey;
+          if (!parentKey) {
+            detailRow.style.display = "none";
+            return;
+          }
+          const parentRow = tableBody.querySelector(
+            `tr[data-job-number="${escapeSelectorValue(parentKey)}"]`
+          );
+          const parentVisible = parentRow && parentRow.style.display !== "none";
+          detailRow.style.display =
+            parentVisible && expandedRows.has(parentKey) ? "" : "none";
+        });
+      };
+
+      const toggleRowExpansion = (jobNumber) => {
+        if (!jobNumber) return;
+        if (expandedRows.has(jobNumber)) {
+          expandedRows.delete(jobNumber);
+        } else {
+          expandedRows.add(jobNumber);
+        }
+        const mainRow = tableBody.querySelector(
+          `tr[data-job-number="${escapeSelectorValue(jobNumber)}"]`
+        );
+        if (mainRow) {
+          mainRow.setAttribute("aria-expanded", expandedRows.has(jobNumber).toString());
+          const toggleButton = mainRow.querySelector(".expand-toggle");
+          if (toggleButton) {
+            const isExpanded = expandedRows.has(jobNumber);
+            toggleButton.setAttribute("aria-expanded", isExpanded.toString());
+            toggleButton.textContent = isExpanded ? "−" : "+";
+            toggleButton.setAttribute(
+              "aria-label",
+              isExpanded ? "Collapse work group set details" : "Expand work group set details"
+            );
+          }
+        }
+        applyFilters();
       };
 
       const findHeaderRowIndex = (rows) => {
@@ -532,6 +746,7 @@
           "Standard Job # & Desc",
           "Standard Job Number",
         ],
+        workGroupSet: ["Work Group Set", "Workgroup Set", "Work Group"],
       };
 
       const normalizeHeaderKey = (value) =>
@@ -647,11 +862,12 @@
         const periodHeader = getHeaderMatch(headers, workDoneHeaders.period);
         const unitsHeader = getHeaderMatch(headers, workDoneHeaders.units);
         const jobHeader = getHeaderMatch(headers, workDoneHeaders.job);
+        const workGroupHeader = getHeaderMatch(headers, workDoneHeaders.workGroupSet);
 
         logDebug(
           `Work-done header matches → period: ${periodHeader || "missing"}, units: ${
             unitsHeader || "missing"
-          }, job: ${jobHeader || "missing"}`
+          }, job: ${jobHeader || "missing"}, work group set: ${workGroupHeader || "missing"}`
         );
 
         if (!periodHeader || !unitsHeader || !jobHeader) {
@@ -662,6 +878,7 @@
         }
 
         const summaryMap = new Map();
+        const breakdownMap = new Map();
         const debugCounters = {
           total: 0,
           missingJob: 0,
@@ -673,6 +890,7 @@
         rows.forEach((row) => {
           const rawPeriod = row[periodHeader];
           const rawJob = row[jobHeader];
+          const rawWorkGroup = workGroupHeader ? row[workGroupHeader] : "";
           const periodLabel = normalizePeriodLabel(rawPeriod);
           const units = parseUnitsValue(row[unitsHeader]);
           const normalizedNumber = normalizeJobNumber(rawJob);
@@ -696,6 +914,21 @@
           if (entry && preferredPeriods.includes(periodLabel)) {
             entry[periodLabel] += Number.isNaN(units) ? 0 : units;
           }
+
+          if (workGroupHeader) {
+            const workGroupSet = String(rawWorkGroup || "").trim();
+            if (workGroupSet) {
+              if (!breakdownMap.has(key)) {
+                breakdownMap.set(key, new Map());
+              }
+              const groupMap = breakdownMap.get(key);
+              if (!groupMap.has(workGroupSet)) {
+                groupMap.set(workGroupSet, new Map(preferredPeriods.map((period) => [period, 0])));
+              }
+              const periodMap = groupMap.get(workGroupSet);
+              periodMap.set(periodLabel, (periodMap.get(periodLabel) || 0) + units);
+            }
+          }
         });
 
         logDebug(
@@ -710,7 +943,19 @@
           ...preferredPeriods,
         ];
 
-        return { headers: headersToRender, rows: Array.from(summaryMap.values()) };
+        const breakdowns = new Map();
+        breakdownMap.forEach((groupMap, jobKey) => {
+          const details = Array.from(groupMap.entries())
+            .map(([name, periodMap]) => {
+              const periods = Object.fromEntries(preferredPeriods.map((period) => [period, periodMap.get(period) || 0]));
+              const total = Object.values(periods).reduce((sum, value) => sum + value, 0);
+              return { name, periods, total };
+            })
+            .sort((a, b) => b.total - a.total);
+          breakdowns.set(jobKey, details);
+        });
+
+        return { headers: headersToRender, rows: Array.from(summaryMap.values()), breakdowns };
       };
 
       let standardJobsData = null;
@@ -726,6 +971,7 @@
           const workDoneMap = new Map(
             workDoneData.rows.map((row) => [row["Standard Job Number"], row])
           );
+          const detailMap = workDoneData.breakdowns ?? new Map();
           const standardJobKeys = new Set(
             standardJobsData.rows.map((row) => {
               const rawNumber = row["Standard Job No"] ?? row["Standard Job Number"] ?? "";
@@ -755,21 +1001,16 @@
             return merged;
           });
 
-          const missingRows = workDoneData.rows.filter((row) => {
-            const key = row["Standard Job Number"];
-            return !standardJobKeys.has(key);
-          });
-
           logDebug(
             `Merged standard jobs (${standardJobsData.rows.length}) with work done (${workDoneData.rows.length}).`
           );
-          renderTable(workDoneData.headers, [...mergedRows, ...missingRows]);
+          renderTable(workDoneData.headers, mergedRows, detailMap);
           return;
         }
 
         if (workDoneData) {
           logDebug("Rendering work-done-only table (standard jobs not uploaded).");
-          renderTable(workDoneData.headers, workDoneData.rows);
+          renderTable(workDoneData.headers, workDoneData.rows, workDoneData.breakdowns);
           return;
         }
 
@@ -870,6 +1111,15 @@
 
       periodFilter.addEventListener("change", applyFilters);
       tableSearch.addEventListener("input", applyFilters);
+
+      tableBody.addEventListener("click", (event) => {
+        const toggleButton = event.target.closest(".expand-toggle");
+        if (!toggleButton) return;
+        const jobNumber = toggleButton.dataset.jobNumber;
+        if (!jobNumber) return;
+        if (!currentDetailMap.has(jobNumber)) return;
+        toggleRowExpansion(jobNumber);
+      });
     </script>
   </body>
 </html>
