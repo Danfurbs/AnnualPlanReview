@@ -522,14 +522,14 @@
       };
 
       const workDoneHeaders = {
-        period: ["Work Order Closed Period"],
-        units: ["Units Complete"],
+        period: ["Period Completed", "Work Order Closed Period"],
+        units: ["Units Completed", "Units Complete"],
         year: ["Work Order Closed Year"],
         job: [
+          "Standard Job No",
           "Standard Job Number & Desc",
           "Standard Job Number & Description",
           "Standard Job # & Desc",
-          "Standard Job No",
           "Standard Job Number",
         ],
       };
@@ -633,6 +633,9 @@
         );
 
         if (!periodHeader || !unitsHeader || !jobHeader) {
+          logDebug(
+            "Work-done file is missing one or more required headers (Standard Job No, Period Completed, Units Completed)."
+          );
           return { headers: [], rows: [] };
         }
 
@@ -642,15 +645,14 @@
           const periodLabel = normalizePeriodLabel(row[periodHeader]);
           if (!periodLabel) return;
           const units = parseUnitsValue(row[unitsHeader]);
-          const { number, description } = parseJobNumberAndDescription(row[jobHeader]);
-          const normalizedNumber = normalizeJobNumber(number);
-          if (!number) return;
+          const normalizedNumber = normalizeJobNumber(row[jobHeader]);
+          if (!normalizedNumber) return;
 
           const key = normalizedNumber;
           if (!summaryMap.has(key)) {
             summaryMap.set(key, {
               "Standard Job Number": normalizedNumber,
-              "Standard Job Description": description,
+              "Standard Job Description": "",
               ...Object.fromEntries(preferredPeriods.map((period) => [period, 0])),
             });
           }
