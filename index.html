@@ -597,21 +597,33 @@
       };
 
       const normalizePeriodLabel = (value) => {
+        if (typeof value === "number") {
+          const periodNumber = Number.isInteger(value) ? value : Math.trunc(value);
+          if (periodNumber < 1 || periodNumber > 13) return null;
+          return `Period ${periodNumber}`;
+        }
         const raw = String(value || "").trim();
         if (!raw) return null;
         if (/^Period\\s*\\d+/i.test(raw)) return raw.replace(/\\s+/g, " ");
-        if (/^\\d+(\\.\\d+)?$/.test(raw)) {
-          const periodNumber = Number(raw);
+        const numericRaw = raw.replace(/[^0-9.]/g, "");
+        if (numericRaw && /^\\d+(\\.\\d+)?$/.test(numericRaw)) {
+          const periodNumber = Number(numericRaw);
           if (Number.isNaN(periodNumber)) return null;
-          if (periodNumber < 1 || periodNumber > 13) return null;
-          return `Period ${periodNumber}`;
+          const normalizedNumber = Number.isInteger(periodNumber)
+            ? periodNumber
+            : Math.trunc(periodNumber);
+          if (normalizedNumber < 1 || normalizedNumber > 13) return null;
+          return `Period ${normalizedNumber}`;
         }
         const match = raw.match(/(\\d+)/);
         if (!match) return null;
         const periodNumber = Number(match[1]);
         if (Number.isNaN(periodNumber)) return null;
-        if (periodNumber < 1 || periodNumber > 13) return null;
-        return `Period ${periodNumber}`;
+        const normalizedNumber = Number.isInteger(periodNumber)
+          ? periodNumber
+          : Math.trunc(periodNumber);
+        if (normalizedNumber < 1 || normalizedNumber > 13) return null;
+        return `Period ${normalizedNumber}`;
       };
 
       const parseUnitsValue = (value) => {
@@ -664,7 +676,8 @@
             debugCounters.missingJob += 1;
             if (debugCounters.sampleLimit > 0) {
               logDebug(
-                `Skipped row ${index + 1}: job="${rawJob}", period="${rawPeriod}", units="${row[unitsHeader]}".`
+                `Skipped row ${index + 1}: job="${rawJob}" (${typeof rawJob}), ` +
+                  `period="${rawPeriod}" (${typeof rawPeriod}), units="${row[unitsHeader]}".`
               );
               debugCounters.sampleLimit -= 1;
             }
@@ -673,7 +686,8 @@
           if (!periodLabel) {
             if (debugCounters.sampleLimit > 0) {
               logDebug(
-                `Skipped row ${index + 1}: period="${rawPeriod}", job="${rawJob}", units="${row[unitsHeader]}".`
+                `Skipped row ${index + 1}: period="${rawPeriod}" (${typeof rawPeriod}), ` +
+                  `job="${rawJob}" (${typeof rawJob}), units="${row[unitsHeader]}".`
               );
               debugCounters.sampleLimit -= 1;
             }
