@@ -10,6 +10,10 @@
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       }
 
+      * {
+        box-sizing: border-box;
+      }
+
       body {
         margin: 0;
         padding: 24px;
@@ -24,12 +28,22 @@
 
       h1 {
         margin: 0 0 8px;
-        font-size: 24px;
+        font-size: 26px;
       }
 
       h2 {
         font-size: 18px;
         margin: 0;
+      }
+
+      h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .helper {
+        font-size: 13px;
+        color: #5b6775;
       }
 
       .controls {
@@ -51,155 +65,7 @@
         border: 1px solid #c9ced6;
         min-width: 180px;
         font-size: 14px;
-      }
-
-      .table-wrapper {
         background: #fff;
-        border-radius: 10px;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-        overflow: auto;
-        max-height: 70vh;
-      }
-
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        min-width: 1100px;
-        font-size: 14px;
-      }
-
-      th,
-      td {
-        padding: 10px 12px;
-        border-bottom: 1px solid #e2e6ec;
-        text-align: left;
-        white-space: nowrap;
-      }
-
-      th {
-        position: sticky;
-        top: 0;
-        background: #d8e6fb;
-        z-index: 1;
-      }
-
-      th.sticky-col,
-      td.sticky-col {
-        position: sticky;
-        left: 0;
-        background: #f1f5fb;
-        z-index: 2;
-      }
-
-      th.sticky-col + th.sticky-col,
-      td.sticky-col + td.sticky-col {
-        left: 180px;
-      }
-
-      th[data-column="Standard Job Number"],
-      td[data-column="Standard Job Number"] {
-        min-width: 160px;
-      }
-
-      th[data-column="Standard Job Description"],
-      td[data-column="Standard Job Description"] {
-        min-width: 240px;
-      }
-
-      tbody tr:nth-child(even) {
-        background: #fafbfc;
-      }
-
-      tbody tr.expandable-row {
-        cursor: default;
-      }
-
-      tbody tr.expandable-row:hover {
-        background: #f1f5f9;
-      }
-
-      tbody tr.detail-row td {
-        padding: 0;
-        background: #f8fafc;
-      }
-
-      .detail-card {
-        padding: 12px 14px 14px;
-      }
-
-      .detail-card h3 {
-        margin: 0 0 8px;
-        font-size: 14px;
-        color: #1f2937;
-      }
-
-      .detail-table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-
-      .detail-table th,
-      .detail-table td {
-        padding: 6px 8px;
-        border-bottom: 1px solid #e2e8f0;
-        font-size: 13px;
-      }
-
-      .detail-table th {
-        background: #e2e8f0;
-      }
-
-      .expand-toggle {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 20px;
-        height: 20px;
-        margin-right: 6px;
-        border: 1px solid #cbd5f5;
-        border-radius: 4px;
-        background: #eef2ff;
-        color: #1e3a8a;
-        font-weight: 700;
-        font-size: 14px;
-        cursor: pointer;
-      }
-
-      .expand-toggle[aria-expanded="true"] {
-        background: #1d4ed8;
-        border-color: #1d4ed8;
-        color: #fff;
-      }
-
-      .empty-state {
-        padding: 40px;
-        text-align: center;
-        color: #657080;
-      }
-
-      .helper {
-        font-size: 13px;
-        color: #5b6775;
-      }
-
-      .summary-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 12px;
-        margin-bottom: 16px;
-      }
-
-      .summary-card {
-        background: #fff;
-        border-radius: 10px;
-        padding: 14px 16px;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-      }
-
-      .summary-card p {
-        margin: 4px 0 0;
-        color: #475569;
-        font-size: 13px;
       }
 
       .primary-button {
@@ -215,6 +81,180 @@
 
       .primary-button:hover {
         background: #1d4ed8;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .summary-card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 14px 16px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+      }
+
+      .summary-card p {
+        margin: 4px 0 0;
+        color: #475569;
+        font-size: 13px;
+      }
+
+      .overview {
+        margin-bottom: 24px;
+      }
+
+      .overview-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .period-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+      }
+
+      .period-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 14px 16px;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+        border: 1px solid #eef2f6;
+      }
+
+      .period-card strong {
+        display: block;
+        font-size: 16px;
+        margin-bottom: 8px;
+      }
+
+      .metrics {
+        display: grid;
+        gap: 6px;
+        font-size: 13px;
+        color: #475569;
+      }
+
+      .metrics span {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .variance-positive {
+        color: #047857;
+        font-weight: 600;
+      }
+
+      .variance-negative {
+        color: #b91c1c;
+        font-weight: 600;
+      }
+
+      .variance-neutral {
+        color: #475569;
+        font-weight: 600;
+      }
+
+      .job-section {
+        margin-bottom: 24px;
+      }
+
+      .job-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-end;
+        margin-bottom: 12px;
+      }
+
+      .job-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .job-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+        border: 1px solid #eef2f6;
+      }
+
+      .job-title {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        align-items: baseline;
+        margin-bottom: 8px;
+      }
+
+      .job-title span {
+        color: #1f2937;
+        font-weight: 700;
+      }
+
+      .job-meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 6px 12px;
+        font-size: 13px;
+        color: #64748b;
+        margin-bottom: 12px;
+      }
+
+      .job-metrics {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      .metric-pill {
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .job-card details {
+        margin-top: 12px;
+      }
+
+      .job-card summary {
+        cursor: pointer;
+        font-weight: 600;
+        color: #1d4ed8;
+      }
+
+      .period-breakdown {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .period-breakdown .metric-pill {
+        background: #f9fafb;
+      }
+
+      .empty-state {
+        padding: 40px;
+        text-align: center;
+        color: #657080;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
       }
 
       .modal-backdrop {
@@ -336,9 +376,10 @@
     <header>
       <h1>Annual Plan Review</h1>
       <p class="helper">
-        Upload forecast and work done Excel files to compare planned versus
-        completed units by period. Use the filters to focus on a specific
-        period or search within the data.
+        Compare forecast versus work done per standard job. Units vary by job,
+        so variances are shown within each job rather than rolled up across
+        different units. Standard job metadata is built in, so only upload your
+        forecast and work done exports.
       </p>
     </header>
 
@@ -348,17 +389,7 @@
       </button>
 
       <label>
-        View
-        <select id="viewMode">
-          <option value="comparison">Comparison</option>
-          <option value="forecast">Forecast only</option>
-          <option value="actual">Actual only</option>
-          <option value="variance">Variance</option>
-        </select>
-      </label>
-
-      <label>
-        Period filter
+        Period focus
         <select id="periodFilter">
           <option value="all">All periods</option>
         </select>
@@ -366,21 +397,31 @@
 
       <label>
         Search
-        <input type="search" id="tableSearch" placeholder="Filter rows..." />
+        <input type="search" id="tableSearch" placeholder="Filter jobs..." />
       </label>
     </section>
 
     <div class="modal-backdrop" id="uploadModal" aria-hidden="true">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="uploadModalTitle"
+      >
         <header>
           <div>
             <h2 id="uploadModalTitle">Upload files</h2>
             <p class="helper">
-              Add your forecast file and the work done export to compare planned
+              Add the forecast file and the work done export to compare planned
               versus actual work by period.
             </p>
           </div>
-          <button type="button" class="close-button" id="closeUploadModal" aria-label="Close">
+          <button
+            type="button"
+            class="close-button"
+            id="closeUploadModal"
+            aria-label="Close"
+          >
             &times;
           </button>
         </header>
@@ -398,16 +439,6 @@
             </span>
           </label>
           <label>
-            Standard jobs file
-            <input
-              type="file"
-              id="standardJobsInput"
-              name="standardJobsFile"
-              accept=".xlsx,.xls,.csv"
-            />
-            <span class="helper">Includes Standard Job No, description, and Period columns.</span>
-          </label>
-          <label>
             Work done file
             <input
               type="file"
@@ -416,7 +447,8 @@
               accept=".xlsx,.xls,.csv"
             />
             <span class="helper">
-              Uses Work Order Closed Period, Units Complete, and Standard Job No or Number &amp; Desc.
+              Uses Work Order Closed Period, Units Complete, and Standard Job No
+              or Number &amp; Desc.
             </span>
           </label>
         </div>
@@ -433,26 +465,32 @@
         <p id="actualCount">0 rows loaded.</p>
       </div>
       <div class="summary-card">
-        <h2>Rows shown</h2>
-        <p id="visibleCount">0 rows displayed.</p>
+        <h2>Jobs shown</h2>
+        <p id="visibleCount">0 jobs displayed.</p>
       </div>
     </section>
 
-    <div class="table-wrapper" id="tableWrapper">
-      <div class="empty-state" id="emptyState">
-        Upload files to view Periods 1–13.
+    <section class="job-section">
+      <div class="job-header">
+        <div>
+          <h2>Job variances</h2>
+          <p class="helper">
+            Focus on a single period or view totals across the full plan.
+          </p>
+        </div>
+        <span class="helper" id="jobCount"></span>
       </div>
-      <table id="dataTable" hidden>
-        <thead></thead>
-        <tbody></tbody>
-      </table>
-    </div>
+      <div class="job-list" id="jobList"></div>
+      <div class="empty-state" id="emptyState" hidden>
+        Upload forecast and work done files to compare job variances.
+      </div>
+    </section>
 
     <section class="debug-panel">
       <header>
         <div>
           <h2>Debug log</h2>
-          <p class="helper">Use this to verify detected sheets, headers, and parsed totals.</p>
+          <p class="helper">Use this to verify detected sheets and parsed totals.</p>
         </div>
         <div class="debug-actions">
           <label>
@@ -462,27 +500,29 @@
           <button type="button" id="clearDebug">Clear</button>
         </div>
       </header>
-      <textarea id="debugOutput" readonly placeholder="Debug output will appear here when logging is enabled."></textarea>
+      <textarea
+        id="debugOutput"
+        readonly
+        placeholder="Debug output will appear here when logging is enabled."
+      ></textarea>
     </section>
 
+    <script src="./standard-jobs-data.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
       const openUploadModal = document.getElementById("openUploadModal");
       const uploadModal = document.getElementById("uploadModal");
       const closeUploadModal = document.getElementById("closeUploadModal");
-      const standardJobsInput = document.getElementById("standardJobsInput");
       const workDoneInput = document.getElementById("workDoneInput");
       const forecastInput = document.getElementById("forecastInput");
-      const viewMode = document.getElementById("viewMode");
       const periodFilter = document.getElementById("periodFilter");
       const tableSearch = document.getElementById("tableSearch");
-      const dataTable = document.getElementById("dataTable");
-      const tableHead = dataTable.querySelector("thead");
-      const tableBody = dataTable.querySelector("tbody");
+      const jobList = document.getElementById("jobList");
       const emptyState = document.getElementById("emptyState");
       const forecastCount = document.getElementById("forecastCount");
       const actualCount = document.getElementById("actualCount");
       const visibleCount = document.getElementById("visibleCount");
+      const jobCount = document.getElementById("jobCount");
       const debugToggle = document.getElementById("debugToggle");
       const debugOutput = document.getElementById("debugOutput");
       const clearDebug = document.getElementById("clearDebug");
@@ -495,12 +535,9 @@
         periodFilter.appendChild(option);
       });
 
-      let currentHeaders = [];
-      let currentRows = [];
-      let currentDetailMap = new Map();
       let debugEnabled = false;
-      let currentViewMode = viewMode.value || "comparison";
-      const expandedRows = new Set();
+      let workDoneData = null;
+      let forecastData = null;
 
       const logDebug = (message) => {
         if (!debugEnabled) return;
@@ -520,56 +557,6 @@
         debugOutput.value = "";
       });
 
-      const resetTable = () => {
-        tableHead.innerHTML = "";
-        tableBody.innerHTML = "";
-        dataTable.hidden = true;
-        emptyState.hidden = false;
-      };
-
-      const normalizeHeader = (value) => String(value || "").trim();
-
-      const preferredPeriods = Array.from({ length: 13 }, (_, index) => `Period ${index + 1}`);
-      const standardJobNumberHeaders = ["Standard Job No", "Standard Job Number"];
-      const standardJobDescriptionHeaders = ["Standard Job Description"];
-      const forecastHeaders = {
-        job: ["STD_JOB_NO", "Standard Job No", "Standard Job Number"],
-        description: ["STD_JOB_DESC", "Standard Job Description"],
-        workGroupSet: ["WGST_DESC", "Work Group Set", "Workgroup Set"],
-      };
-
-      const pickRelevantHeaders = (headers) => {
-        const lookup = new Map();
-
-        headers.forEach((header, index) => {
-          lookup.set(header.toLowerCase(), headers[index]);
-        });
-
-        const standardJobNumber = standardJobNumberHeaders
-          .map((candidate) => lookup.get(candidate.toLowerCase()))
-          .find(Boolean);
-
-        const standardJobDescription = standardJobDescriptionHeaders
-          .map((candidate) => lookup.get(candidate.toLowerCase()))
-          .find(Boolean);
-
-        const periodMatches = preferredPeriods
-          .map((period) => lookup.get(period.toLowerCase()))
-          .filter(Boolean);
-
-        const ordered = [
-          standardJobNumber,
-          standardJobDescription,
-          ...periodMatches,
-        ].filter(Boolean);
-
-        if (ordered.length) {
-          return ordered;
-        }
-
-        return headers.filter((header) => /^Period\\s*\\d+$/i.test(header));
-      };
-
       const showModal = () => {
         uploadModal.classList.add("is-open");
         uploadModal.setAttribute("aria-hidden", "false");
@@ -588,11 +575,145 @@
         }
       });
 
-      const escapeSelectorValue = (value) => {
-        if (window.CSS && typeof window.CSS.escape === "function") {
-          return window.CSS.escape(value);
+      const normalizeHeader = (value) => String(value || "").trim();
+
+      const preferredPeriods = Array.from({ length: 13 }, (_, index) => `Period ${index + 1}`);
+      const forecastHeaders = {
+        job: [
+          "STD_JOB_NO",
+          "STD JOB NO",
+          "STD_JOB_NUMBER",
+          "STD JOB NUMBER",
+          "Standard Job No",
+          "Standard Job Number",
+        ],
+        description: [
+          "STD_JOB_DESC",
+          "STD JOB DESC",
+          "STD_JOB_DESCRIPTION",
+          "STD JOB DESCRIPTION",
+          "Standard Job Description",
+        ],
+        workGroupSet: ["WGST_DESC", "Work Group Set", "Workgroup Set"],
+      };
+
+      const workDoneHeaders = {
+        period: ["Period Completed", "Work Order Closed Period"],
+        units: ["Units Completed", "Units Complete"],
+        year: ["Work Order Closed Year"],
+        job: [
+          "Standard Job No",
+          "Standard Job Number & Desc",
+          "Standard Job Number & Description",
+          "Standard Job # & Desc",
+          "Standard Job Number",
+        ],
+        workGroupSet: ["Work Group Set", "Workgroup Set", "Work Group"],
+      };
+
+      const normalizeHeaderKey = (value) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "");
+
+      const isConvertedHeader = (value) => normalizeHeaderKey(value).includes("converted");
+
+      const getHeaderMatch = (headers, candidates) => {
+        const normalizedHeaders = headers.map((header) => ({
+          raw: header,
+          key: normalizeHeaderKey(header),
+        }));
+
+        for (const candidate of candidates) {
+          const candidateKey = normalizeHeaderKey(candidate);
+          const exactMatch = normalizedHeaders.find(
+            (header) => header.key === candidateKey && !isConvertedHeader(header.raw)
+          );
+          if (exactMatch) return exactMatch.raw;
+
+          const partialMatch = normalizedHeaders.find(
+            (header) => header.key.includes(candidateKey) && !isConvertedHeader(header.raw)
+          );
+          if (partialMatch) return partialMatch.raw;
         }
-        return String(value).replace(/["\\]/g, "\\$&");
+
+        return null;
+      };
+
+      const parseJobNumberAndDescription = (value) => {
+        const text = String(value || "").trim();
+        if (!text) return { number: "", description: "" };
+        const leadingDigits = text.match(/^\s*(\d{6})\b/);
+        if (leadingDigits) {
+          const description = text
+            .slice(leadingDigits[0].length)
+            .trim()
+            .replace(/^[-–]\s*/, "");
+          return { number: leadingDigits[1], description };
+        }
+        const dashMatch = text.match(/^\s*([A-Za-z0-9]+)\s*[-–]\s*(.+)$/);
+        if (dashMatch) {
+          return { number: dashMatch[1].trim(), description: dashMatch[2].trim() };
+        }
+        const parts = text.split(/\s+/);
+        if (parts.length > 1) {
+          return { number: parts[0], description: parts.slice(1).join(" ") };
+        }
+        return { number: text, description: "" };
+      };
+
+      const normalizeJobNumber = (value) => {
+        const raw = String(value || "").trim();
+        if (!raw) return "";
+        if (/^\d+$/.test(raw)) {
+          return raw.padStart(6, "0");
+        }
+        return raw;
+      };
+
+      const normalizePeriodLabel = (value) => {
+        if (typeof value === "number") {
+          const periodNumber = Number.isInteger(value) ? value : Math.trunc(value);
+          if (periodNumber < 1 || periodNumber > 13) return null;
+          return `Period ${periodNumber}`;
+        }
+        const raw = String(value || "").trim();
+        if (!raw) return null;
+        if (/^Period\s*\d+/i.test(raw)) return raw.replace(/\s+/g, " ");
+        if (/^P\s*\d+/i.test(raw)) {
+          const pMatch = raw.match(/(\d+)/);
+          if (!pMatch) return null;
+          const periodNumber = Number(pMatch[1]);
+          if (Number.isNaN(periodNumber)) return null;
+          if (periodNumber < 1 || periodNumber > 13) return null;
+          return `Period ${periodNumber}`;
+        }
+        const numericRaw = raw.replace(/[^0-9.]/g, "");
+        if (numericRaw && /^\d+(\.\d+)?$/.test(numericRaw)) {
+          const periodNumber = Number(numericRaw);
+          if (Number.isNaN(periodNumber)) return null;
+          const normalizedNumber = Number.isInteger(periodNumber)
+            ? periodNumber
+            : Math.trunc(periodNumber);
+          if (normalizedNumber < 1 || normalizedNumber > 13) return null;
+          return `Period ${normalizedNumber}`;
+        }
+        const match = raw.match(/(\d+)/);
+        if (!match) return null;
+        const periodNumber = Number(match[1]);
+        if (Number.isNaN(periodNumber)) return null;
+        const normalizedNumber = Number.isInteger(periodNumber)
+          ? periodNumber
+          : Math.trunc(periodNumber);
+        if (normalizedNumber < 1 || normalizedNumber > 13) return null;
+        return `Period ${normalizedNumber}`;
+      };
+
+      const parseUnitsValue = (value) => {
+        if (value === null || value === undefined) return 0;
+        const cleaned = String(value).replace(/,/g, "").trim();
+        const parsed = Number(cleaned);
+        return Number.isNaN(parsed) ? 0 : parsed;
       };
 
       const formatUnits = (value) => {
@@ -602,274 +723,15 @@
         return numberValue.toFixed(2);
       };
 
-      const buildWorkGroupSetDetail = (
-        details,
-        firstColumnKey,
-        secondColumnKey,
-        periodHeaders
-      ) => {
-        const card = document.createElement("div");
-        card.className = "detail-card";
-        const title = document.createElement("h3");
-        title.textContent = "Work Group Set breakdown";
-        card.appendChild(title);
-
-        if (!details.length) {
-          const empty = document.createElement("p");
-          empty.className = "helper";
-          empty.textContent = "No work group set details were found for this job.";
-          card.appendChild(empty);
-          return card;
-        }
-
-        const detailTable = document.createElement("table");
-        detailTable.className = "detail-table";
-        const thead = document.createElement("thead");
-        const headRow = document.createElement("tr");
-        ["Work Group Set", "Units Completed"].forEach((label) => {
-          const th = document.createElement("th");
-          th.textContent = label;
-          headRow.appendChild(th);
-        });
-        thead.appendChild(headRow);
-        detailTable.appendChild(thead);
-
-        const tbody = document.createElement("tbody");
-        details.forEach((detail) => {
-          const row = document.createElement("tr");
-          const nameCell = document.createElement("td");
-          nameCell.textContent = detail.name;
-          const unitsCell = document.createElement("td");
-          unitsCell.textContent = formatUnits(detail.units);
-          row.appendChild(nameCell);
-          (periodHeaders || preferredPeriods).forEach((header) => {
-            const unitsCell = document.createElement("td");
-            const periodLabel = normalizePeriodLabel(header) || header;
-            unitsCell.textContent = formatUnits(detail.periods[periodLabel] || 0);
-            unitsCell.dataset.column = header;
-            row.appendChild(unitsCell);
-          });
-          tbody.appendChild(row);
-        });
-        detailTable.appendChild(tbody);
-        card.appendChild(detailTable);
-        return card;
-      };
-
-      const buildExpandToggle = (jobNumber, expanded) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "expand-toggle";
-        button.setAttribute("aria-expanded", expanded ? "true" : "false");
-        button.setAttribute("aria-label", expanded ? "Collapse work group set details" : "Expand work group set details");
-        button.dataset.jobNumber = jobNumber;
-        button.textContent = expanded ? "−" : "+";
-        return button;
-      };
-
-      const renderTable = (headers, rows, detailMap = new Map()) => {
-        currentHeaders = headers;
-        currentRows = rows;
-        currentDetailMap = detailMap instanceof Map ? detailMap : new Map();
-        expandedRows.clear();
-
-        const detailPeriodHeaders = headers.filter((header) =>
-          /^Actual\s*Period\s*\d+$/i.test(header)
-        );
-        const fallbackDetailHeaders = headers.filter((header) =>
-          /^Period\s*\d+$/i.test(header)
-        );
-        const activeDetailHeaders = detailPeriodHeaders.length
-          ? detailPeriodHeaders
-          : fallbackDetailHeaders;
-
-        const headerRow = document.createElement("tr");
-        headers.forEach((header) => {
-          const th = document.createElement("th");
-          th.textContent = header;
-          th.dataset.column = header;
-          if (header === "Standard Job Number" || header === "Standard Job Description") {
-            th.classList.add("sticky-col");
-          }
-          headerRow.appendChild(th);
-        });
-        tableHead.innerHTML = "";
-        tableHead.appendChild(headerRow);
-
-        tableBody.innerHTML = "";
-        rows.forEach((row) => {
-          const tr = document.createElement("tr");
-          const jobNumber = normalizeJobNumber(
-            row["Standard Job Number"] ?? row["Standard Job No"] ?? ""
-          );
-          const details = jobNumber ? currentDetailMap.get(jobNumber) : null;
-          if (details && details.length) {
-            tr.classList.add("expandable-row");
-            tr.setAttribute("aria-expanded", "false");
-          }
-          headers.forEach((header, index) => {
-            const td = document.createElement("td");
-            const value = formatPeriodValue(header, row[header]);
-            if (index === 0 && details && details.length) {
-              const wrapper = document.createElement("span");
-              wrapper.appendChild(buildExpandToggle(jobNumber, false));
-              const label = document.createElement("span");
-              label.textContent = value;
-              wrapper.appendChild(label);
-              td.appendChild(wrapper);
-            } else {
-              td.textContent = value;
-            }
-            td.dataset.column = header;
-            if (header === "Standard Job Number" || header === "Standard Job Description") {
-              td.classList.add("sticky-col");
-            }
-            tr.appendChild(td);
-          });
-          if (jobNumber) {
-            tr.dataset.jobNumber = jobNumber;
-          }
-          tableBody.appendChild(tr);
-
-          if (details && details.length) {
-            const detailRow = document.createElement("tr");
-            detailRow.className = "detail-row";
-            detailRow.dataset.parentKey = jobNumber;
-            const detailCell = document.createElement("td");
-            detailCell.colSpan = headers.length;
-            detailCell.appendChild(
-              buildWorkGroupSetDetail(
-                details,
-                headers[0],
-                headers[1],
-                activeDetailHeaders
-              )
-            );
-            detailRow.appendChild(detailCell);
-            detailRow.style.display = "none";
-            tableBody.appendChild(detailRow);
-          }
-        });
-
-        dataTable.hidden = false;
-        emptyState.hidden = true;
-        logDebug(`Rendered table with ${headers.length} columns and ${rows.length} rows.`);
-        applyFilters();
-      };
-
-      const getPeriodNumberFromHeader = (header) => {
-        const text = String(header || "");
-        const match = text.match(/period\s*(\d+)/i);
-        if (match) return Number(match[1]);
-        const pMatch = text.match(/^p\s*(\d+)/i);
-        if (pMatch) return Number(pMatch[1]);
-        return null;
-      };
-
-      const getViewColumnType = (header) => {
-        if (/^Forecast\\s+/i.test(header)) return "forecast";
-        if (/^Actual\\s+/i.test(header)) return "actual";
-        if (/^Variance\\s+/i.test(header)) return "variance";
-        return "base";
-      };
-
-      const applyFilters = () => {
-        const searchValue = tableSearch.value.toLowerCase();
-        const selectedPeriod = periodFilter.value;
-
-        const periodColumns = currentHeaders.filter(
-          (header) => getPeriodNumberFromHeader(header) !== null
-        );
-        const selectedPeriodNumber = getPeriodNumberFromHeader(selectedPeriod);
-
-        const viewFilteredHeaders = currentHeaders.filter((header) => {
-          const type = getViewColumnType(header);
-          if (type === "base") return true;
-          if (currentViewMode === "comparison") return true;
-          return type === currentViewMode;
-        });
-
-        const visibleColumns =
-          selectedPeriod === "all"
-            ? viewFilteredHeaders
-            : viewFilteredHeaders.filter(
-                (header) =>
-                  getPeriodNumberFromHeader(header) === selectedPeriodNumber ||
-                  !periodColumns.includes(header)
-              );
-
-        const headersToHide = currentHeaders.filter(
-          (header) => !visibleColumns.includes(header)
-        );
-
-        dataTable.querySelectorAll("th, td").forEach((cell) => {
-          const column = cell.dataset.column;
-          if (headersToHide.includes(column)) {
-            cell.style.display = "none";
-          } else {
-            cell.style.display = "table-cell";
-          }
-        });
-
-        let visibleRowCount = 0;
-        Array.from(tableBody.rows).forEach((row) => {
-          if (row.classList.contains("detail-row")) {
-            return;
-          }
-          const rowText = Array.from(row.cells)
-            .map((cell) => cell.textContent.toLowerCase())
-            .join(" ");
-          row.style.display = rowText.includes(searchValue) ? "" : "none";
-          if (row.style.display !== "none") {
-            visibleRowCount += 1;
-          }
-        });
-
-        Array.from(tableBody.querySelectorAll("tr.detail-row")).forEach((detailRow) => {
-          const parentKey = detailRow.dataset.parentKey;
-          if (!parentKey) {
-            detailRow.style.display = "none";
-            return;
-          }
-          const parentRow = tableBody.querySelector(
-            `tr[data-job-number="${escapeSelectorValue(parentKey)}"]`
-          );
-          const parentVisible = parentRow && parentRow.style.display !== "none";
-          detailRow.style.display =
-            parentVisible && expandedRows.has(parentKey) ? "" : "none";
-        });
-        visibleCount.textContent = `${visibleRowCount} rows displayed.`;
-      };
-
-      const toggleRowExpansion = (jobNumber) => {
-        if (!jobNumber) return;
-        if (expandedRows.has(jobNumber)) {
-          expandedRows.delete(jobNumber);
-        } else {
-          expandedRows.add(jobNumber);
-        }
-        const mainRow = tableBody.querySelector(
-          `tr[data-job-number="${escapeSelectorValue(jobNumber)}"]`
-        );
-        if (mainRow) {
-          mainRow.setAttribute("aria-expanded", expandedRows.has(jobNumber).toString());
-          const toggleButton = mainRow.querySelector(".expand-toggle");
-          if (toggleButton) {
-            const isExpanded = expandedRows.has(jobNumber);
-            toggleButton.setAttribute("aria-expanded", isExpanded.toString());
-            toggleButton.textContent = isExpanded ? "−" : "+";
-            toggleButton.setAttribute(
-              "aria-label",
-              isExpanded ? "Collapse work group set details" : "Expand work group set details"
-            );
-          }
-        }
-        applyFilters();
+      const getVarianceClass = (variance) => {
+        if (variance > 0) return "variance-positive";
+        if (variance < 0) return "variance-negative";
+        return "variance-neutral";
       };
 
       const findHeaderRowIndex = (rows) => {
         const headerRegex =
-          /standard job|std_job|wgst_desc|period\\s*\\d+|^p\\s*\\d+|work order closed period|units complete|work order closed year/i;
+          /standard job|std_job|wgst_desc|period\s*\d+|^p\s*\d+|work order closed period|units complete|work order closed year/i;
         const maxScan = Math.min(rows.length, 25);
 
         for (let i = 0; i < maxScan; i += 1) {
@@ -905,155 +767,22 @@
         return { headers, rows };
       };
 
-      const workDoneHeaders = {
-        period: ["Period Completed", "Work Order Closed Period"],
-        units: ["Units Completed", "Units Complete"],
-        year: ["Work Order Closed Year"],
-        job: [
-          "Standard Job No",
-          "Standard Job Number & Desc",
-          "Standard Job Number & Description",
-          "Standard Job # & Desc",
-          "Standard Job Number",
-        ],
-        workGroupSet: ["Work Group Set", "Workgroup Set", "Work Group"],
-      };
-
-      const normalizeHeaderKey = (value) =>
-        String(value || "")
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "");
-
-      const normalizedStandardJobNumberHeaders = standardJobNumberHeaders.map(normalizeHeaderKey);
-
-      const isConvertedHeader = (value) => normalizeHeaderKey(value).includes("converted");
-
-      const getHeaderMatch = (headers, candidates) => {
-        const normalizedHeaders = headers.map((header) => ({
-          raw: header,
-          key: normalizeHeaderKey(header),
-        }));
-
-        for (const candidate of candidates) {
-          const candidateKey = normalizeHeaderKey(candidate);
-          const exactMatch = normalizedHeaders.find(
-            (header) => header.key === candidateKey && !isConvertedHeader(header.raw)
-          );
-          if (exactMatch) return exactMatch.raw;
-
-          const partialMatch = normalizedHeaders.find(
-            (header) => header.key.includes(candidateKey) && !isConvertedHeader(header.raw)
-          );
-          if (partialMatch) return partialMatch.raw;
-        }
-
-        return null;
-      };
-
-      const parseJobNumberAndDescription = (value) => {
-        const text = String(value || "").trim();
-        if (!text) return { number: "", description: "" };
-        const leadingDigits = text.match(/^\\s*(\\d{6})\\b/);
-        if (leadingDigits) {
-          const description = text
-            .slice(leadingDigits[0].length)
-            .trim()
-            .replace(/^[-–]\\s*/, "");
-          return { number: leadingDigits[1], description };
-        }
-        const dashMatch = text.match(/^\\s*([A-Za-z0-9]+)\\s*[-–]\\s*(.+)$/);
-        if (dashMatch) {
-          return { number: dashMatch[1].trim(), description: dashMatch[2].trim() };
-        }
-        const parts = text.split(/\s+/);
-        if (parts.length > 1) {
-          return { number: parts[0], description: parts.slice(1).join(" ") };
-        }
-        return { number: text, description: "" };
-      };
-
-      const normalizeJobNumber = (value) => {
-        const raw = String(value || "").trim();
-        if (!raw) return "";
-        if (/^\\d+$/.test(raw)) {
-          return raw.padStart(6, "0");
-        }
-        return raw;
-      };
-
-      const normalizePeriodLabel = (value) => {
-        if (typeof value === "number") {
-          const periodNumber = Number.isInteger(value) ? value : Math.trunc(value);
-          if (periodNumber < 1 || periodNumber > 13) return null;
-          return `Period ${periodNumber}`;
-        }
-        const raw = String(value || "").trim();
-        if (!raw) return null;
-        if (/^Period\\s*\\d+/i.test(raw)) return raw.replace(/\\s+/g, " ");
-        if (/^P\\s*\\d+/i.test(raw)) {
-          const pMatch = raw.match(/(\\d+)/);
-          if (!pMatch) return null;
-          const periodNumber = Number(pMatch[1]);
-          if (Number.isNaN(periodNumber)) return null;
-          if (periodNumber < 1 || periodNumber > 13) return null;
-          return `Period ${periodNumber}`;
-        }
-        const numericRaw = raw.replace(/[^0-9.]/g, "");
-        if (numericRaw && /^\\d+(\\.\\d+)?$/.test(numericRaw)) {
-          const periodNumber = Number(numericRaw);
-          if (Number.isNaN(periodNumber)) return null;
-          const normalizedNumber = Number.isInteger(periodNumber)
-            ? periodNumber
-            : Math.trunc(periodNumber);
-          if (normalizedNumber < 1 || normalizedNumber > 13) return null;
-          return `Period ${normalizedNumber}`;
-        }
-        const match = raw.match(/(\\d+)/);
-        if (!match) return null;
-        const periodNumber = Number(match[1]);
-        if (Number.isNaN(periodNumber)) return null;
-        const normalizedNumber = Number.isInteger(periodNumber)
-          ? periodNumber
-          : Math.trunc(periodNumber);
-        if (normalizedNumber < 1 || normalizedNumber > 13) return null;
-        return `Period ${normalizedNumber}`;
-      };
-
-      const parseUnitsValue = (value) => {
-        if (value === null || value === undefined) return 0;
-        const cleaned = String(value).replace(/,/g, "").trim();
-        const parsed = Number(cleaned);
-        return Number.isNaN(parsed) ? 0 : parsed;
-      };
-
-      const formatPeriodValue = (header, value) => {
-        if (getPeriodNumberFromHeader(header) === null) return value ?? "";
-        if (value === null || value === undefined || value === "") return "";
-        if (typeof value === "number") return value.toFixed(2);
-        if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value.trim())) {
-          return Number(value).toFixed(2);
-        }
-        return value;
-      };
-
       const buildForecastSummary = (headers, rows) => {
         const jobHeader = getHeaderMatch(headers, forecastHeaders.job);
         const descHeader = getHeaderMatch(headers, forecastHeaders.description);
-        const workGroupHeader = getHeaderMatch(headers, forecastHeaders.workGroupSet);
 
         logDebug(
           `Forecast header matches → job: ${jobHeader || "missing"}, desc: ${
             descHeader || "missing"
-          }, work group set: ${workGroupHeader || "missing"}`
+          }.`
         );
 
         if (!jobHeader) {
           logDebug("Forecast file is missing STD_JOB_NO (standard job number).");
-          return { headers: [], rows: [], breakdowns: new Map() };
+          return { headers: [], rows: [] };
         }
 
         const summaryMap = new Map();
-        const breakdownMap = new Map();
         const periodHeaders = headers.filter((header) => normalizePeriodLabel(header));
 
         rows.forEach((row) => {
@@ -1084,45 +813,6 @@
             if (!periodLabel || !preferredPeriods.includes(periodLabel)) return;
             entry[periodLabel] += parseUnitsValue(row[header]);
           });
-
-          if (workGroupHeader) {
-            const workGroupSet = String(row[workGroupHeader] || "").trim();
-            if (workGroupSet) {
-              if (!breakdownMap.has(normalizedNumber)) {
-                breakdownMap.set(normalizedNumber, new Map());
-              }
-              const groupMap = breakdownMap.get(normalizedNumber);
-              if (!groupMap.has(workGroupSet)) {
-                groupMap.set(
-                  workGroupSet,
-                  new Map(preferredPeriods.map((period) => [period, 0]))
-                );
-              }
-              const periodMap = groupMap.get(workGroupSet);
-              periodHeaders.forEach((header) => {
-                const periodLabel = normalizePeriodLabel(header);
-                if (!periodLabel || !preferredPeriods.includes(periodLabel)) return;
-                periodMap.set(
-                  periodLabel,
-                  (periodMap.get(periodLabel) || 0) + parseUnitsValue(row[header])
-                );
-              });
-            }
-          }
-        });
-
-        const breakdowns = new Map();
-        breakdownMap.forEach((groupMap, jobKey) => {
-          const details = Array.from(groupMap.entries())
-            .map(([name, periodMap]) => {
-              const periods = Object.fromEntries(
-                preferredPeriods.map((period) => [period, periodMap.get(period) || 0])
-              );
-              const total = Object.values(periods).reduce((sum, value) => sum + value, 0);
-              return { name, periods, total };
-            })
-            .sort((a, b) => b.total - a.total);
-          breakdowns.set(jobKey, details);
         });
 
         const headersToRender = [
@@ -1131,19 +821,18 @@
           ...preferredPeriods,
         ];
 
-        return { headers: headersToRender, rows: Array.from(summaryMap.values()), breakdowns };
+        return { headers: headersToRender, rows: Array.from(summaryMap.values()) };
       };
 
       const buildWorkDoneSummary = (headers, rows) => {
         const periodHeader = getHeaderMatch(headers, workDoneHeaders.period);
         const unitsHeader = getHeaderMatch(headers, workDoneHeaders.units);
         const jobHeader = getHeaderMatch(headers, workDoneHeaders.job);
-        const workGroupHeader = getHeaderMatch(headers, workDoneHeaders.workGroupSet);
 
         logDebug(
           `Work-done header matches → period: ${periodHeader || "missing"}, units: ${
             unitsHeader || "missing"
-          }, job: ${jobHeader || "missing"}, work group set: ${workGroupHeader || "missing"}`
+          }, job: ${jobHeader || "missing"}.`
         );
 
         if (!periodHeader || !unitsHeader || !jobHeader) {
@@ -1154,19 +843,10 @@
         }
 
         const summaryMap = new Map();
-        const breakdownMap = new Map();
-        const debugCounters = {
-          total: 0,
-          missingJob: 0,
-          missingPeriod: 0,
-          invalidPeriod: 0,
-          sampleLimit: 5,
-        };
 
         rows.forEach((row) => {
           const rawPeriod = row[periodHeader];
           const rawJob = row[jobHeader];
-          const rawWorkGroup = workGroupHeader ? row[workGroupHeader] : "";
           const parsedJob = parseJobNumberAndDescription(rawJob);
           const periodLabel = normalizePeriodLabel(rawPeriod);
           const units = parseUnitsValue(row[unitsHeader]);
@@ -1194,24 +874,7 @@
           if (entry && parsedJob.description && !entry["Standard Job Description"]) {
             entry["Standard Job Description"] = parsedJob.description;
           }
-
-          if (workGroupHeader) {
-            const workGroupSet = String(rawWorkGroup || "").trim();
-            if (workGroupSet) {
-              if (!breakdownMap.has(key)) {
-                breakdownMap.set(key, new Map());
-              }
-              const groupMap = breakdownMap.get(key);
-              groupMap.set(workGroupSet, (groupMap.get(workGroupSet) || 0) + units);
-            }
-          }
         });
-
-        logDebug(
-          `Work-done summary rows: ${summaryMap.size}. Rows scanned: ${debugCounters.total}, ` +
-            `missing job: ${debugCounters.missingJob}, missing period: ${debugCounters.missingPeriod}, ` +
-            `invalid period: ${debugCounters.invalidPeriod}.`
-        );
 
         const headersToRender = [
           "Standard Job Number",
@@ -1219,216 +882,215 @@
           ...preferredPeriods,
         ];
 
-        const breakdowns = new Map();
-        breakdownMap.forEach((groupMap, jobKey) => {
-          const details = Array.from(groupMap.entries())
-            .map(([name, units]) => ({ name, units }))
-            .sort((a, b) => b.units - a.units);
-          breakdowns.set(jobKey, details);
-        });
-
-        return { headers: headersToRender, rows: Array.from(summaryMap.values()), breakdowns };
+        return { headers: headersToRender, rows: Array.from(summaryMap.values()) };
       };
 
-      let standardJobsData = null;
-      let workDoneData = null;
-      let forecastData = null;
+      const standardJobsMap = new Map(
+        (window.STANDARD_JOBS || []).map((job) => [
+          normalizeJobNumber(job.standardJobNo),
+          job,
+        ])
+      );
 
-      const updateSummaryCards = () => {
+      const updateSummaryCards = (visibleJobs = 0) => {
         const forecastRows = forecastData?.rows?.length ?? 0;
         const actualRows = workDoneData?.rows?.length ?? 0;
         forecastCount.textContent = `${forecastRows} rows loaded.`;
         actualCount.textContent = `${actualRows} rows loaded.`;
+        visibleCount.textContent = `${visibleJobs} jobs displayed.`;
       };
 
-      const updateTableFromUploads = () => {
-        if (!standardJobsData && !workDoneData && !forecastData) {
-          resetTable();
-          updateSummaryCards();
-          visibleCount.textContent = "0 rows displayed.";
-          return;
-        }
+      const getJobRecords = () => {
+        if (!forecastData && !workDoneData) return [];
+        const forecastMap = new Map(
+          (forecastData?.rows || []).map((row) => [row["Standard Job Number"], row])
+        );
+        const workDoneMap = new Map(
+          (workDoneData?.rows || []).map((row) => [row["Standard Job Number"], row])
+        );
 
-        if (!(forecastData && workDoneData)) {
-          const preferredView = forecastData ? "forecast" : workDoneData ? "actual" : "comparison";
-          if (viewMode.value !== preferredView) {
-            viewMode.value = preferredView;
-            currentViewMode = preferredView;
-          }
-        }
+        const allowedKeys = new Set(standardJobsMap.keys());
+        const jobKeys = new Set(
+          [...forecastMap.keys(), ...workDoneMap.keys()].filter((key) =>
+            allowedKeys.has(key)
+          )
+        );
 
-        if (forecastData && workDoneData) {
-          const forecastMap = new Map(
-            forecastData.rows.map((row) => [row["Standard Job Number"], row])
-          );
-          const workDoneMap = new Map(
-            workDoneData.rows.map((row) => [row["Standard Job Number"], row])
-          );
-          const standardJobMap = standardJobsData
-            ? new Map(
-                standardJobsData.rows.map((row) => [
-                  normalizeJobNumber(
-                    row["Standard Job No"] ?? row["Standard Job Number"] ?? ""
-                  ),
-                  row,
-                ])
-              )
-            : new Map();
-          const detailMap = workDoneData.breakdowns ?? new Map();
+        return Array.from(jobKeys)
+          .filter(Boolean)
+          .sort()
+          .map((jobNumber) => {
+            const forecastRow = forecastMap.get(jobNumber);
+            const workRow = workDoneMap.get(jobNumber);
+            const meta = standardJobsMap.get(jobNumber) || {};
+            const description =
+              meta.standardJobDescription ||
+              forecastRow?.["Standard Job Description"] ||
+              workRow?.["Standard Job Description"] ||
+              "";
 
-          const jobKeys = new Set([
-            ...forecastMap.keys(),
-            ...workDoneMap.keys(),
-            ...standardJobMap.keys(),
-          ]);
-
-          const comparisonHeaders = [
-            "Standard Job Number",
-            "Standard Job Description",
-            ...preferredPeriods.flatMap((period) => [
-              `Forecast ${period}`,
-              `Actual ${period}`,
-              `Variance ${period}`,
-            ]),
-          ];
-
-          const mergedRows = Array.from(jobKeys)
-            .filter(Boolean)
-            .sort()
-            .map((jobNumber) => {
-              const forecastRow = forecastMap.get(jobNumber);
-              const workRow = workDoneMap.get(jobNumber);
-              const standardRow = standardJobMap.get(jobNumber);
-              const description =
-                forecastRow?.["Standard Job Description"] ||
-                standardRow?.["Standard Job Description"] ||
-                "";
-              const merged = {
-                "Standard Job Number": jobNumber,
-                "Standard Job Description": description,
+            const periods = preferredPeriods.map((period) => {
+              const forecastValue = forecastRow ? forecastRow[period] ?? 0 : 0;
+              const actualValue = workRow ? workRow[period] ?? 0 : 0;
+              return {
+                period,
+                forecast: forecastValue,
+                actual: actualValue,
+                variance: actualValue - forecastValue,
               };
-              preferredPeriods.forEach((period) => {
-                const forecastValue = forecastRow ? forecastRow[period] ?? 0 : 0;
-                const actualValue = workRow ? workRow[period] ?? 0 : 0;
-                merged[`Forecast ${period}`] = forecastValue;
-                merged[`Actual ${period}`] = actualValue;
-                merged[`Variance ${period}`] = actualValue - forecastValue;
-              });
-              return merged;
             });
 
-          logDebug(
-            `Merged forecast (${forecastData.rows.length}) with work done (${workDoneData.rows.length}).`
-          );
-          renderTable(comparisonHeaders, mergedRows, detailMap);
-          updateSummaryCards();
-          return;
-        }
-
-        if (workDoneData && standardJobsData) {
-          const workDoneMap = new Map(
-            workDoneData.rows.map((row) => [row["Standard Job Number"], row])
-          );
-          const detailMap = workDoneData.breakdowns ?? new Map();
-
-          const mergedRows = standardJobsData.rows.map((row) => {
-            const number = normalizeJobNumber(
-              row["Standard Job No"] ?? row["Standard Job Number"] ?? ""
+            const totals = periods.reduce(
+              (acc, period) => {
+                acc.forecast += period.forecast;
+                acc.actual += period.actual;
+                acc.variance += period.variance;
+                return acc;
+              },
+              { forecast: 0, actual: 0, variance: 0 }
             );
-            const description = row["Standard Job Description"] ?? "";
-            const workRow = workDoneMap.get(number);
-            const merged = {
-              "Standard Job Number": number,
-              "Standard Job Description": description,
+
+            return {
+              jobNumber,
+              description,
+              meta,
+              periods,
+              totals,
             };
-            preferredPeriods.forEach((period) => {
-              merged[period] = workRow ? workRow[period] : row[period] ?? 0;
-            });
-            return merged;
           });
-
-          logDebug(
-            `Merged standard jobs (${standardJobsData.rows.length}) with work done (${workDoneData.rows.length}).`
-          );
-          renderTable(workDoneData.headers, mergedRows, detailMap);
-          updateSummaryCards();
-          return;
-        }
-
-        if (workDoneData) {
-          logDebug("Rendering work-done-only table (standard jobs not uploaded).");
-          renderTable(workDoneData.headers, workDoneData.rows, workDoneData.breakdowns);
-          updateSummaryCards();
-          return;
-        }
-
-        if (forecastData) {
-          logDebug("Rendering forecast-only table (work done not uploaded).");
-          renderTable(forecastData.headers, forecastData.rows, forecastData.breakdowns);
-          updateSummaryCards();
-          return;
-        }
-
-        if (forecastData) {
-          logDebug("Rendering forecast-only table (work done not uploaded).");
-          renderTable(forecastData.headers, forecastData.rows, forecastData.breakdowns);
-          return;
-        }
-
-        if (standardJobsData) {
-          logDebug("Rendering standard-jobs-only table (work done not uploaded).");
-          renderTable(standardJobsData.headers, standardJobsData.rows);
-          updateSummaryCards();
-        }
       };
 
-      const handleStandardJobsUpload = (file) => {
-        if (!file) {
-          standardJobsData = null;
-          updateTableFromUploads();
-          return;
+      const buildMetricPill = (label, value, varianceClass = "") => {
+        const pill = document.createElement("div");
+        pill.className = "metric-pill";
+        if (varianceClass) {
+          pill.classList.add(varianceClass);
         }
+        pill.innerHTML = `<span>${label}</span><span>${formatUnits(value)}</span>`;
+        return pill;
+      };
 
-        logDebug(`Standard jobs file selected: ${file.name}`);
+      const renderJobList = (jobs) => {
+        jobList.innerHTML = "";
+        const searchValue = tableSearch.value.toLowerCase();
+        const selectedPeriod = periodFilter.value;
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: "array" });
-          logDebug(`Standard jobs sheets: ${workbook.SheetNames.join(", ")}`);
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const { headers, rows } = parseSheetToJSON(firstSheet);
+        const filteredJobs = jobs.filter((job) => {
+          const metaValues = [
+            job.jobNumber,
+            job.description,
+            job.meta.discipline,
+            job.meta.mntCode,
+            job.meta.unitOfMeasure,
+            job.meta.cyclicWorkArising,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return metaValues.includes(searchValue);
+        });
 
-          if (!headers.length) {
-            standardJobsData = null;
-            updateTableFromUploads();
-            return;
+        const scoredJobs = filteredJobs.map((job) => {
+          if (selectedPeriod === "all") {
+            return {
+              job,
+              forecast: job.totals.forecast,
+              actual: job.totals.actual,
+              variance: job.totals.variance,
+            };
+          }
+          const periodData = job.periods.find((entry) => entry.period === selectedPeriod);
+          return {
+            job,
+            forecast: periodData?.forecast ?? 0,
+            actual: periodData?.actual ?? 0,
+            variance: periodData?.variance ?? 0,
+          };
+        });
+
+        scoredJobs.sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance));
+
+        scoredJobs.forEach(({ job, forecast, actual, variance }) => {
+          const card = document.createElement("div");
+          card.className = "job-card";
+
+          const meta = job.meta || {};
+          const title = document.createElement("div");
+          title.className = "job-title";
+          title.innerHTML = `
+            <span>${job.jobNumber}</span>
+            <span>${job.description || "No description available"}</span>
+          `;
+
+          const metaGrid = document.createElement("div");
+          metaGrid.className = "job-meta";
+          const metaItems = [
+            ["Discipline", meta.discipline],
+            ["MNT Code", meta.mntCode],
+            ["Unit", meta.unitOfMeasure],
+            ["Cyclic/Work Arising", meta.cyclicWorkArising],
+          ];
+          metaGrid.innerHTML = metaItems
+            .map(
+              ([label, value]) =>
+                `<span><strong>${label}:</strong> ${value || "—"}</span>`
+            )
+            .join("");
+
+          const metrics = document.createElement("div");
+          metrics.className = "job-metrics";
+          metrics.appendChild(buildMetricPill("Forecast", forecast));
+          metrics.appendChild(buildMetricPill("Actual", actual));
+          metrics.appendChild(
+            buildMetricPill("Variance", variance, getVarianceClass(variance))
+          );
+
+          card.appendChild(title);
+          card.appendChild(metaGrid);
+          card.appendChild(metrics);
+
+          if (selectedPeriod === "all") {
+            const details = document.createElement("details");
+            const summary = document.createElement("summary");
+            summary.textContent = "View period breakdown";
+            details.appendChild(summary);
+
+            const breakdown = document.createElement("div");
+            breakdown.className = "period-breakdown";
+            job.periods.forEach((period) => {
+              const pill = document.createElement("div");
+              pill.className = "metric-pill";
+              const varianceClass = getVarianceClass(period.variance);
+              pill.innerHTML = `
+                <span>${period.period}</span>
+                <span class="${varianceClass}">${formatUnits(period.variance)}</span>
+              `;
+              breakdown.appendChild(pill);
+            });
+
+            details.appendChild(breakdown);
+            card.appendChild(details);
           }
 
-          const filteredHeaders = pickRelevantHeaders(headers);
-          const filteredRows = rows.map((row) => {
-            const filtered = {};
-            filteredHeaders.forEach((header) => {
-              if (normalizedStandardJobNumberHeaders.includes(normalizeHeaderKey(header))) {
-                filtered[header] = normalizeJobNumber(row[header]);
-              } else {
-                filtered[header] = row[header] ?? "";
-              }
-            });
-            return filtered;
-          });
+          jobList.appendChild(card);
+        });
 
-          standardJobsData = { headers: filteredHeaders, rows: filteredRows };
-          logDebug(`Standard jobs rows loaded: ${filteredRows.length}.`);
-          updateTableFromUploads();
-        };
-        reader.readAsArrayBuffer(file);
+        const visibleJobs = scoredJobs.length;
+        updateSummaryCards(visibleJobs);
+        jobCount.textContent = `${visibleJobs} jobs`;
+        emptyState.hidden = visibleJobs > 0;
+      };
+
+      const updateView = () => {
+        const jobs = getJobRecords();
+        renderJobList(jobs);
+        updateSummaryCards(jobs.length);
       };
 
       const handleWorkDoneUpload = (file) => {
         if (!file) {
           workDoneData = null;
-          updateTableFromUploads();
+          updateView();
           return;
         }
 
@@ -1453,12 +1115,12 @@
 
           if (!headers.length) {
             workDoneData = null;
-            updateTableFromUploads();
+            updateView();
             return;
           }
 
           workDoneData = buildWorkDoneSummary(headers, rows);
-          updateTableFromUploads();
+          updateView();
         };
         reader.readAsArrayBuffer(file);
       };
@@ -1466,7 +1128,7 @@
       const handleForecastUpload = (file) => {
         if (!file) {
           forecastData = null;
-          updateTableFromUploads();
+          updateView();
           return;
         }
 
@@ -1482,20 +1144,16 @@
 
           if (!headers.length) {
             forecastData = null;
-            updateTableFromUploads();
+            updateView();
             return;
           }
 
           forecastData = buildForecastSummary(headers, rows);
           logDebug(`Forecast rows loaded: ${forecastData.rows.length}.`);
-          updateTableFromUploads();
+          updateView();
         };
         reader.readAsArrayBuffer(file);
       };
-
-      standardJobsInput.addEventListener("change", (event) => {
-        handleStandardJobsUpload(event.target.files?.[0]);
-      });
 
       workDoneInput.addEventListener("change", (event) => {
         handleWorkDoneUpload(event.target.files?.[0]);
@@ -1505,22 +1163,10 @@
         handleForecastUpload(event.target.files?.[0]);
       });
 
-      viewMode.addEventListener("change", (event) => {
-        currentViewMode = event.target.value;
-        applyFilters();
-      });
+      periodFilter.addEventListener("change", updateView);
+      tableSearch.addEventListener("input", updateView);
 
-      periodFilter.addEventListener("change", applyFilters);
-      tableSearch.addEventListener("input", applyFilters);
-
-      tableBody.addEventListener("click", (event) => {
-        const toggleButton = event.target.closest(".expand-toggle");
-        if (!toggleButton) return;
-        const jobNumber = toggleButton.dataset.jobNumber;
-        if (!jobNumber) return;
-        if (!currentDetailMap.has(jobNumber)) return;
-        toggleRowExpansion(jobNumber);
-      });
+      updateView();
     </script>
   </body>
 </html>
