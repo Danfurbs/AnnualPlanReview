@@ -80,11 +80,11 @@
       }
 
       tbody tr.expandable-row {
-        cursor: pointer;
+        cursor: default;
       }
 
       tbody tr.expandable-row:hover {
-        background: #eef2ff;
+        background: #f1f5f9;
       }
 
       tbody tr.detail-row td {
@@ -116,6 +116,28 @@
 
       .detail-table th {
         background: #e2e8f0;
+      }
+
+      .expand-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        margin-right: 6px;
+        border: 1px solid #cbd5f5;
+        border-radius: 4px;
+        background: #eef2ff;
+        color: #1e3a8a;
+        font-weight: 700;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .expand-toggle[aria-expanded="true"] {
+        background: #1d4ed8;
+        border-color: #1d4ed8;
+        color: #fff;
       }
 
       .empty-state {
@@ -471,7 +493,7 @@
         return numberValue.toFixed(2);
       };
 
-      const buildWorkGroupSetDetail = (details) => {
+      const buildWorkGroupSetDetail = (details, firstColumnKey) => {
         const card = document.createElement("div");
         card.className = "detail-card";
         const title = document.createElement("h3");
@@ -490,9 +512,10 @@
         detailTable.className = "detail-table";
         const thead = document.createElement("thead");
         const headRow = document.createElement("tr");
-        ["Work Group Set", "Units Completed"].forEach((label) => {
+        ["Work Group Set", ...preferredPeriods].forEach((label, index) => {
           const th = document.createElement("th");
           th.textContent = label;
+          th.dataset.column = index === 0 ? firstColumnKey : label;
           headRow.appendChild(th);
         });
         thead.appendChild(headRow);
@@ -503,15 +526,30 @@
           const row = document.createElement("tr");
           const nameCell = document.createElement("td");
           nameCell.textContent = detail.name;
-          const unitsCell = document.createElement("td");
-          unitsCell.textContent = formatUnits(detail.units);
           row.appendChild(nameCell);
-          row.appendChild(unitsCell);
+          nameCell.dataset.column = firstColumnKey;
+          preferredPeriods.forEach((period) => {
+            const unitsCell = document.createElement("td");
+            unitsCell.textContent = formatUnits(detail.periods[period] || 0);
+            unitsCell.dataset.column = period;
+            row.appendChild(unitsCell);
+          });
           tbody.appendChild(row);
         });
         detailTable.appendChild(tbody);
         card.appendChild(detailTable);
         return card;
+      };
+
+      const buildExpandToggle = (jobNumber, expanded) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "expand-toggle";
+        button.setAttribute("aria-expanded", expanded ? "true" : "false");
+        button.setAttribute("aria-label", expanded ? "Collapse work group set details" : "Expand work group set details");
+        button.dataset.jobNumber = jobNumber;
+        button.textContent = expanded ? "−" : "+";
+        return button;
       };
 
       const renderTable = (headers, rows, detailMap = new Map()) => {
@@ -541,9 +579,19 @@
             tr.classList.add("expandable-row");
             tr.setAttribute("aria-expanded", "false");
           }
-          headers.forEach((header) => {
+          headers.forEach((header, index) => {
             const td = document.createElement("td");
-            td.textContent = formatPeriodValue(header, row[header]);
+            const value = formatPeriodValue(header, row[header]);
+            if (index === 0 && details && details.length) {
+              const wrapper = document.createElement("span");
+              wrapper.appendChild(buildExpandToggle(jobNumber, false));
+              const label = document.createElement("span");
+              label.textContent = value;
+              wrapper.appendChild(label);
+              td.appendChild(wrapper);
+            } else {
+              td.textContent = value;
+            }
             td.dataset.column = header;
             tr.appendChild(td);
           });
@@ -558,7 +606,7 @@
             detailRow.dataset.parentKey = jobNumber;
             const detailCell = document.createElement("td");
             detailCell.colSpan = headers.length;
-            detailCell.appendChild(buildWorkGroupSetDetail(details));
+            detailCell.appendChild(buildWorkGroupSetDetail(details, headers[0]));
             detailRow.appendChild(detailCell);
             detailRow.style.display = "none";
             tableBody.appendChild(detailRow);
@@ -636,6 +684,16 @@
         );
         if (mainRow) {
           mainRow.setAttribute("aria-expanded", expandedRows.has(jobNumber).toString());
+          const toggleButton = mainRow.querySelector(".expand-toggle");
+          if (toggleButton) {
+            const isExpanded = expandedRows.has(jobNumber);
+            toggleButton.setAttribute("aria-expanded", isExpanded.toString());
+            toggleButton.textContent = isExpanded ? "−" : "+";
+            toggleButton.setAttribute(
+              "aria-label",
+              isExpanded ? "Collapse work group set details" : "Expand work group set details"
+            );
+          }
         }
         applyFilters();
       };
@@ -864,7 +922,11 @@
                 breakdownMap.set(key, new Map());
               }
               const groupMap = breakdownMap.get(key);
-              groupMap.set(workGroupSet, (groupMap.get(workGroupSet) || 0) + units);
+              if (!groupMap.has(workGroupSet)) {
+                groupMap.set(workGroupSet, new Map(preferredPeriods.map((period) => [period, 0])));
+              }
+              const periodMap = groupMap.get(workGroupSet);
+              periodMap.set(periodLabel, (periodMap.get(periodLabel) || 0) + units);
             }
           }
         });
@@ -884,8 +946,12 @@
         const breakdowns = new Map();
         breakdownMap.forEach((groupMap, jobKey) => {
           const details = Array.from(groupMap.entries())
-            .map(([name, units]) => ({ name, units }))
-            .sort((a, b) => b.units - a.units);
+            .map(([name, periodMap]) => {
+              const periods = Object.fromEntries(preferredPeriods.map((period) => [period, periodMap.get(period) || 0]));
+              const total = Object.values(periods).reduce((sum, value) => sum + value, 0);
+              return { name, periods, total };
+            })
+            .sort((a, b) => b.total - a.total);
           breakdowns.set(jobKey, details);
         });
 
@@ -935,15 +1001,10 @@
             return merged;
           });
 
-          const missingRows = workDoneData.rows.filter((row) => {
-            const key = row["Standard Job Number"];
-            return !standardJobKeys.has(key);
-          });
-
           logDebug(
             `Merged standard jobs (${standardJobsData.rows.length}) with work done (${workDoneData.rows.length}).`
           );
-          renderTable(workDoneData.headers, [...mergedRows, ...missingRows], detailMap);
+          renderTable(workDoneData.headers, mergedRows, detailMap);
           return;
         }
 
@@ -1052,9 +1113,9 @@
       tableSearch.addEventListener("input", applyFilters);
 
       tableBody.addEventListener("click", (event) => {
-        const row = event.target.closest("tr");
-        if (!row || row.classList.contains("detail-row")) return;
-        const jobNumber = row.dataset.jobNumber;
+        const toggleButton = event.target.closest(".expand-toggle");
+        if (!toggleButton) return;
+        const jobNumber = toggleButton.dataset.jobNumber;
         if (!jobNumber) return;
         if (!currentDetailMap.has(jobNumber)) return;
         toggleRowExpansion(jobNumber);
