@@ -522,8 +522,8 @@
       };
 
       const workDoneHeaders = {
-        period: ["Work Order Closed Period"],
-        units: ["Units Complete"],
+        period: ["Period Completed", "Work Order Closed Period"],
+        units: ["Units Completed", "Units Complete"],
         year: ["Work Order Closed Year"],
         job: [
           "Standard Job No",
@@ -662,6 +662,13 @@
         }
 
         const summaryMap = new Map();
+        const debugCounters = {
+          total: 0,
+          missingJob: 0,
+          missingPeriod: 0,
+          invalidPeriod: 0,
+          sampleLimit: 5,
+        };
 
         rows.forEach((row) => {
           const rawPeriod = row[periodHeader];
@@ -691,7 +698,11 @@
           }
         });
 
-        logDebug(`Work-done summary rows: ${summaryMap.size}.`);
+        logDebug(
+          `Work-done summary rows: ${summaryMap.size}. Rows scanned: ${debugCounters.total}, ` +
+            `missing job: ${debugCounters.missingJob}, missing period: ${debugCounters.missingPeriod}, ` +
+            `invalid period: ${debugCounters.invalidPeriod}.`
+        );
 
         const headersToRender = [
           "Standard Job Number",
