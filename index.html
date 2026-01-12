@@ -399,19 +399,14 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="./standard-jobs-data.js"></script>
   <script>
     // Data storage
     let forecastData = null;
     let workDoneData = null;
     let standardJobs = new Map();
 
-    // Parse standard jobs data
-    const STANDARD_JOBS_RAW = `Discipline	MNT Code	Standard Job No	Standard Job Description	Unit of Measure	Cyclic/Work Arising
-PWAY	MNT004	9112	TEF3071. TAMP TRACK USING OTM	MI - Mile	W
-PWAY	MNT005	9113	TEF3071. STONEBLOW TRACK USING OTM	MI - Mile	W
-E&P - CS	MNT211	1465	OLE-BALANCE WEIGHT SURVEY	EA - Each	W`;
-
-    // Initialize standard jobs (truncated for brevity - full list in production)
+    // Initialize standard jobs
     function initStandardJobs() {
       const lines = STANDARD_JOBS_RAW.split('\n').slice(1);
       lines.forEach(line => {
@@ -467,7 +462,7 @@ E&P - CS	MNT211	1465	OLE-BALANCE WEIGHT SURVEY	EA - Each	W`;
 
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const sheet = workbook.Sheets['Results'] || workbook.Sheets[workbook.SheetNames[0]];
       
       // Find header row
       const headerRow = findHeaderRow(sheet);
@@ -523,7 +518,7 @@ E&P - CS	MNT211	1465	OLE-BALANCE WEIGHT SURVEY	EA - Each	W`;
 
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const sheet = workbook.Sheets['Detail'] || workbook.Sheets[workbook.SheetNames[0]];
       
       // Find header row
       const headerRow = findHeaderRow(sheet);
