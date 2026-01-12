@@ -462,7 +462,7 @@
 
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const sheet = workbook.Sheets['Results'] || workbook.Sheets[workbook.SheetNames[0]];
       
       // Find header row
       const headerRow = findHeaderRow(sheet);
