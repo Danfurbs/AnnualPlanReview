@@ -677,6 +677,13 @@
         }
       });
 
+      closeBreakdownModal.addEventListener("click", hideBreakdownModal);
+      breakdownModal.addEventListener("click", (event) => {
+        if (event.target === breakdownModal) {
+          hideBreakdownModal();
+        }
+      });
+
       const normalizeHeader = (value) => String(value || "").trim();
 
       const preferredPeriods = Array.from({ length: 13 }, (_, index) => `Period ${index + 1}`);
