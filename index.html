@@ -1341,6 +1341,13 @@
         breakdownModal.setAttribute("aria-hidden", "true");
       };
 
+      closeBreakdownModal.addEventListener("click", hideBreakdownModal);
+      breakdownModal.addEventListener("click", (event) => {
+        if (event.target === breakdownModal) {
+          hideBreakdownModal();
+        }
+      });
+
       const updateView = () => {
         const jobs = getJobRecords();
         renderJobList(jobs);
