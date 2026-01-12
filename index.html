@@ -177,7 +177,7 @@
 
       .job-list {
         display: grid;
-        gap: 12px;
+        gap: 20px;
       }
 
       .job-card {
@@ -186,6 +186,30 @@
         padding: 16px;
         box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
         border: 1px solid #eef2f6;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .job-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.15);
+      }
+
+      .job-card:focus-visible {
+        outline: 3px solid #93c5fd;
+        outline-offset: 2px;
+      }
+
+      .job-card.status-good {
+        border-left: 6px solid #16a34a;
+      }
+
+      .job-card.status-warning {
+        border-left: 6px solid #f59e0b;
+      }
+
+      .job-card.status-bad {
+        border-left: 6px solid #dc2626;
       }
 
       .job-title {
@@ -203,7 +227,7 @@
 
       .job-meta {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
         gap: 6px 12px;
         font-size: 13px;
         color: #64748b;
@@ -211,8 +235,8 @@
       }
 
       .job-metrics {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        display: flex;
+        flex-wrap: wrap;
         gap: 8px;
         font-size: 13px;
       }
@@ -227,25 +251,62 @@
         gap: 8px;
       }
 
-      .job-card details {
+      .discipline-section {
+        background: #f8fafc;
+        border-radius: 14px;
+        padding: 14px;
+        border: 1px solid #e2e8f0;
+      }
+
+      .discipline-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        gap: 8px;
+      }
+
+      .discipline-header h3 {
+        font-size: 17px;
+      }
+
+      .discipline-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+
+      .variance-note {
+        font-size: 12px;
+        color: #475569;
+      }
+
+      .breakdown-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
         margin-top: 12px;
       }
 
-      .job-card summary {
-        cursor: pointer;
-        font-weight: 600;
-        color: #1d4ed8;
-      }
-
-      .period-breakdown {
+      .breakdown-item {
+        background: #f8fafc;
+        border-radius: 10px;
+        padding: 10px 12px;
+        border: 1px solid #e2e8f0;
+        font-size: 13px;
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: 8px;
-        margin-top: 10px;
+        gap: 4px;
       }
 
-      .period-breakdown .metric-pill {
-        background: #f9fafb;
+      .breakdown-item strong {
+        font-size: 14px;
+        color: #1f2937;
+      }
+
+      .breakdown-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
       }
 
       .empty-state {
@@ -486,6 +547,41 @@
       </div>
     </section>
 
+    <div class="modal-backdrop" id="breakdownModal" aria-hidden="true">
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="breakdownModalTitle"
+      >
+        <header>
+          <div>
+            <h2 id="breakdownModalTitle">Job breakdown</h2>
+            <p class="helper" id="breakdownModalMeta"></p>
+          </div>
+          <button
+            type="button"
+            class="close-button"
+            id="closeBreakdownModal"
+            aria-label="Close"
+          >
+            &times;
+          </button>
+        </header>
+        <section>
+          <h3>By period</h3>
+          <div class="breakdown-grid" id="breakdownPeriods"></div>
+        </section>
+        <section>
+          <h3>By work group set</h3>
+          <p class="helper variance-note">
+            Totals roll up across all periods.
+          </p>
+          <div class="breakdown-grid" id="breakdownWorkGroups"></div>
+        </section>
+      </div>
+    </div>
+
     <section class="debug-panel">
       <header>
         <div>
@@ -526,6 +622,12 @@
       const debugToggle = document.getElementById("debugToggle");
       const debugOutput = document.getElementById("debugOutput");
       const clearDebug = document.getElementById("clearDebug");
+      const breakdownModal = document.getElementById("breakdownModal");
+      const closeBreakdownModal = document.getElementById("closeBreakdownModal");
+      const breakdownModalTitle = document.getElementById("breakdownModalTitle");
+      const breakdownModalMeta = document.getElementById("breakdownModalMeta");
+      const breakdownPeriods = document.getElementById("breakdownPeriods");
+      const breakdownWorkGroups = document.getElementById("breakdownWorkGroups");
 
       const periodOptions = Array.from({ length: 13 }, (_, index) => `Period ${index + 1}`);
       periodOptions.forEach((period) => {
@@ -729,6 +831,17 @@
         return "variance-neutral";
       };
 
+      const getVarianceStatus = (forecast, actual) => {
+        if (!forecast && !actual) return "status-good";
+        if (!forecast && actual) return "status-bad";
+        const varianceRatio = Math.abs(actual - forecast) / Math.abs(forecast);
+        if (varianceRatio > 0.5) return "status-bad";
+        if (varianceRatio <= 0.1) return "status-good";
+        return "status-warning";
+      };
+
+      const formatPercent = (value) => `${(value * 100).toFixed(1)}%`;
+
       const findHeaderRowIndex = (rows) => {
         const headerRegex =
           /standard job|std_job|wgst_desc|period\s*\d+|^p\s*\d+|work order closed period|units complete|work order closed year/i;
@@ -770,6 +883,7 @@
       const buildForecastSummary = (headers, rows) => {
         const jobHeader = getHeaderMatch(headers, forecastHeaders.job);
         const descHeader = getHeaderMatch(headers, forecastHeaders.description);
+        const workGroupHeader = getHeaderMatch(headers, forecastHeaders.workGroupSet);
 
         logDebug(
           `Forecast header matches → job: ${jobHeader || "missing"}, desc: ${
@@ -784,6 +898,7 @@
 
         const summaryMap = new Map();
         const periodHeaders = headers.filter((header) => normalizePeriodLabel(header));
+        const workGroupSetTotals = new Map();
 
         rows.forEach((row) => {
           const rawJob = row[jobHeader];
@@ -813,6 +928,20 @@
             if (!periodLabel || !preferredPeriods.includes(periodLabel)) return;
             entry[periodLabel] += parseUnitsValue(row[header]);
           });
+
+          const rowTotal = periodHeaders.reduce((sum, header) => {
+            const periodLabel = normalizePeriodLabel(header);
+            if (!periodLabel || !preferredPeriods.includes(periodLabel)) return sum;
+            return sum + parseUnitsValue(row[header]);
+          }, 0);
+
+          const workGroupKey = String(row[workGroupHeader] || "Unspecified").trim() ||
+            "Unspecified";
+          if (!workGroupSetTotals.has(normalizedNumber)) {
+            workGroupSetTotals.set(normalizedNumber, new Map());
+          }
+          const jobMap = workGroupSetTotals.get(normalizedNumber);
+          jobMap.set(workGroupKey, (jobMap.get(workGroupKey) || 0) + rowTotal);
         });
 
         const headersToRender = [
@@ -821,13 +950,18 @@
           ...preferredPeriods,
         ];
 
-        return { headers: headersToRender, rows: Array.from(summaryMap.values()) };
+        return {
+          headers: headersToRender,
+          rows: Array.from(summaryMap.values()),
+          workGroupSetTotals,
+        };
       };
 
       const buildWorkDoneSummary = (headers, rows) => {
         const periodHeader = getHeaderMatch(headers, workDoneHeaders.period);
         const unitsHeader = getHeaderMatch(headers, workDoneHeaders.units);
         const jobHeader = getHeaderMatch(headers, workDoneHeaders.job);
+        const workGroupHeader = getHeaderMatch(headers, workDoneHeaders.workGroupSet);
 
         logDebug(
           `Work-done header matches → period: ${periodHeader || "missing"}, units: ${
@@ -843,6 +977,7 @@
         }
 
         const summaryMap = new Map();
+        const workGroupSetTotals = new Map();
 
         rows.forEach((row) => {
           const rawPeriod = row[periodHeader];
@@ -874,6 +1009,14 @@
           if (entry && parsedJob.description && !entry["Standard Job Description"]) {
             entry["Standard Job Description"] = parsedJob.description;
           }
+
+          const workGroupKey = String(row[workGroupHeader] || "Unspecified").trim() ||
+            "Unspecified";
+          if (!workGroupSetTotals.has(normalizedNumber)) {
+            workGroupSetTotals.set(normalizedNumber, new Map());
+          }
+          const jobMap = workGroupSetTotals.get(normalizedNumber);
+          jobMap.set(workGroupKey, (jobMap.get(workGroupKey) || 0) + units);
         });
 
         const headersToRender = [
@@ -882,7 +1025,11 @@
           ...preferredPeriods,
         ];
 
-        return { headers: headersToRender, rows: Array.from(summaryMap.values()) };
+        return {
+          headers: headersToRender,
+          rows: Array.from(summaryMap.values()),
+          workGroupSetTotals,
+        };
       };
 
       const standardJobsMap = new Map(
@@ -908,6 +1055,8 @@
         const workDoneMap = new Map(
           (workDoneData?.rows || []).map((row) => [row["Standard Job Number"], row])
         );
+        const forecastWorkGroupMap = forecastData?.workGroupSetTotals || new Map();
+        const workDoneWorkGroupMap = workDoneData?.workGroupSetTotals || new Map();
 
         const allowedKeys = new Set(standardJobsMap.keys());
         const jobKeys = new Set(
@@ -950,12 +1099,33 @@
               { forecast: 0, actual: 0, variance: 0 }
             );
 
+            const forecastGroups = forecastWorkGroupMap.get(jobNumber) || new Map();
+            const actualGroups = workDoneWorkGroupMap.get(jobNumber) || new Map();
+            const workGroupKeys = new Set([
+              ...forecastGroups.keys(),
+              ...actualGroups.keys(),
+            ]);
+            const workGroupSets = Array.from(workGroupKeys).map((workGroupSet) => {
+              const forecastValue = forecastGroups.get(workGroupSet) || 0;
+              const actualValue = actualGroups.get(workGroupSet) || 0;
+              return {
+                workGroupSet,
+                forecast: forecastValue,
+                actual: actualValue,
+                variance: actualValue - forecastValue,
+              };
+            });
+            workGroupSets.sort(
+              (a, b) => Math.abs(b.variance) - Math.abs(a.variance)
+            );
+
             return {
               jobNumber,
               description,
               meta,
               periods,
               totals,
+              workGroupSets,
             };
           });
       };
@@ -1010,76 +1180,166 @@
 
         scoredJobs.sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance));
 
-        scoredJobs.forEach(({ job, forecast, actual, variance }) => {
-          const card = document.createElement("div");
-          card.className = "job-card";
+        const jobsByDiscipline = scoredJobs.reduce((acc, item) => {
+          const discipline = item.job.meta?.discipline || "Other";
+          if (!acc.has(discipline)) {
+            acc.set(discipline, []);
+          }
+          acc.get(discipline).push(item);
+          return acc;
+        }, new Map());
 
-          const meta = job.meta || {};
-          const title = document.createElement("div");
-          title.className = "job-title";
-          title.innerHTML = `
-            <span>${job.jobNumber}</span>
-            <span>${job.description || "No description available"}</span>
-          `;
+        Array.from(jobsByDiscipline.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .forEach(([discipline, disciplineJobs]) => {
+            const section = document.createElement("div");
+            section.className = "discipline-section";
 
-          const metaGrid = document.createElement("div");
-          metaGrid.className = "job-meta";
-          const metaItems = [
-            ["Discipline", meta.discipline],
-            ["MNT Code", meta.mntCode],
-            ["Unit", meta.unitOfMeasure],
-            ["Cyclic/Work Arising", meta.cyclicWorkArising],
-          ];
-          metaGrid.innerHTML = metaItems
-            .map(
-              ([label, value]) =>
-                `<span><strong>${label}:</strong> ${value || "—"}</span>`
-            )
-            .join("");
+            const header = document.createElement("div");
+            header.className = "discipline-header";
+            header.innerHTML = `
+              <h3>${discipline}</h3>
+              <span class="helper">${disciplineJobs.length} jobs</span>
+            `;
 
-          const metrics = document.createElement("div");
-          metrics.className = "job-metrics";
-          metrics.appendChild(buildMetricPill("Forecast", forecast));
-          metrics.appendChild(buildMetricPill("Actual", actual));
-          metrics.appendChild(
-            buildMetricPill("Variance", variance, getVarianceClass(variance))
-          );
+            const grid = document.createElement("div");
+            grid.className = "discipline-grid";
 
-          card.appendChild(title);
-          card.appendChild(metaGrid);
-          card.appendChild(metrics);
+            disciplineJobs.forEach(({ job, forecast, actual }) => {
+              const statusClass = getVarianceStatus(forecast, actual);
+              const varianceRatio = forecast
+                ? Math.abs(actual - forecast) / Math.abs(forecast)
+                : actual
+                ? 1
+                : 0;
 
-          if (selectedPeriod === "all") {
-            const details = document.createElement("details");
-            const summary = document.createElement("summary");
-            summary.textContent = "View period breakdown";
-            details.appendChild(summary);
+              const card = document.createElement("div");
+              card.className = `job-card ${statusClass}`;
+              card.setAttribute("role", "button");
+              card.setAttribute("tabindex", "0");
 
-            const breakdown = document.createElement("div");
-            breakdown.className = "period-breakdown";
-            job.periods.forEach((period) => {
-              const pill = document.createElement("div");
-              pill.className = "metric-pill";
-              const varianceClass = getVarianceClass(period.variance);
-              pill.innerHTML = `
-                <span>${period.period}</span>
-                <span class="${varianceClass}">${formatUnits(period.variance)}</span>
+              const title = document.createElement("div");
+              title.className = "job-title";
+              title.innerHTML = `
+                <span>${job.jobNumber}</span>
+                <span>${job.description || "No description available"}</span>
               `;
-              breakdown.appendChild(pill);
+
+              const metrics = document.createElement("div");
+              metrics.className = "job-metrics";
+              metrics.appendChild(buildMetricPill("Planned", forecast));
+              metrics.appendChild(buildMetricPill("Actual", actual));
+              metrics.appendChild(
+                buildMetricPill(
+                  "Variance",
+                  actual - forecast,
+                  getVarianceClass(actual - forecast)
+                )
+              );
+
+              const varianceNote = document.createElement("div");
+              varianceNote.className = "variance-note";
+              varianceNote.textContent = `Variance ${formatPercent(varianceRatio)}`;
+
+              card.appendChild(title);
+              card.appendChild(metrics);
+              card.appendChild(varianceNote);
+
+              const openBreakdown = () => showBreakdownModal(job);
+              card.addEventListener("click", openBreakdown);
+              card.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openBreakdown();
+                }
+              });
+
+              grid.appendChild(card);
             });
 
-            details.appendChild(breakdown);
-            card.appendChild(details);
-          }
-
-          jobList.appendChild(card);
-        });
+            section.appendChild(header);
+            section.appendChild(grid);
+            jobList.appendChild(section);
+          });
 
         const visibleJobs = scoredJobs.length;
         updateSummaryCards(visibleJobs);
         jobCount.textContent = `${visibleJobs} jobs`;
         emptyState.hidden = visibleJobs > 0;
       };
+
+      const showBreakdownModal = (job) => {
+        breakdownModalTitle.textContent = `${job.jobNumber} breakdown`;
+        breakdownModalMeta.textContent = `${job.description || "No description"} · ${
+          job.meta?.discipline || "Discipline not set"
+        }`;
+
+        breakdownPeriods.innerHTML = "";
+        job.periods.forEach((period) => {
+          const item = document.createElement("div");
+          item.className = "breakdown-item";
+          item.innerHTML = `
+            <strong>${period.period}</strong>
+            <div class="breakdown-meta">
+              <span>Planned</span>
+              <span>${formatUnits(period.forecast)}</span>
+            </div>
+            <div class="breakdown-meta">
+              <span>Actual</span>
+              <span>${formatUnits(period.actual)}</span>
+            </div>
+            <div class="breakdown-meta ${getVarianceClass(period.variance)}">
+              <span>Variance</span>
+              <span>${formatUnits(period.variance)}</span>
+            </div>
+          `;
+          breakdownPeriods.appendChild(item);
+        });
+
+        breakdownWorkGroups.innerHTML = "";
+        if (!job.workGroupSets.length) {
+          const empty = document.createElement("div");
+          empty.className = "breakdown-item";
+          empty.textContent = "No work group set data available.";
+          breakdownWorkGroups.appendChild(empty);
+        } else {
+          job.workGroupSets.forEach((group) => {
+            const item = document.createElement("div");
+            item.className = "breakdown-item";
+            item.innerHTML = `
+              <strong>${group.workGroupSet}</strong>
+              <div class="breakdown-meta">
+                <span>Planned</span>
+                <span>${formatUnits(group.forecast)}</span>
+              </div>
+              <div class="breakdown-meta">
+                <span>Actual</span>
+                <span>${formatUnits(group.actual)}</span>
+              </div>
+              <div class="breakdown-meta ${getVarianceClass(group.variance)}">
+                <span>Variance</span>
+                <span>${formatUnits(group.variance)}</span>
+              </div>
+            `;
+            breakdownWorkGroups.appendChild(item);
+          });
+        }
+
+        breakdownModal.classList.add("is-open");
+        breakdownModal.setAttribute("aria-hidden", "false");
+      };
+
+      const hideBreakdownModal = () => {
+        breakdownModal.classList.remove("is-open");
+        breakdownModal.setAttribute("aria-hidden", "true");
+      };
+
+      closeBreakdownModal.addEventListener("click", hideBreakdownModal);
+      breakdownModal.addEventListener("click", (event) => {
+        if (event.target === breakdownModal) {
+          hideBreakdownModal();
+        }
+      });
 
       const updateView = () => {
         const jobs = getJobRecords();
