@@ -11,6 +11,8 @@
     h1 { font-size: 24px; margin-bottom: 8px; }
     .subtitle { color: #718096; font-size: 14px; }
     .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+    .control-group { display: flex; flex-direction: column; gap: 6px; }
+    .control-group label { font-size: 12px; color: #4a5568; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
     button { background: #3182ce; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; }
     button:hover { background: #2c5aa0; }
     select, input { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; }
@@ -92,6 +94,12 @@
 
     <div class="controls">
       <button onclick="openModal()">Upload Files</button>
+      <div class="control-group">
+        <label for="wgFilter">Work group set</label>
+        <select id="wgFilter" onchange="render()">
+          <option value="all">All Work Group Sets</option>
+        </select>
+      </div>
       <select id="period" onchange="render()">
         <option value="all">All Periods</option>
         <option value="P1">Period 1</option>
@@ -294,6 +302,41 @@
       return text;
     }
 
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function getWorkGroupOptions() {
+      const names = new Set();
+      [fData, wData].forEach(source => {
+        if (!source) return;
+        source.forEach(job => {
+          Object.keys(job.wgs || {}).forEach(wg => {
+            if (wg) names.add(wg);
+          });
+        });
+      });
+      return Array.from(names).sort((a, b) => a.localeCompare(b));
+    }
+
+    function updateWorkGroupFilterOptions() {
+      const select = document.getElementById('wgFilter');
+      if (!select) return;
+      const current = select.value || 'all';
+      const options = getWorkGroupOptions();
+      const optionHtml = [
+        '<option value="all">All Work Group Sets</option>',
+        ...options.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+      ].join('');
+      select.innerHTML = optionHtml;
+      select.value = options.includes(current) ? current : 'all';
+    }
+
     async function loadForecast(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -343,6 +386,7 @@
         });
         console.log('✓ Matched:', matched, 'of', rows.length);
         document.getElementById('fCount').textContent = rows.length;
+        updateWorkGroupFilterOptions();
         render();
         closeModal();
       } catch(err) {
@@ -421,6 +465,7 @@
         });
         console.log('✓ Matched:', matched, 'of', rows.length);
         document.getElementById('aCount').textContent = rows.length;
+        updateWorkGroupFilterOptions();
         render();
         closeModal();
       } catch(err) {
@@ -475,8 +520,16 @@
 
       const search = document.getElementById('search').value.toLowerCase();
       const period = document.getElementById('period').value;
-      
-      let filtered = jobs.filter(j => !search || j.jn.includes(search) || j.desc.toLowerCase().includes(search) || j.disc.toLowerCase().includes(search));
+      const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+
+      let filtered = jobs.filter(j => {
+        const matchesSearch = !search || j.jn.includes(search) || j.desc.toLowerCase().includes(search) || j.disc.toLowerCase().includes(search);
+        if (!matchesSearch) return false;
+        if (wgFilter === 'all') return true;
+        const wgData = j.wgs[wgFilter];
+        if (!wgData) return false;
+        return Object.values(wgData.periods || {}).some(periodData => periodData.f !== 0 || periodData.a !== 0);
+      });
       
       filtered.sort((a,b) => {
         const av = period==='all' ? Math.abs(a.tot.v) : Math.abs(a.periods[period]?.v||0);
@@ -604,7 +657,7 @@
       } else {
         wgEntries.forEach(([wg, data], idx) => {
           let rowTotal = 0;
-          tableHTML += `<tr class="wg-summary" data-wg="${idx}"><td><strong>${wg} <span class="wg-toggle">Show details</span></strong></td>`;
+          tableHTML += `<tr class="wg-summary is-open" data-wg="${idx}"><td><strong>${wg} <span class="wg-toggle">Hide details</span></strong></td>`;
           for(let i=1; i<=13; i++) {
             const p = `P${i}`;
             const d = data.periods[p] || {v: 0};
@@ -623,7 +676,7 @@
           ];
           detailRows.forEach(({ label, key }) => {
             let detailTotal = 0;
-            tableHTML += `<tr class="wg-detail" data-wg="${idx}"><td>${label}</td>`;
+            tableHTML += `<tr class="wg-detail open" data-wg="${idx}"><td>${label}</td>`;
             for(let i=1; i<=13; i++) {
               const p = `P${i}`;
               const d = data.periods[p] || {f: 0, a: 0, v: 0};
