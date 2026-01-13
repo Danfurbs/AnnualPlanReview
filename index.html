@@ -164,9 +164,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+  <script src="work-group-sets-data.js"></script>
   <script src="standard-jobs-data.js"></script>
   <script>
     let fData = null, wData = null, stdJobs = new Map();
+    let workGroupSets = new Map();
     let currentChart = null;
     const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11'];
     const COMMENT_STORAGE_KEY = 'aprJobComments';
@@ -198,6 +200,17 @@
 
     function init() {
       loadCommentStore();
+      if (typeof WORK_GROUP_SETS_RAW !== 'undefined') {
+        WORK_GROUP_SETS_RAW.split('\n').slice(1).forEach(line => {
+          const p = line.split('\t');
+          if (p.length >= 2) {
+            workGroupSets.set(p[0].trim(), p[1].trim());
+          }
+        });
+        console.log('✓ Work group sets loaded:', workGroupSets.size);
+      } else {
+        console.warn('⚠ work-group-sets-data.js not found - using raw values');
+      }
       // Check if external file loaded
       if (typeof STANDARD_JOBS_RAW !== 'undefined') {
         STANDARD_JOBS_RAW.split('\n').slice(1).forEach(line => {
@@ -220,6 +233,16 @@
       const s = String(txt).trim().split('-')[0].trim();
       const m = s.match(/(\d{6})/);
       return m ? m[1] : null;
+    }
+
+    function normalizeWorkGroupSet(raw) {
+      if (!raw) return 'Unspecified';
+      const text = String(raw).trim();
+      if (!text) return 'Unspecified';
+      const code = text.split(/\s+/)[0];
+      if (workGroupSets.has(code)) return workGroupSets.get(code);
+      if (workGroupSets.has(text)) return workGroupSets.get(text);
+      return text;
     }
 
     async function loadForecast(e) {
@@ -255,7 +278,9 @@
             fData.set(jn, {periods:{}, wgs:{}});
           }
           const job = fData.get(jn);
-          const wg = r['Work Group Set'] || r['WGST_DESC'] || 'Unspecified';
+          const wg = normalizeWorkGroupSet(
+            r['Work Group Set'] || r['WGST_DESC'] || r['Work Group Set Description']
+          );
           
           // Look for P01-P13 or P1-P13
           for(let i=1; i<=13; i++) {
@@ -333,7 +358,9 @@
           const job = wData.get(jn);
           const u = parseFloat(units||0);
           job.periods[per] = (job.periods[per]||0) + u;
-          const wg = r['Work Group Set'] || 'Unspecified';
+          const wg = normalizeWorkGroupSet(
+            r['Work Group Set'] || r['Work Group Set Description']
+          );
           if (!job.wgs[wg]) job.wgs[wg] = {};
           job.wgs[wg][per] = (job.wgs[wg][per]||0) + u;
         });
