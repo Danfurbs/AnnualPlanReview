@@ -28,6 +28,7 @@
     .job-card.bad { border-left: 4px solid #f56565; }
     .job-number { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
     .job-desc { color: #718096; font-size: 13px; margin-bottom: 12px; }
+    .job-unit { color: #4a5568; font-size: 12px; margin-bottom: 12px; }
     .job-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 13px; }
     .metric-label { color: #718096; font-size: 11px; text-transform: uppercase; }
     .metric-value { font-weight: 600; margin-top: 2px; }
@@ -150,9 +151,9 @@
       if (typeof STANDARD_JOBS_RAW !== 'undefined') {
         STANDARD_JOBS_RAW.split('\n').slice(1).forEach(line => {
           const p = line.split('\t');
-          if (p.length >= 4) {
+          if (p.length >= 5) {
             stdJobs.set(p[2].trim().padStart(6,'0'), {
-              disc: p[0].trim(), desc: p[3].trim()
+              disc: p[0].trim(), desc: p[3].trim(), unit: p[4].trim()
             });
           }
         });
@@ -314,8 +315,10 @@
           jn, 
           disc: meta?.disc || 'Unknown', 
           desc: meta?.desc || `Job ${jn}`, 
+          unit: meta?.unit || 'Unit not specified',
           periods:{}, 
-          tot:{f:0,a:0,v:0}
+          tot:{f:0,a:0,v:0},
+          wgs: {}
         };
         for(let i=1; i<=13; i++) {
           const p = `P${i}`;
@@ -326,6 +329,20 @@
           job.tot.a += av;
           job.tot.v += av-fv;
         }
+
+        const wgNames = new Set([
+          ...Object.keys(f?.wgs || {}),
+          ...Object.keys(a?.wgs || {})
+        ]);
+        wgNames.forEach(wg => {
+          job.wgs[wg] = {periods: {}};
+          for(let i=1; i<=13; i++) {
+            const p = `P${i}`;
+            const fv = f?.wgs?.[wg]?.[p] || 0;
+            const av = a?.wgs?.[wg]?.[p] || 0;
+            job.wgs[wg].periods[p] = {f: fv, a: av, v: av - fv};
+          }
+        });
         jobs.push(job);
       });
 
@@ -370,6 +387,7 @@
           card.innerHTML = `
             <div class="job-number">${j.jn}</div>
             <div class="job-desc">${j.desc}</div>
+            <div class="job-unit">Unit: ${j.unit}</div>
             <div class="job-metrics">
               <div><div class="metric-label">Planned</div><div class="metric-value">${pd.f.toFixed(2)}</div></div>
               <div><div class="metric-label">Actual</div><div class="metric-value">${pd.a.toFixed(2)}</div></div>
@@ -387,7 +405,7 @@
 
     function showBreakdown(job) {
       document.getElementById('bdTitle').textContent = `${job.jn} - Breakdown`;
-      document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc}`;
+      document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc} • ${job.unit}`;
       
       // Build cumulative data
       const periods = [];
@@ -453,20 +471,25 @@
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
       tableHTML += '<th>Total</th></tr></thead><tbody>';
       
-      Object.entries(job.wgs).forEach(([wg, data]) => {
-        let rowTotal = 0;
-        tableHTML += `<tr><td><strong>${wg}</strong></td>`;
-        for(let i=1; i<=13; i++) {
-          const p = `P${i}`;
-          const d = data.periods[p];
-          const v = d.v;
-          rowTotal += v;
-          const cl = v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
-          tableHTML += `<td class="${cl}">${v > 0 ? '+' : ''}${v.toFixed(1)}</td>`;
-        }
-        const tcl = rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral';
-        tableHTML += `<td class="${tcl}"><strong>${rowTotal > 0 ? '+' : ''}${rowTotal.toFixed(1)}</strong></td></tr>`;
-      });
+      const wgEntries = Object.entries(job.wgs || {});
+      if (wgEntries.length === 0) {
+        tableHTML += '<tr><td colspan="15"><em>No work group data available.</em></td></tr>';
+      } else {
+        wgEntries.forEach(([wg, data]) => {
+          let rowTotal = 0;
+          tableHTML += `<tr><td><strong>${wg}</strong></td>`;
+          for(let i=1; i<=13; i++) {
+            const p = `P${i}`;
+            const d = data.periods[p] || {v: 0};
+            const v = d.v || 0;
+            rowTotal += v;
+            const cl = v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
+            tableHTML += `<td class="${cl}">${v > 0 ? '+' : ''}${v.toFixed(1)}</td>`;
+          }
+          const tcl = rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral';
+          tableHTML += `<td class="${tcl}"><strong>${rowTotal > 0 ? '+' : ''}${rowTotal.toFixed(1)}</strong></td></tr>`;
+        });
+      }
       tableHTML += '</tbody>';
       wgTable.innerHTML = tableHTML;
       
