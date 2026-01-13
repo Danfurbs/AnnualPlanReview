@@ -38,6 +38,7 @@
     .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000; }
     .modal.open { display: flex; }
     .modal-content { background: white; border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .modal-content.modal-content--wide { max-width: 1100px; width: 95%; max-height: 90vh; }
     .modal-header { display: flex; justify-content: space-between; margin-bottom: 20px; }
     .close { background: none; color: #718096; font-size: 24px; padding: 0; width: 32px; height: 32px; cursor: pointer; }
     .file-input-group { margin-bottom: 16px; }
@@ -54,6 +55,13 @@
     .wg-table tbody td:first-child { text-align: left; color: #2d3748; }
     .wg-table tbody tr:nth-child(even) { background: #f8fafc; }
     .wg-table tbody tr:hover { background: #edf2f7; }
+    .wg-summary { cursor: pointer; }
+    .wg-summary strong { display: inline-flex; align-items: center; gap: 8px; }
+    .wg-toggle { font-size: 11px; text-transform: uppercase; color: #64748b; }
+    .wg-detail { display: none; background: #f8fafc; }
+    .wg-detail.open { display: table-row; }
+    .wg-detail td { font-size: 12px; color: #4a5568; }
+    .wg-detail td:first-child { font-weight: 600; color: #1f2937; }
     .breakdown-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
     .breakdown-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
     .breakdown-item strong { font-size: 13px; color: #2d3748; }
@@ -140,7 +148,7 @@
   </div>
 
   <div id="breakdown" class="modal">
-    <div class="modal-content" style="max-width: 900px;">
+    <div class="modal-content modal-content--wide">
       <div class="modal-header">
         <div>
           <h2 id="bdTitle">Job Breakdown</h2>
@@ -594,9 +602,9 @@
       if (wgEntries.length === 0) {
         tableHTML += '<tr><td colspan="15"><em>No work group data available.</em></td></tr>';
       } else {
-        wgEntries.forEach(([wg, data]) => {
+        wgEntries.forEach(([wg, data], idx) => {
           let rowTotal = 0;
-          tableHTML += `<tr><td><strong>${wg}</strong></td>`;
+          tableHTML += `<tr class="wg-summary" data-wg="${idx}"><td><strong>${wg} <span class="wg-toggle">Show details</span></strong></td>`;
           for(let i=1; i<=13; i++) {
             const p = `P${i}`;
             const d = data.periods[p] || {v: 0};
@@ -607,10 +615,41 @@
           }
           const tcl = rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral';
           tableHTML += `<td class="${tcl}"><strong>${rowTotal > 0 ? '+' : ''}${rowTotal.toFixed(1)}</strong></td></tr>`;
+
+          const detailRows = [
+            { label: 'Planned', key: 'f' },
+            { label: 'Actual', key: 'a' },
+            { label: 'Variance', key: 'v' }
+          ];
+          detailRows.forEach(({ label, key }) => {
+            let detailTotal = 0;
+            tableHTML += `<tr class="wg-detail" data-wg="${idx}"><td>${label}</td>`;
+            for(let i=1; i<=13; i++) {
+              const p = `P${i}`;
+              const d = data.periods[p] || {f: 0, a: 0, v: 0};
+              const val = d[key] || 0;
+              detailTotal += val;
+              const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
+              tableHTML += `<td class="${cl}">${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}</td>`;
+            }
+            const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
+            tableHTML += `<td class="${tcl}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+          });
         });
       }
       tableHTML += '</tbody>';
       wgTable.innerHTML = tableHTML;
+
+      wgTable.querySelectorAll('.wg-summary').forEach(row => {
+        row.addEventListener('click', () => {
+          const key = row.dataset.wg;
+          const details = wgTable.querySelectorAll(`.wg-detail[data-wg="${key}"]`);
+          const isOpen = row.classList.toggle('is-open');
+          details.forEach(detail => detail.classList.toggle('open', isOpen));
+          const toggle = row.querySelector('.wg-toggle');
+          if (toggle) toggle.textContent = isOpen ? 'Hide details' : 'Show details';
+        });
+      });
       
       // Period summary
       const periodGrid = document.getElementById('periodGrid');
