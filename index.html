@@ -651,13 +651,16 @@
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
       tableHTML += '<th>Total</th></tr></thead><tbody>';
       
-      const wgEntries = Object.entries(job.wgs || {});
+      const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const isFiltered = wgFilter !== 'all';
+      const wgEntries = Object.entries(job.wgs || {}).filter(([wg]) => !isFiltered || wg === wgFilter);
       if (wgEntries.length === 0) {
         tableHTML += '<tr><td colspan="15"><em>No work group data available.</em></td></tr>';
       } else {
         wgEntries.forEach(([wg, data], idx) => {
           let rowTotal = 0;
-          tableHTML += `<tr class="wg-summary is-open" data-wg="${idx}"><td><strong>${wg} <span class="wg-toggle">Hide details</span></strong></td>`;
+          const summaryOpen = isFiltered;
+          tableHTML += `<tr class="wg-summary${summaryOpen ? ' is-open' : ''}" data-wg="${idx}"><td><strong>${wg} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
           for(let i=1; i<=13; i++) {
             const p = `P${i}`;
             const d = data.periods[p] || {v: 0};
@@ -676,7 +679,7 @@
           ];
           detailRows.forEach(({ label, key }) => {
             let detailTotal = 0;
-            tableHTML += `<tr class="wg-detail open" data-wg="${idx}"><td>${label}</td>`;
+            tableHTML += `<tr class="wg-detail${summaryOpen ? ' open' : ''}" data-wg="${idx}"><td>${label}</td>`;
             for(let i=1; i<=13; i++) {
               const p = `P${i}`;
               const d = data.periods[p] || {f: 0, a: 0, v: 0};
