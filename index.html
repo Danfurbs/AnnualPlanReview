@@ -45,6 +45,23 @@
     .helper-text { font-size: 12px; color: #718096; margin-top: 4px; }
     .row-input { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
     input[type="number"] { width: 80px; }
+    .breakdown-section { margin-top: 20px; }
+    .breakdown-section h3 { margin-bottom: 12px; font-size: 16px; color: #2d3748; }
+    .wg-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    .wg-table thead th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; }
+    .wg-table thead th:first-child { text-align: left; }
+    .wg-table tbody td { padding: 10px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: right; }
+    .wg-table tbody td:first-child { text-align: left; color: #2d3748; }
+    .wg-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .wg-table tbody tr:hover { background: #edf2f7; }
+    .breakdown-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+    .breakdown-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .breakdown-item strong { font-size: 13px; color: #2d3748; }
+    .breakdown-row { display: flex; justify-content: space-between; font-size: 12px; color: #4a5568; }
+    .comment-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    .comment-field { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .comment-field label { font-size: 12px; font-weight: 700; color: #2d3748; text-transform: uppercase; letter-spacing: 0.04em; }
+    .comment-field textarea { border: 1px solid #cbd5e0; border-radius: 6px; padding: 8px; font-size: 13px; min-height: 90px; resize: vertical; }
   </style>
 </head>
 <body>
@@ -137,6 +154,11 @@
         <h3>Period Summary</h3>
         <div class="breakdown-grid" id="periodGrid"></div>
       </div>
+
+      <div class="breakdown-section">
+        <h3>Comments</h3>
+        <div class="comment-grid" id="commentGrid"></div>
+      </div>
     </div>
   </div>
 
@@ -146,8 +168,36 @@
   <script>
     let fData = null, wData = null, stdJobs = new Map();
     let currentChart = null;
+    const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11'];
+    const COMMENT_STORAGE_KEY = 'aprJobComments';
+    let commentStore = {};
+
+    function loadCommentStore() {
+      try {
+        const raw = localStorage.getItem(COMMENT_STORAGE_KEY);
+        commentStore = raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        console.warn('Failed to load comments:', err);
+        commentStore = {};
+      }
+    }
+
+    function saveCommentStore() {
+      localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
+    }
+
+    function updateJobComment(jobNumber, category, value) {
+      if (!commentStore[jobNumber]) commentStore[jobNumber] = {};
+      commentStore[jobNumber][category] = value;
+      saveCommentStore();
+    }
+
+    function getJobComments(jobNumber) {
+      return commentStore[jobNumber] || {};
+    }
 
     function init() {
+      loadCommentStore();
       // Check if external file loaded
       if (typeof STANDARD_JOBS_RAW !== 'undefined') {
         STANDARD_JOBS_RAW.split('\n').slice(1).forEach(line => {
@@ -510,6 +560,25 @@
           </div>
         `;
       }
+
+      // Comments section
+      const commentGrid = document.getElementById('commentGrid');
+      commentGrid.innerHTML = '';
+      const comments = getJobComments(job.jn);
+      COMMENT_CATEGORIES.forEach(category => {
+        const field = document.createElement('div');
+        field.className = 'comment-field';
+        const label = document.createElement('label');
+        label.textContent = category;
+        const textarea = document.createElement('textarea');
+        textarea.value = comments[category] || '';
+        textarea.addEventListener('input', event => {
+          updateJobComment(job.jn, category, event.target.value);
+        });
+        field.appendChild(label);
+        field.appendChild(textarea);
+        commentGrid.appendChild(field);
+      });
       
       document.getElementById('breakdown').classList.add('open');
     }
