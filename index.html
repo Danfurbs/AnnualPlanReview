@@ -95,6 +95,13 @@
     <div class="controls">
       <button onclick="openModal()">Upload Files</button>
       <div class="control-group">
+        <label for="viewMode">View mode</label>
+        <select id="viewMode" onchange="render()">
+          <option value="actual">Show Work Done Only</option>
+          <option value="forecast">Show Work Done &amp; Forecast</option>
+        </select>
+      </div>
+      <div class="control-group">
         <label for="wgFilter">Work group set</label>
         <select id="wgFilter" onchange="render()">
           <option value="all">All Work Group Sets</option>
@@ -337,6 +344,20 @@
       select.value = options.includes(current) ? current : 'all';
     }
 
+    function getMaxWorkDonePeriod() {
+      if (!wData) return 0;
+      let max = 0;
+      wData.forEach(job => {
+        Object.entries(job.periods || {}).forEach(([period, value]) => {
+          const numeric = parseInt(String(period).replace(/[^0-9]/g, ''), 10);
+          if (!Number.isNaN(numeric) && numeric > max && value !== 0) {
+            max = numeric;
+          }
+        });
+      });
+      return max;
+    }
+
     async function loadForecast(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -475,6 +496,8 @@
     }
 
     function render() {
+      const viewMode = document.getElementById('viewMode')?.value || 'actual';
+      const maxWorkDonePeriod = viewMode === 'forecast' ? getMaxWorkDonePeriod() : 0;
       const all = new Set([...(fData?.keys()||[]), ...(wData?.keys()||[])]);
       const jobs = [];
       all.forEach(jn => {
@@ -495,7 +518,9 @@
         for(let i=1; i<=13; i++) {
           const p = `P${i}`;
           const fv = f?.periods[p]||0;
-          const av = a?.periods[p]||0;
+          const avRaw = a?.periods[p]||0;
+          const useForecast = viewMode === 'forecast' && i > maxWorkDonePeriod;
+          const av = useForecast ? fv : avRaw;
           job.periods[p] = {f:fv, a:av, v:av-fv};
           job.tot.f += fv;
           job.tot.a += av;
@@ -511,7 +536,9 @@
           for(let i=1; i<=13; i++) {
             const p = `P${i}`;
             const fv = f?.wgs?.[wg]?.[p] || 0;
-            const av = a?.wgs?.[wg]?.[p] || 0;
+            const avRaw = a?.wgs?.[wg]?.[p] || 0;
+            const useForecast = viewMode === 'forecast' && i > maxWorkDonePeriod;
+            const av = useForecast ? fv : avRaw;
             job.wgs[wg].periods[p] = {f: fv, a: av, v: av - fv};
           }
         });
