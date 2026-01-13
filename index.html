@@ -58,10 +58,21 @@
     .breakdown-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
     .breakdown-item strong { font-size: 13px; color: #2d3748; }
     .breakdown-row { display: flex; justify-content: space-between; font-size: 12px; color: #4a5568; }
-    .comment-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-    .comment-field { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
-    .comment-field label { font-size: 12px; font-weight: 700; color: #2d3748; text-transform: uppercase; letter-spacing: 0.04em; }
-    .comment-field textarea { border: 1px solid #cbd5e0; border-radius: 6px; padding: 8px; font-size: 13px; min-height: 90px; resize: vertical; }
+    .comment-panel { display: flex; flex-direction: column; gap: 12px; }
+    .comment-entry { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .comment-entry label { font-size: 12px; font-weight: 700; color: #2d3748; text-transform: uppercase; letter-spacing: 0.04em; }
+    .comment-entry-row { display: flex; gap: 8px; align-items: stretch; }
+    .comment-entry-row select { min-width: 160px; }
+    .comment-entry-row textarea { flex: 1; border: 1px solid #cbd5e0; border-radius: 6px; padding: 8px; font-size: 13px; min-height: 90px; resize: vertical; }
+    .comment-actions { display: flex; justify-content: flex-end; }
+    .comment-table { width: 100%; border-collapse: collapse; }
+    .comment-table th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .comment-table td { padding: 10px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: top; }
+    .comment-table td:last-child { text-align: right; }
+    .comment-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .comment-table tbody tr:hover { background: #edf2f7; }
+    .comment-delete { background: #e53e3e; padding: 6px 12px; border-radius: 6px; font-size: 12px; }
+    .comment-delete:hover { background: #c53030; }
   </style>
 </head>
 <body>
@@ -157,7 +168,21 @@
 
       <div class="breakdown-section">
         <h3>Comments</h3>
-        <div class="comment-grid" id="commentGrid"></div>
+        <div class="comment-panel">
+          <div class="comment-entry">
+            <label for="commentType">Add Comment</label>
+            <div class="comment-entry-row">
+              <select id="commentType"></select>
+              <textarea id="commentText" placeholder="Enter comment..."></textarea>
+            </div>
+            <div class="comment-actions">
+              <button type="button" id="commentAdd">Add Comment</button>
+            </div>
+          </div>
+          <div style="overflow-x: auto;">
+            <table class="comment-table" id="commentTable"></table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -171,11 +196,14 @@
     let workGroupSets = new Map();
     let currentChart = null;
     const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11'];
-    const COMMENT_STORAGE_KEY = 'aprJobComments';
+    const COMMENT_STORAGE_KEY = 'aprJobCommentsV2';
+    const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
     let commentStore = {};
+    let currentCommentJob = null;
 
     function loadCommentStore() {
       try {
+        localStorage.removeItem(LEGACY_COMMENT_STORAGE_KEY);
         const raw = localStorage.getItem(COMMENT_STORAGE_KEY);
         commentStore = raw ? JSON.parse(raw) : {};
       } catch (err) {
@@ -188,14 +216,27 @@
       localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
     }
 
-    function updateJobComment(jobNumber, category, value) {
-      if (!commentStore[jobNumber]) commentStore[jobNumber] = {};
-      commentStore[jobNumber][category] = value;
+    function getJobComments(jobNumber) {
+      return commentStore[jobNumber] || [];
+    }
+
+    function addJobComment(jobNumber, category, value) {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      if (!commentStore[jobNumber]) commentStore[jobNumber] = [];
+      commentStore[jobNumber].unshift({
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        category,
+        text: trimmed,
+        timestamp: new Date().toISOString()
+      });
       saveCommentStore();
     }
 
-    function getJobComments(jobNumber) {
-      return commentStore[jobNumber] || {};
+    function deleteJobComment(jobNumber, id) {
+      if (!commentStore[jobNumber]) return;
+      commentStore[jobNumber] = commentStore[jobNumber].filter(entry => entry.id !== id);
+      saveCommentStore();
     }
 
     function init() {
@@ -589,25 +630,56 @@
       }
 
       // Comments section
-      const commentGrid = document.getElementById('commentGrid');
-      commentGrid.innerHTML = '';
-      const comments = getJobComments(job.jn);
-      COMMENT_CATEGORIES.forEach(category => {
-        const field = document.createElement('div');
-        field.className = 'comment-field';
-        const label = document.createElement('label');
-        label.textContent = category;
-        const textarea = document.createElement('textarea');
-        textarea.value = comments[category] || '';
-        textarea.addEventListener('input', event => {
-          updateJobComment(job.jn, category, event.target.value);
-        });
-        field.appendChild(label);
-        field.appendChild(textarea);
-        commentGrid.appendChild(field);
-      });
+      currentCommentJob = job.jn;
+      const commentType = document.getElementById('commentType');
+      const commentText = document.getElementById('commentText');
+      const commentAdd = document.getElementById('commentAdd');
+      if (!commentType.options.length) {
+        commentType.innerHTML = COMMENT_CATEGORIES.map(category => `<option value="${category}">${category}</option>`).join('');
+      }
+      commentText.value = '';
+      commentAdd.onclick = () => {
+        addJobComment(job.jn, commentType.value, commentText.value);
+        commentText.value = '';
+        renderCommentsTable(job.jn);
+      };
+      renderCommentsTable(job.jn);
       
       document.getElementById('breakdown').classList.add('open');
+    }
+
+    function renderCommentsTable(jobNumber) {
+      const commentTable = document.getElementById('commentTable');
+      const comments = getJobComments(jobNumber);
+      if (!comments.length) {
+        commentTable.innerHTML = '<thead><tr><th>Type</th><th>Comment</th><th>Date</th><th></th></tr></thead><tbody><tr><td colspan="4"><em>No comments yet.</em></td></tr></tbody>';
+        return;
+      }
+      const rows = comments.map(entry => `
+        <tr>
+          <td>${entry.category}</td>
+          <td>${entry.text}</td>
+          <td>${formatTimestamp(entry.timestamp)}</td>
+          <td><button type="button" class="comment-delete" data-id="${entry.id}">Delete</button></td>
+        </tr>
+      `).join('');
+      commentTable.innerHTML = `
+        <thead><tr><th>Type</th><th>Comment</th><th>Date</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      `;
+      commentTable.querySelectorAll('.comment-delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+          deleteJobComment(jobNumber, btn.dataset.id);
+          renderCommentsTable(jobNumber);
+        });
+      });
+    }
+
+    function formatTimestamp(value) {
+      if (!value) return '';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString();
     }
 
     function closeBreakdown() {
