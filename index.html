@@ -110,9 +110,40 @@
     </div>
   </div>
 
+  <div id="breakdown" class="modal">
+    <div class="modal-content" style="max-width: 900px;">
+      <div class="modal-header">
+        <div>
+          <h2 id="bdTitle">Job Breakdown</h2>
+          <p class="helper-text" id="bdMeta"></p>
+        </div>
+        <button class="close" onclick="closeBreakdown()">&times;</button>
+      </div>
+      
+      <div class="breakdown-section">
+        <h3>Cumulative Progress</h3>
+        <canvas id="chart"></canvas>
+      </div>
+
+      <div class="breakdown-section">
+        <h3>Work Group Performance by Period</h3>
+        <div style="overflow-x: auto;">
+          <table class="wg-table" id="wgTable"></table>
+        </div>
+      </div>
+
+      <div class="breakdown-section">
+        <h3>Period Summary</h3>
+        <div class="breakdown-grid" id="periodGrid"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
   <script>
     let fData = null, wData = null, stdJobs = new Map();
+    let currentChart = null;
 
     function init() {
       // Check if external file loaded
@@ -332,17 +363,21 @@
           const stat = vp>0.5 ? 'bad' : vp>0.1 ? 'warning' : 'good';
           const vc = pd.v>0 ? 'positive' : pd.v<0 ? 'negative' : 'neutral';
           
-          grid.innerHTML += `
-            <div class="job-card ${stat}">
-              <div class="job-number">${j.jn}</div>
-              <div class="job-desc">${j.desc}</div>
-              <div class="job-metrics">
-                <div><div class="metric-label">Planned</div><div class="metric-value">${pd.f.toFixed(2)}</div></div>
-                <div><div class="metric-label">Actual</div><div class="metric-value">${pd.a.toFixed(2)}</div></div>
-                <div><div class="metric-label">Variance</div><div class="metric-value ${vc}">${pd.v>0?'+':''}${pd.v.toFixed(2)}</div></div>
-              </div>
+          const card = document.createElement('div');
+          card.className = `job-card ${stat}`;
+          card.onclick = () => showBreakdown(j);
+          
+          card.innerHTML = `
+            <div class="job-number">${j.jn}</div>
+            <div class="job-desc">${j.desc}</div>
+            <div class="job-metrics">
+              <div><div class="metric-label">Planned</div><div class="metric-value">${pd.f.toFixed(2)}</div></div>
+              <div><div class="metric-label">Actual</div><div class="metric-value">${pd.a.toFixed(2)}</div></div>
+              <div><div class="metric-label">Variance</div><div class="metric-value ${vc}">${pd.v>0?'+':''}${pd.v.toFixed(2)}</div></div>
             </div>
           `;
+          
+          grid.appendChild(card);
         });
         
         sec.appendChild(grid);
@@ -350,9 +385,120 @@
       });
     }
 
+    function showBreakdown(job) {
+      document.getElementById('bdTitle').textContent = `${job.jn} - Breakdown`;
+      document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc}`;
+      
+      // Build cumulative data
+      const periods = [];
+      let cumF = 0, cumA = 0;
+      const cumForecast = [], cumActual = [];
+      
+      for(let i=1; i<=13; i++) {
+        const p = `P${i}`;
+        periods.push(`Period ${i}`);
+        cumF += job.periods[p].f;
+        cumA += job.periods[p].a;
+        cumForecast.push(cumF);
+        cumActual.push(cumA);
+      }
+      
+      // Draw chart
+      const ctx = document.getElementById('chart');
+      if (currentChart) currentChart.destroy();
+      
+      currentChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: periods,
+          datasets: [
+            {
+              label: 'Forecast (Cumulative)',
+              data: cumForecast,
+              borderColor: '#3b82f6',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              tension: 0.3,
+              fill: true
+            },
+            {
+              label: 'Actual (Cumulative)',
+              data: cumActual,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              tension: 0.3,
+              fill: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`
+              }
+            }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+      
+      // Build work group table
+      const wgTable = document.getElementById('wgTable');
+      let tableHTML = '<thead><tr><th>Work Group</th>';
+      for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
+      tableHTML += '<th>Total</th></tr></thead><tbody>';
+      
+      Object.entries(job.wgs).forEach(([wg, data]) => {
+        let rowTotal = 0;
+        tableHTML += `<tr><td><strong>${wg}</strong></td>`;
+        for(let i=1; i<=13; i++) {
+          const p = `P${i}`;
+          const d = data.periods[p];
+          const v = d.v;
+          rowTotal += v;
+          const cl = v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
+          tableHTML += `<td class="${cl}">${v > 0 ? '+' : ''}${v.toFixed(1)}</td>`;
+        }
+        const tcl = rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral';
+        tableHTML += `<td class="${tcl}"><strong>${rowTotal > 0 ? '+' : ''}${rowTotal.toFixed(1)}</strong></td></tr>`;
+      });
+      tableHTML += '</tbody>';
+      wgTable.innerHTML = tableHTML;
+      
+      // Period summary
+      const periodGrid = document.getElementById('periodGrid');
+      periodGrid.innerHTML = '';
+      for(let i=1; i<=13; i++) {
+        const p = `P${i}`;
+        const d = job.periods[p];
+        const vc = d.v > 0 ? 'positive' : d.v < 0 ? 'negative' : 'neutral';
+        periodGrid.innerHTML += `
+          <div class="breakdown-item">
+            <strong>Period ${i}</strong>
+            <div class="breakdown-row"><span>Forecast:</span><span>${d.f.toFixed(2)}</span></div>
+            <div class="breakdown-row"><span>Actual:</span><span>${d.a.toFixed(2)}</span></div>
+            <div class="breakdown-row ${vc}"><span>Variance:</span><span>${d.v>0?'+':''}${d.v.toFixed(2)}</span></div>
+          </div>
+        `;
+      }
+      
+      document.getElementById('breakdown').classList.add('open');
+    }
+
+    function closeBreakdown() {
+      document.getElementById('breakdown').classList.remove('open');
+    }
+
     function openModal() { document.getElementById('modal').classList.add('open'); }
     function closeModal() { document.getElementById('modal').classList.remove('open'); }
+    
     document.getElementById('modal').onclick = e => { if (e.target.id==='modal') closeModal(); };
+    document.getElementById('breakdown').onclick = e => { if (e.target.id==='breakdown') closeBreakdown(); };
 
     init();
     render();
