@@ -548,6 +548,23 @@
       const search = document.getElementById('search').value.toLowerCase();
       const period = document.getElementById('period').value;
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const getJobDisplayData = (job) => {
+        if (wgFilter === 'all') {
+          return { periods: job.periods, tot: job.tot };
+        }
+        const wgData = job.wgs?.[wgFilter];
+        const periods = {};
+        const totals = { f: 0, a: 0, v: 0 };
+        for (let i = 1; i <= 13; i++) {
+          const p = `P${i}`;
+          const data = wgData?.periods?.[p] || { f: 0, a: 0, v: 0 };
+          periods[p] = data;
+          totals.f += data.f || 0;
+          totals.a += data.a || 0;
+          totals.v += data.v || 0;
+        }
+        return { periods, tot: totals };
+      };
 
       let filtered = jobs.filter(j => {
         const matchesSearch = !search || j.jn.includes(search) || j.desc.toLowerCase().includes(search) || j.disc.toLowerCase().includes(search);
@@ -559,8 +576,10 @@
       });
       
       filtered.sort((a,b) => {
-        const av = period==='all' ? Math.abs(a.tot.v) : Math.abs(a.periods[period]?.v||0);
-        const bv = period==='all' ? Math.abs(b.tot.v) : Math.abs(b.periods[period]?.v||0);
+        const aDisplay = getJobDisplayData(a);
+        const bDisplay = getJobDisplayData(b);
+        const av = period==='all' ? Math.abs(aDisplay.tot.v) : Math.abs(aDisplay.periods[period]?.v||0);
+        const bv = period==='all' ? Math.abs(bDisplay.tot.v) : Math.abs(bDisplay.periods[period]?.v||0);
         return bv - av;
       });
 
@@ -582,7 +601,8 @@
         grid.className = 'jobs-grid';
         
         byDisc[disc].forEach(j => {
-          const pd = period==='all' ? j.tot : j.periods[period];
+          const displayData = getJobDisplayData(j);
+          const pd = period==='all' ? displayData.tot : displayData.periods[period];
           const vp = pd.f ? Math.abs(pd.v/pd.f) : (pd.v!==0?1:0);
           const stat = vp>0.5 ? 'bad' : vp>0.1 ? 'warning' : 'good';
           const vc = pd.v>0 ? 'positive' : pd.v<0 ? 'negative' : 'neutral';
@@ -611,8 +631,27 @@
     }
 
     function showBreakdown(job) {
+      const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const wgLabel = wgFilter === 'all' ? '' : ` • ${wgFilter}`;
       document.getElementById('bdTitle').textContent = `${job.jn} - Breakdown`;
-      document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc} • ${job.unit}`;
+      document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc} • ${job.unit}${wgLabel}`;
+      const displayData = (() => {
+        if (wgFilter === 'all') {
+          return { periods: job.periods, tot: job.tot };
+        }
+        const wgData = job.wgs?.[wgFilter];
+        const periods = {};
+        const totals = { f: 0, a: 0, v: 0 };
+        for (let i = 1; i <= 13; i++) {
+          const p = `P${i}`;
+          const data = wgData?.periods?.[p] || { f: 0, a: 0, v: 0 };
+          periods[p] = data;
+          totals.f += data.f || 0;
+          totals.a += data.a || 0;
+          totals.v += data.v || 0;
+        }
+        return { periods, tot: totals };
+      })();
       
       // Build cumulative data
       const periods = [];
@@ -622,8 +661,8 @@
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
         periods.push(`Period ${i}`);
-        cumF += job.periods[p].f;
-        cumA += job.periods[p].a;
+        cumF += displayData.periods[p].f;
+        cumA += displayData.periods[p].a;
         cumForecast.push(cumF);
         cumActual.push(cumA);
       }
@@ -678,7 +717,6 @@
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
       tableHTML += '<th>Total</th></tr></thead><tbody>';
       
-      const wgFilter = document.getElementById('wgFilter')?.value || 'all';
       const isFiltered = wgFilter !== 'all';
       const wgEntries = Object.entries(job.wgs || {}).filter(([wg]) => !isFiltered || wg === wgFilter);
       if (wgEntries.length === 0) {
@@ -739,7 +777,7 @@
       periodGrid.innerHTML = '';
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
-        const d = job.periods[p];
+        const d = displayData.periods[p];
         const vc = d.v > 0 ? 'positive' : d.v < 0 ? 'negative' : 'neutral';
         periodGrid.innerHTML += `
           <div class="breakdown-item">
