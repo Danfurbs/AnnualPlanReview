@@ -233,6 +233,7 @@
     const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11'];
     const COMMENT_STORAGE_KEY = 'aprJobCommentsV2';
     const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
+    const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
     let commentStore = {};
     let currentCommentJob = null;
 
@@ -244,6 +245,56 @@
       } catch (err) {
         console.warn('Failed to load comments:', err);
         commentStore = {};
+      }
+    }
+
+    function serializeForecastData(map) {
+      const output = {};
+      map.forEach((value, key) => {
+        output[key] = value;
+      });
+      return output;
+    }
+
+    function hydrateForecastData(raw) {
+      const output = new Map();
+      Object.entries(raw || {}).forEach(([key, value]) => {
+        if (value && typeof value === 'object') {
+          output.set(key, value);
+        }
+      });
+      return output;
+    }
+
+    function loadForecastStore() {
+      try {
+        const raw = localStorage.getItem(FORECAST_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        const hydrated = hydrateForecastData(parsed.data);
+        if (!hydrated.size) return null;
+        fData = hydrated;
+        return {
+          rowCount: parsed.rowCount ?? hydrated.size,
+          savedAt: parsed.savedAt || null
+        };
+      } catch (err) {
+        console.warn('Failed to load forecast cache:', err);
+        return null;
+      }
+    }
+
+    function saveForecastStore(rowCount) {
+      try {
+        const payload = {
+          data: serializeForecastData(fData || new Map()),
+          rowCount: rowCount ?? null,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(FORECAST_STORAGE_KEY, JSON.stringify(payload));
+      } catch (err) {
+        console.warn('Failed to persist forecast cache:', err);
       }
     }
 
@@ -276,6 +327,7 @@
 
     function init() {
       loadCommentStore();
+      const forecastCache = loadForecastStore();
       if (typeof WORK_GROUP_SETS_RAW !== 'undefined') {
         WORK_GROUP_SETS_RAW.split('\n').slice(1).forEach(line => {
           const p = line.split('\t');
@@ -301,6 +353,11 @@
       } else {
         console.warn('⚠ standard-jobs-data.js not found - all jobs will be processed');
         // Process all jobs when no filter available
+      }
+      if (forecastCache) {
+        document.getElementById('fCount').textContent = forecastCache.rowCount;
+        updateWorkGroupFilterOptions();
+        console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
       }
     }
 
@@ -419,6 +476,7 @@
         });
         console.log('✓ Matched:', matched, 'of', rows.length);
         document.getElementById('fCount').textContent = rows.length;
+        saveForecastStore(rows.length);
         updateWorkGroupFilterOptions();
         render();
         closeModal();
