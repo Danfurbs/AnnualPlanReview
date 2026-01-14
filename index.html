@@ -101,6 +101,25 @@
           <option value="forecast">Show Work Done &amp; Forecast</option>
         </select>
       </div>
+      <div class="control-group" id="forecastCutoffGroup">
+        <label for="forecastCutoff">Work done cutoff</label>
+        <select id="forecastCutoff" onchange="render()">
+          <option value="auto">Auto (latest work done period)</option>
+          <option value="P1">Period 1</option>
+          <option value="P2">Period 2</option>
+          <option value="P3">Period 3</option>
+          <option value="P4">Period 4</option>
+          <option value="P5">Period 5</option>
+          <option value="P6">Period 6</option>
+          <option value="P7">Period 7</option>
+          <option value="P8">Period 8</option>
+          <option value="P9">Period 9</option>
+          <option value="P10">Period 10</option>
+          <option value="P11">Period 11</option>
+          <option value="P12">Period 12</option>
+          <option value="P13">Period 13</option>
+        </select>
+      </div>
       <div class="control-group">
         <label for="wgFilter">Work group set</label>
         <select id="wgFilter" onchange="render()">
@@ -642,7 +661,13 @@
 
     function render() {
       const viewMode = document.getElementById('viewMode')?.value || 'actual';
-      const maxWorkDonePeriod = viewMode === 'forecast' ? getMaxWorkDonePeriod() : 0;
+      const cutoffValue = document.getElementById('forecastCutoff')?.value || 'auto';
+      const maxWorkDonePeriod = (() => {
+        if (viewMode !== 'forecast') return 0;
+        if (cutoffValue === 'auto') return getMaxWorkDonePeriod();
+        const numeric = parseInt(String(cutoffValue).replace(/[^0-9]/g, ''), 10);
+        return Number.isNaN(numeric) ? 0 : numeric;
+      })();
       const all = new Set([...(fData?.keys()||[]), ...(wData?.keys()||[])]);
       const jobs = [];
       all.forEach(jn => {
@@ -773,14 +798,22 @@
         sec.appendChild(grid);
         cont.appendChild(sec);
       });
-      updateModalModeNotes(viewMode, maxWorkDonePeriod);
+      updateForecastCutoffVisibility(viewMode);
+      updateModalModeNotes(viewMode, maxWorkDonePeriod, cutoffValue);
     }
 
-    function updateModalModeNotes(viewMode, maxWorkDonePeriod) {
+    function updateForecastCutoffVisibility(viewMode) {
+      const cutoffGroup = document.getElementById('forecastCutoffGroup');
+      if (!cutoffGroup) return;
+      cutoffGroup.style.display = viewMode === 'forecast' ? 'flex' : 'none';
+    }
+
+    function updateModalModeNotes(viewMode, maxWorkDonePeriod, cutoffValue) {
       const isForecast = viewMode === 'forecast';
+      const cutoffLabel = cutoffValue === 'auto' ? 'Auto' : 'Selected';
       const periodLabel = maxWorkDonePeriod > 0 ? `Period ${maxWorkDonePeriod}` : 'Period N/A';
       const message = isForecast
-        ? `Units derived from Work Done up to ${periodLabel} then Forecast for remaining.`
+        ? `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining.`
         : 'Units derived from Work Done only.';
       const uploadNote = document.getElementById('uploadModeNote');
       const breakdownNote = document.getElementById('breakdownModeNote');
