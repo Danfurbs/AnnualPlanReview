@@ -141,6 +141,7 @@
         <h2>Upload Files</h2>
         <button class="close" onclick="closeModal()">&times;</button>
       </div>
+      <p class="helper-text" id="uploadModeNote"></p>
       <div class="file-input-group">
         <label>Forecast (must have "Results" sheet)</label>
         <input type="file" id="fFile" accept=".xlsx,.xls" onchange="loadForecast(event)">
@@ -159,6 +160,16 @@
         </div>
         <p class="helper-text">Try 1, 2, or 3 if not loading</p>
       </div>
+      <div class="file-input-group">
+        <label>Comments Upload</label>
+        <input type="file" id="cFile" accept=".xlsx,.xls" onchange="loadComments(event)">
+        <div class="row-input">
+          <label>Header row:</label>
+          <input type="number" id="cRow" value="1" min="1">
+        </div>
+        <p class="helper-text">Required columns: Standard Job Number, Comment Type, Comment</p>
+        <button type="button" onclick="exportComments()">Export Comments</button>
+      </div>
     </div>
   </div>
 
@@ -171,6 +182,7 @@
         </div>
         <button class="close" onclick="closeBreakdown()">&times;</button>
       </div>
+      <p class="helper-text" id="breakdownModeNote"></p>
       
       <div class="breakdown-section">
         <h3>Cumulative Progress</h3>
@@ -495,6 +507,81 @@
       }
     }
 
+    async function loadComments(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const ab = await file.arrayBuffer();
+        const wb = XLSX.read(ab);
+        const sheetName = wb.SheetNames[0];
+        if (!sheetName) {
+          alert('No worksheet found in comments file.');
+          return;
+        }
+        const row = parseInt(document.getElementById('cRow').value, 10) - 1;
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { range: row });
+        if (!rows.length) {
+          alert('No comment rows found.');
+          return;
+        }
+        const required = ['Standard Job Number', 'Comment Type', 'Comment'];
+        const missing = required.filter(key => !(key in rows[0]));
+        if (missing.length) {
+          alert(`Missing required columns: ${missing.join(', ')}`);
+          return;
+        }
+        let added = 0;
+        rows.forEach(r => {
+          const rawJob = String(r['Standard Job Number'] || '').trim();
+          const jn = rawJob.replace(/\D/g, '').padStart(6, '0');
+          const category = String(r['Comment Type'] || '').trim() || 'General';
+          const text = String(r['Comment'] || '').trim();
+          if (!jn || jn === '000000' || !text) return;
+          if (!commentStore[jn]) commentStore[jn] = [];
+          commentStore[jn].unshift({
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            category,
+            text,
+            timestamp: new Date().toISOString()
+          });
+          added += 1;
+        });
+        saveCommentStore();
+        if (currentCommentJob) {
+          renderCommentsTable(currentCommentJob);
+        }
+        alert(`Imported ${added} comments.`);
+      } catch (err) {
+        console.error(err);
+        alert('Error loading comments');
+      } finally {
+        e.target.value = '';
+      }
+    }
+
+    function exportComments() {
+      const rows = [];
+      Object.entries(commentStore).forEach(([jobNumber, comments]) => {
+        comments.forEach(entry => {
+          rows.push({
+            'Standard Job Number': jobNumber,
+            'Comment Type': entry.category,
+            'Comment': entry.text
+          });
+        });
+      });
+      if (!rows.length) {
+        alert('No comments to export.');
+        return;
+      }
+      const ws = XLSX.utils.json_to_sheet(rows, {
+        header: ['Standard Job Number', 'Comment Type', 'Comment']
+      });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Comments');
+      XLSX.writeFile(wb, 'apr-comments.xlsx');
+    }
+
     function render() {
       const viewMode = document.getElementById('viewMode')?.value || 'actual';
       const maxWorkDonePeriod = viewMode === 'forecast' ? getMaxWorkDonePeriod() : 0;
@@ -548,6 +635,23 @@
       const search = document.getElementById('search').value.toLowerCase();
       const period = document.getElementById('period').value;
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const getJobDisplayData = (job) => {
+        if (wgFilter === 'all') {
+          return { periods: job.periods, tot: job.tot };
+        }
+        const wgData = job.wgs?.[wgFilter];
+        const periods = {};
+        const totals = { f: 0, a: 0, v: 0 };
+        for (let i = 1; i <= 13; i++) {
+          const p = `P${i}`;
+          const data = wgData?.periods?.[p] || { f: 0, a: 0, v: 0 };
+          periods[p] = data;
+          totals.f += data.f || 0;
+          totals.a += data.a || 0;
+          totals.v += data.v || 0;
+        }
+        return { periods, tot: totals };
+      };
 
       let filtered = jobs.filter(j => {
         const matchesSearch = !search || j.jn.includes(search) || j.desc.toLowerCase().includes(search) || j.disc.toLowerCase().includes(search);
@@ -559,8 +663,10 @@
       });
       
       filtered.sort((a,b) => {
-        const av = period==='all' ? Math.abs(a.tot.v) : Math.abs(a.periods[period]?.v||0);
-        const bv = period==='all' ? Math.abs(b.tot.v) : Math.abs(b.periods[period]?.v||0);
+        const aDisplay = getJobDisplayData(a);
+        const bDisplay = getJobDisplayData(b);
+        const av = period==='all' ? Math.abs(aDisplay.tot.v) : Math.abs(aDisplay.periods[period]?.v||0);
+        const bv = period==='all' ? Math.abs(bDisplay.tot.v) : Math.abs(bDisplay.periods[period]?.v||0);
         return bv - av;
       });
 
@@ -582,7 +688,8 @@
         grid.className = 'jobs-grid';
         
         byDisc[disc].forEach(j => {
-          const pd = period==='all' ? j.tot : j.periods[period];
+          const displayData = getJobDisplayData(j);
+          const pd = period==='all' ? displayData.tot : displayData.periods[period];
           const vp = pd.f ? Math.abs(pd.v/pd.f) : (pd.v!==0?1:0);
           const stat = vp>0.5 ? 'bad' : vp>0.1 ? 'warning' : 'good';
           const vc = pd.v>0 ? 'positive' : pd.v<0 ? 'negative' : 'neutral';
@@ -608,11 +715,43 @@
         sec.appendChild(grid);
         cont.appendChild(sec);
       });
+      updateModalModeNotes(viewMode, maxWorkDonePeriod);
+    }
+
+    function updateModalModeNotes(viewMode, maxWorkDonePeriod) {
+      const isForecast = viewMode === 'forecast';
+      const periodLabel = maxWorkDonePeriod > 0 ? `Period ${maxWorkDonePeriod}` : 'Period N/A';
+      const message = isForecast
+        ? `Units derived from Work Done up to ${periodLabel} then Forecast for remaining.`
+        : 'Units derived from Work Done only.';
+      const uploadNote = document.getElementById('uploadModeNote');
+      const breakdownNote = document.getElementById('breakdownModeNote');
+      if (uploadNote) uploadNote.textContent = message;
+      if (breakdownNote) breakdownNote.textContent = message;
     }
 
     function showBreakdown(job) {
+      const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const wgLabel = wgFilter === 'all' ? '' : ` • ${wgFilter}`;
       document.getElementById('bdTitle').textContent = `${job.jn} - Breakdown`;
-      document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc} • ${job.unit}`;
+      document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc} • ${job.unit}${wgLabel}`;
+      const displayData = (() => {
+        if (wgFilter === 'all') {
+          return { periods: job.periods, tot: job.tot };
+        }
+        const wgData = job.wgs?.[wgFilter];
+        const periods = {};
+        const totals = { f: 0, a: 0, v: 0 };
+        for (let i = 1; i <= 13; i++) {
+          const p = `P${i}`;
+          const data = wgData?.periods?.[p] || { f: 0, a: 0, v: 0 };
+          periods[p] = data;
+          totals.f += data.f || 0;
+          totals.a += data.a || 0;
+          totals.v += data.v || 0;
+        }
+        return { periods, tot: totals };
+      })();
       
       // Build cumulative data
       const periods = [];
@@ -622,8 +761,8 @@
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
         periods.push(`Period ${i}`);
-        cumF += job.periods[p].f;
-        cumA += job.periods[p].a;
+        cumF += displayData.periods[p].f;
+        cumA += displayData.periods[p].a;
         cumForecast.push(cumF);
         cumActual.push(cumA);
       }
@@ -678,7 +817,6 @@
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
       tableHTML += '<th>Total</th></tr></thead><tbody>';
       
-      const wgFilter = document.getElementById('wgFilter')?.value || 'all';
       const isFiltered = wgFilter !== 'all';
       const wgEntries = Object.entries(job.wgs || {}).filter(([wg]) => !isFiltered || wg === wgFilter);
       if (wgEntries.length === 0) {
@@ -739,7 +877,7 @@
       periodGrid.innerHTML = '';
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
-        const d = job.periods[p];
+        const d = displayData.periods[p];
         const vc = d.v > 0 ? 'positive' : d.v < 0 ? 'negative' : 'neutral';
         periodGrid.innerHTML += `
           <div class="breakdown-item">
