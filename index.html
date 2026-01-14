@@ -274,6 +274,24 @@
       </div>
 
       <div class="breakdown-section">
+        <h3>Work Orders (Work Done)</h3>
+        <div class="wo-controls">
+          <div class="wo-summary">
+            <span class="wo-pill">Work Orders: <strong id="woTotal">0</strong></span>
+            <span class="wo-pill">Units Complete: <strong id="woUnits">0</strong></span>
+            <span class="wo-pill">Flagged: <strong id="woFlagged">0</strong></span>
+          </div>
+          <div class="wo-filters">
+            <input type="search" id="woSearch" placeholder="Search work orders...">
+            <label class="wo-flag-toggle"><input type="checkbox" id="woFlagOnly"> Show flagged only</label>
+          </div>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="wo-table" id="woTable"></table>
+        </div>
+      </div>
+
+      <div class="breakdown-section">
         <h3>Comments</h3>
         <div class="comment-panel">
           <div class="comment-entry">
