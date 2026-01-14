@@ -22,7 +22,9 @@
     .summary-card .value { font-size: 28px; font-weight: 700; }
     .discipline-section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .discipline-header { display: flex; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0; }
+    .discipline-header .header-actions { display: flex; align-items: center; gap: 8px; }
     .jobs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .discipline-section.collapsed .jobs-grid { display: none; }
     .job-card { padding: 16px; border: 2px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
     .job-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     .job-card.good { border-left: 4px solid #48bb78; }
@@ -83,6 +85,24 @@
     .comment-table tbody tr:hover { background: #edf2f7; }
     .comment-delete { background: #e53e3e; padding: 6px 12px; border-radius: 6px; font-size: 12px; }
     .comment-delete:hover { background: #c53030; }
+    .wo-controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .wo-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .wo-pill { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px; padding: 6px 12px; font-size: 12px; color: #4a5568; }
+    .wo-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .wo-filters input[type="search"] { min-width: 220px; }
+    .wo-flag-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #4a5568; }
+    .wo-table { width: 100%; border-collapse: collapse; min-width: 860px; }
+    .wo-table thead th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .wo-table tbody td { padding: 10px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: top; }
+    .wo-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .wo-table tbody tr:hover { background: #edf2f7; }
+    .wo-units { text-align: right; font-variant-numeric: tabular-nums; }
+    .wo-flagged { border-left: 4px solid #f6ad55; }
+    .wo-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: #fef3c7; color: #92400e; margin-right: 6px; margin-bottom: 4px; }
+    .wo-empty { font-style: italic; color: #718096; }
+    .section-toggle { background: #edf2f7; color: #2d3748; border: 1px solid #cbd5e0; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; cursor: pointer; }
+    .section-toggle:hover { background: #e2e8f0; }
+    .collapsible-content.collapsed { display: none; }
   </style>
 </head>
 <body>
@@ -124,6 +144,16 @@
         <label for="wgFilter">Work group set</label>
         <select id="wgFilter" onchange="render()">
           <option value="all">All Work Group Sets</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="varianceFilter">Variance filter</label>
+        <select id="varianceFilter" onchange="render()">
+          <option value="all">Show All</option>
+          <option value="warning">Show Ambers</option>
+          <option value="bad">Show Reds</option>
+          <option value="variance">Show Any Variances</option>
+          <option value="good">Show Greens</option>
         </select>
       </div>
       <select id="period" onchange="render()">
@@ -216,8 +246,31 @@
       </div>
 
       <div class="breakdown-section">
-        <h3>Period Summary</h3>
-        <div class="breakdown-grid" id="periodGrid"></div>
+        <div class="discipline-header">
+          <h3>Period Summary</h3>
+          <div class="header-actions">
+            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('periodGrid', this)">Collapse</button>
+          </div>
+        </div>
+        <div class="breakdown-grid collapsible-content" id="periodGrid"></div>
+      </div>
+
+      <div class="breakdown-section">
+        <h3>Work Orders (Work Done)</h3>
+        <div class="wo-controls">
+          <div class="wo-summary">
+            <span class="wo-pill">Work Orders: <strong id="woTotal">0</strong></span>
+            <span class="wo-pill">Units Complete: <strong id="woUnits">0</strong></span>
+            <span class="wo-pill">Flagged: <strong id="woFlagged">0</strong></span>
+          </div>
+          <div class="wo-filters">
+            <input type="search" id="woSearch" placeholder="Search work orders...">
+            <label class="wo-flag-toggle"><input type="checkbox" id="woFlagOnly"> Show flagged only</label>
+          </div>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="wo-table" id="woTable"></table>
+        </div>
       </div>
 
       <div class="breakdown-section">
@@ -249,6 +302,8 @@
     let fData = null, wData = null, stdJobs = new Map();
     let workGroupSets = new Map();
     let currentChart = null;
+    let currentWorkOrders = [];
+    let currentWorkOrderWorkGroup = 'all';
     const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11'];
     const COMMENT_STORAGE_KEY = 'aprJobCommentsV2';
     const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
@@ -395,6 +450,27 @@
       if (workGroupSets.has(code)) return workGroupSets.get(code);
       if (workGroupSets.has(text)) return workGroupSets.get(text);
       return text;
+    }
+
+    function extractWorkOrderNumber(row) {
+      const raw = row['Work Order'] ||
+        row['Work Order Number'] ||
+        row['Work Order No'] ||
+        row['WO Number'] ||
+        row['WO No'] ||
+        row['Work Order #'] ||
+        row['WO #'] ||
+        '';
+      const text = String(raw || '').trim();
+      return text || null;
+    }
+
+    function getVarianceStatus(pd) {
+      const variance = pd?.v || 0;
+      const forecast = pd?.f || 0;
+      const ratio = forecast ? Math.abs(variance / forecast) : (variance !== 0 ? 1 : 0);
+      const status = ratio > 0.5 ? 'bad' : ratio > 0.1 ? 'warning' : 'good';
+      return { status, hasVariance: variance !== 0 };
     }
 
     function escapeHtml(value) {
@@ -559,6 +635,7 @@
           matched++;
           if (!wData.has(jn)) wData.set(jn, {periods:{}, wgs:{}});
           const job = wData.get(jn);
+          if (!job.workOrders) job.workOrders = [];
           const u = parseFloat(units||0);
           job.periods[per] = (job.periods[per]||0) + u;
           const wg = normalizeWorkGroupSet(
@@ -566,6 +643,33 @@
           );
           if (!job.wgs[wg]) job.wgs[wg] = {};
           job.wgs[wg][per] = (job.wgs[wg][per]||0) + u;
+          const workOrderNumber = extractWorkOrderNumber(r);
+          const workOrder = {
+            id: `${jn}-${workOrderNumber || 'unknown'}-${job.workOrders.length + 1}`,
+            number: workOrderNumber || 'Unknown',
+            description: String(
+              r['Work Order Description'] ||
+              r['Work Order Desc'] ||
+              r['WO Description'] ||
+              r['Description'] ||
+              ''
+            ).trim(),
+            status: String(
+              r['Work Order Status'] ||
+              r['WO Status'] ||
+              r['Status'] ||
+              ''
+            ).trim(),
+            period: per,
+            units: u,
+            workGroup: wg,
+            closedDate: String(
+              r['Work Order Closed Date'] ||
+              r['Closed Date'] ||
+              ''
+            ).trim()
+          };
+          job.workOrders.push(workOrder);
         });
         
         console.log('Sample work done rows:');
@@ -659,9 +763,142 @@
       XLSX.writeFile(wb, 'apr-comments.xlsx');
     }
 
+    function computeQuantile(sorted, q) {
+      if (!sorted.length) return 0;
+      const pos = (sorted.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      if (sorted[base + 1] !== undefined) {
+        return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+      }
+      return sorted[base];
+    }
+
+    function getWorkOrderStats(workOrders) {
+      const units = workOrders
+        .map(order => Number(order.units))
+        .filter(val => !Number.isNaN(val))
+        .sort((a, b) => a - b);
+      if (!units.length) {
+        return { median: 0, q1: 0, q3: 0, iqr: 0, mean: 0, highThreshold: 0 };
+      }
+      const q1 = computeQuantile(units, 0.25);
+      const q3 = computeQuantile(units, 0.75);
+      const median = computeQuantile(units, 0.5);
+      const iqr = q3 - q1;
+      const mean = units.reduce((sum, val) => sum + val, 0) / units.length;
+      let highThreshold = q3 + 1.5 * iqr;
+      if (highThreshold === 0) {
+        highThreshold = mean ? mean * 4 : 0;
+      }
+      if (median > 0) {
+        highThreshold = Math.max(highThreshold, median * 4);
+      }
+      return { median, q1, q3, iqr, mean, highThreshold };
+    }
+
+    function getWorkOrderFlags(order, stats) {
+      const flags = [];
+      const units = Number(order.units) || 0;
+      if (units === 0 && order.period) {
+        flags.push('Zero units in closed period');
+      }
+      if (stats.highThreshold > 0 && units > stats.highThreshold) {
+        flags.push('High units vs typical');
+      }
+      return flags;
+    }
+
+    function renderWorkOrders() {
+      const table = document.getElementById('woTable');
+      if (!table) return;
+      const workOrders = currentWorkOrders || [];
+      const stats = getWorkOrderStats(workOrders);
+      const search = (document.getElementById('woSearch')?.value || '').toLowerCase();
+      const flaggedOnly = document.getElementById('woFlagOnly')?.checked || false;
+
+      const enriched = workOrders.map(order => {
+        const flags = getWorkOrderFlags(order, stats);
+        return { ...order, flags };
+      });
+
+      const baseFiltered = enriched.filter(order => (
+        currentWorkOrderWorkGroup === 'all' || order.workGroup === currentWorkOrderWorkGroup
+      ));
+
+      const filtered = baseFiltered.filter(order => {
+        const haystack = [
+          order.number,
+          order.description,
+          order.status,
+          order.period,
+          order.workGroup,
+          order.closedDate,
+          ...order.flags
+        ].join(' ').toLowerCase();
+        if (flaggedOnly && order.flags.length === 0) return false;
+        if (search && !haystack.includes(search)) return false;
+        return true;
+      });
+
+      const flaggedCount = baseFiltered.filter(order => order.flags.length).length;
+      const totalUnits = baseFiltered.reduce((sum, order) => sum + (Number(order.units) || 0), 0);
+
+      const totalEl = document.getElementById('woTotal');
+      const unitsEl = document.getElementById('woUnits');
+      const flaggedEl = document.getElementById('woFlagged');
+      if (totalEl) totalEl.textContent = baseFiltered.length;
+      if (unitsEl) unitsEl.textContent = totalUnits.toFixed(2);
+      if (flaggedEl) flaggedEl.textContent = flaggedCount;
+
+      if (!workOrders.length) {
+        table.innerHTML = '<thead><tr><th>Work Orders</th></tr></thead><tbody><tr><td class="wo-empty">No work orders found in the work done report for this job.</td></tr></tbody>';
+        return;
+      }
+
+      if (!filtered.length) {
+        table.innerHTML = '<thead><tr><th>Work Orders</th></tr></thead><tbody><tr><td class="wo-empty">No work orders match the current filters.</td></tr></tbody>';
+        return;
+      }
+
+      const rows = filtered.map(order => {
+        const flagsHtml = order.flags.length
+          ? order.flags.map(flag => `<span class="wo-badge">${escapeHtml(flag)}</span>`).join('')
+          : '<span class="wo-empty">None</span>';
+        const rowClass = order.flags.length ? 'wo-flagged' : '';
+        return `
+          <tr class="${rowClass}">
+            <td><strong>${escapeHtml(order.number || 'Unknown')}</strong></td>
+            <td>${escapeHtml(order.description || '-')}</td>
+            <td>${escapeHtml(order.status || '-')}</td>
+            <td>${escapeHtml(order.period || '-')}</td>
+            <td>${escapeHtml(order.workGroup || '-')}</td>
+            <td class="wo-units">${(Number(order.units) || 0).toFixed(2)}</td>
+            <td>${flagsHtml}</td>
+          </tr>
+        `;
+      }).join('');
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Work Order</th>
+            <th>Description</th>
+            <th>Status</th>
+            <th>Closed Period</th>
+            <th>Work Group</th>
+            <th class="wo-units">Units</th>
+            <th>Flags</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      `;
+    }
+
     function render() {
       const viewMode = document.getElementById('viewMode')?.value || 'actual';
       const cutoffValue = document.getElementById('forecastCutoff')?.value || 'auto';
+      const varianceFilter = document.getElementById('varianceFilter')?.value || 'all';
       const maxWorkDonePeriod = (() => {
         if (viewMode !== 'forecast') return 0;
         if (cutoffValue === 'auto') return getMaxWorkDonePeriod();
@@ -744,6 +981,15 @@
         if (!wgData) return false;
         return Object.values(wgData.periods || {}).some(periodData => periodData.f !== 0 || periodData.a !== 0);
       });
+
+      filtered = filtered.filter(j => {
+        const displayData = getJobDisplayData(j);
+        const pd = period === 'all' ? displayData.tot : displayData.periods[period];
+        const { status, hasVariance } = getVarianceStatus(pd);
+        if (varianceFilter === 'all') return true;
+        if (varianceFilter === 'variance') return hasVariance;
+        return status === varianceFilter;
+      });
       
       filtered.sort((a,b) => {
         const aDisplay = getJobDisplayData(a);
@@ -766,15 +1012,22 @@
       Object.keys(byDisc).sort().forEach(disc => {
         const sec = document.createElement('div');
         sec.className = 'discipline-section';
-        sec.innerHTML = `<div class="discipline-header"><h2>${disc}</h2><span>${byDisc[disc].length} jobs</span></div>`;
+        sec.innerHTML = `
+          <div class="discipline-header">
+            <h2>${disc}</h2>
+            <div class="header-actions">
+              <span>${byDisc[disc].length} jobs</span>
+              <button type="button" class="section-toggle" onclick="toggleDisciplineSection(this)">Collapse</button>
+            </div>
+          </div>
+        `;
         const grid = document.createElement('div');
         grid.className = 'jobs-grid';
         
         byDisc[disc].forEach(j => {
           const displayData = getJobDisplayData(j);
           const pd = period==='all' ? displayData.tot : displayData.periods[period];
-          const vp = pd.f ? Math.abs(pd.v/pd.f) : (pd.v!==0?1:0);
-          const stat = vp>0.5 ? 'bad' : vp>0.1 ? 'warning' : 'good';
+          const { status: stat } = getVarianceStatus(pd);
           const vc = pd.v>0 ? 'positive' : pd.v<0 ? 'negative' : 'neutral';
           
           const card = document.createElement('div');
@@ -980,6 +1233,17 @@
         `;
       }
 
+      // Work orders
+      currentWorkOrders = (wData?.get(job.jn)?.workOrders || []).slice();
+      currentWorkOrderWorkGroup = wgFilter;
+      const woSearch = document.getElementById('woSearch');
+      const woFlagOnly = document.getElementById('woFlagOnly');
+      if (woSearch) woSearch.value = '';
+      if (woFlagOnly) woFlagOnly.checked = false;
+      if (woSearch) woSearch.oninput = renderWorkOrders;
+      if (woFlagOnly) woFlagOnly.onchange = renderWorkOrders;
+      renderWorkOrders();
+
       // Comments section
       currentCommentJob = job.jn;
       const commentType = document.getElementById('commentType');
@@ -1031,6 +1295,20 @@
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) return value;
       return date.toLocaleString();
+    }
+
+    function toggleDisciplineSection(button) {
+      const section = button.closest('.discipline-section');
+      if (!section) return;
+      const isCollapsed = section.classList.toggle('collapsed');
+      button.textContent = isCollapsed ? 'Expand' : 'Collapse';
+    }
+
+    function toggleBreakdownSection(targetId, button) {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      const isCollapsed = target.classList.toggle('collapsed');
+      button.textContent = isCollapsed ? 'Expand' : 'Collapse';
     }
 
     function closeBreakdown() {
