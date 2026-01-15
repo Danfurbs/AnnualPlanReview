@@ -48,7 +48,7 @@
     .discipline-section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .discipline-header { display: flex; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0; }
     .discipline-header .header-actions { display: flex; align-items: center; gap: 8px; }
-    .jobs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .jobs-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
     .discipline-section.collapsed .jobs-grid { display: none; }
     .job-card { background: white; padding: 18px 20px; border-radius: 12px; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; gap: 16px; position: relative; }
     .job-card:hover { transform: translateY(-2px); box-shadow: 0 10px 16px rgba(15, 23, 42, 0.08); }
@@ -454,6 +454,16 @@
       saveReviewStore();
     }
 
+    function reopenJobReview(jobNumber, stage) {
+      if (!reviewStore[jobNumber]) return;
+      if (!reviewStore[jobNumber][stage]) return;
+      delete reviewStore[jobNumber][stage];
+      if (!Object.keys(reviewStore[jobNumber]).length) {
+        delete reviewStore[jobNumber];
+      }
+      saveReviewStore();
+    }
+
     function serializeForecastData(map) {
       const output = {};
       map.forEach((value, key) => {
@@ -718,7 +728,7 @@
     function showBreakdownByJobNumber(jobNumber) {
       const job = currentJobsMap.get(jobNumber);
       if (!job) return;
-      showBreakdown(job);
+      showBreakdown(job, { scrollTop: true });
     }
 
     function updateWorkGroupFilterOptions() {
@@ -1317,7 +1327,9 @@
               <button type="button" class="primary-button" data-action="commentary">Add Commentary</button>
               ${commentCount ? `<button type="button" class="secondary" data-action="view-comments">View Comments (${commentCount})</button>` : ''}
               <button type="button" class="secondary" data-action="details">View Details</button>
-              <button type="button" class="${isReviewed ? 'disabled' : 'success'}" data-action="reviewed" ${isReviewed ? 'disabled' : ''}>${isReviewed ? 'Reviewed' : 'Mark Reviewed'}</button>
+              ${isReviewed
+                ? '<button type="button" class="secondary" data-action="reopen">Reopen</button>'
+                : '<button type="button" class="success" data-action="reviewed">Mark Reviewed</button>'}
             </div>
           `;
 
@@ -1326,7 +1338,7 @@
               event.stopPropagation();
               const action = button.dataset.action;
               if (action === 'details') {
-                showBreakdown(j);
+                showBreakdown(j, { scrollTop: true });
               }
               if (action === 'commentary') {
                 openCommentary(j);
@@ -1336,6 +1348,10 @@
               }
               if (action === 'reviewed' && !isReviewed) {
                 markJobReviewed(j.jn, reviewStage);
+                render();
+              }
+              if (action === 'reopen' && isReviewed) {
+                reopenJobReview(j.jn, reviewStage);
                 render();
               }
             });
@@ -1370,9 +1386,11 @@
       if (breakdownNote) breakdownNote.textContent = message;
     }
 
-    function showBreakdown(job) {
+    function showBreakdown(job, options = {}) {
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
       const wgLabel = wgFilter === 'all' ? '' : ` • ${wgFilter}`;
+      const breakdownModal = document.getElementById('breakdown');
+      const modalContent = breakdownModal?.querySelector('.modal-content');
       document.getElementById('bdTitle').textContent = `${job.jn} - Breakdown`;
       document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc} • ${job.unit}${wgLabel}`;
       const displayData = (() => {
@@ -1557,7 +1575,18 @@
       };
       renderCommentsTable(job.jn);
       
-      document.getElementById('breakdown').classList.add('open');
+      breakdownModal.classList.add('open');
+      if (options.scrollTop && modalContent) {
+        modalContent.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+
+    function openCommentary(job) {
+      showBreakdown(job);
+      setTimeout(() => {
+        const commentText = document.getElementById('commentText');
+        if (commentText) commentText.focus();
+      }, 0);
     }
 
     function openCommentary(job) {
