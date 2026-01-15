@@ -1589,6 +1589,14 @@
       }, 0);
     }
 
+    function openCommentary(job) {
+      showBreakdown(job);
+      setTimeout(() => {
+        const commentText = document.getElementById('commentText');
+        if (commentText) commentText.focus();
+      }, 0);
+    }
+
     function renderCommentsTable(jobNumber) {
       const commentList = document.getElementById('commentList');
       const comments = getJobComments(jobNumber);
