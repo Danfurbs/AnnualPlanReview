@@ -48,19 +48,39 @@
     .discipline-section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .discipline-header { display: flex; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0; }
     .discipline-header .header-actions { display: flex; align-items: center; gap: 8px; }
-    .jobs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .jobs-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
     .discipline-section.collapsed .jobs-grid { display: none; }
-    .job-card { padding: 16px; border: 2px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
-    .job-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    .job-card.good { border-left: 4px solid #48bb78; }
-    .job-card.warning { border-left: 4px solid #f6ad55; }
-    .job-card.bad { border-left: 4px solid #f56565; }
-    .job-number { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
-    .job-desc { color: #718096; font-size: 13px; margin-bottom: 12px; }
-    .job-unit { color: #4a5568; font-size: 12px; margin-bottom: 12px; }
-    .job-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 13px; }
-    .metric-label { color: #718096; font-size: 11px; text-transform: uppercase; }
-    .metric-value { font-weight: 600; margin-top: 2px; }
+    .job-card { background: white; padding: 18px 20px; border-radius: 12px; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; gap: 16px; position: relative; }
+    .job-card:hover { transform: translateY(-2px); box-shadow: 0 10px 16px rgba(15, 23, 42, 0.08); }
+    .job-card.good { border-left: 4px solid #22c55e; }
+    .job-card.warning { border-left: 4px solid #f59e0b; }
+    .job-card.bad { border-left: 4px solid #ef4444; }
+    .job-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .job-pill-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .job-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .job-pill.priority { background: #fee2e2; color: #b91c1c; }
+    .job-pill.reviewed { background: #dcfce7; color: #15803d; }
+    .job-pill.needs-review { background: #fef3c7; color: #92400e; }
+    .job-card-title { font-weight: 800; font-size: 16px; color: #0f172a; }
+    .job-card-subtitle { color: #64748b; font-size: 13px; font-weight: 600; }
+    .job-card-body { display: flex; gap: 20px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+    .job-details { flex: 1 1 320px; display: flex; flex-direction: column; gap: 6px; }
+    .job-unit { color: #4a5568; font-size: 12px; }
+    .job-alert { border-radius: 8px; padding: 10px 12px; font-size: 12px; font-weight: 600; display: flex; flex-direction: column; gap: 4px; }
+    .job-alert.bad { background: #fef2f2; color: #b91c1c; border-left: 4px solid #ef4444; }
+    .job-alert.warning { background: #fff7ed; color: #c2410c; border-left: 4px solid #f59e0b; }
+    .job-alert.good { background: #f0fdf4; color: #166534; border-left: 4px solid #22c55e; }
+    .job-metrics { display: grid; grid-template-columns: repeat(3, minmax(90px, 1fr)); gap: 10px; font-size: 13px; flex: 0 1 320px; }
+    .metric-card { background: #f8fafc; border-radius: 10px; padding: 10px 12px; text-align: center; }
+    .metric-label { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .metric-value { font-weight: 700; margin-top: 6px; font-size: 16px; }
+    .job-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .job-actions button { padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; }
+    .job-actions .secondary { background: #e2e8f0; color: #1f2937; }
+    .job-actions .secondary:hover { background: #cbd5f5; }
+    .job-actions .success { background: #22c55e; }
+    .job-actions .success:hover { background: #16a34a; }
+    .job-actions .disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; }
     .positive { color: #48bb78; }
     .negative { color: #f56565; }
     .neutral { color: #718096; }
@@ -95,21 +115,23 @@
     .breakdown-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
     .breakdown-item strong { font-size: 13px; color: #2d3748; }
     .breakdown-row { display: flex; justify-content: space-between; font-size: 12px; color: #4a5568; }
-    .comment-panel { display: flex; flex-direction: column; gap: 12px; }
-    .comment-entry { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-    .comment-entry label { font-size: 12px; font-weight: 700; color: #2d3748; text-transform: uppercase; letter-spacing: 0.04em; }
-    .comment-entry-row { display: flex; gap: 8px; align-items: stretch; }
-    .comment-entry-row select { min-width: 160px; }
-    .comment-entry-row textarea { flex: 1; border: 1px solid #cbd5e0; border-radius: 6px; padding: 8px; font-size: 13px; min-height: 90px; resize: vertical; }
-    .comment-actions { display: flex; justify-content: flex-end; }
-    .comment-table { width: 100%; border-collapse: collapse; }
-    .comment-table th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
-    .comment-table td { padding: 10px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: top; }
-    .comment-table td:last-child { text-align: right; }
-    .comment-table tbody tr:nth-child(even) { background: #f8fafc; }
-    .comment-table tbody tr:hover { background: #edf2f7; }
-    .comment-delete { background: #e53e3e; padding: 6px 12px; border-radius: 6px; font-size: 12px; }
-    .comment-delete:hover { background: #c53030; }
+    .comment-panel { display: flex; flex-direction: column; gap: 16px; }
+    .comment-list { display: flex; flex-direction: column; gap: 12px; }
+    .comment-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; position: relative; }
+    .comment-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: 12px 0 0 12px; background: #3b82f6; }
+    .comment-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .comment-type { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #1e3a8a; background: #dbeafe; padding: 4px 10px; border-radius: 999px; }
+    .comment-meta { font-size: 12px; color: #64748b; }
+    .comment-body { font-size: 13px; color: #1f2937; line-height: 1.5; }
+    .comment-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .comment-delete { background: #ef4444; padding: 6px 12px; border-radius: 8px; font-size: 12px; }
+    .comment-delete:hover { background: #dc2626; }
+    .comment-form { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; background: #f8fafc; display: flex; flex-direction: column; gap: 12px; }
+    .comment-form-header { font-size: 14px; font-weight: 700; color: #1f2937; display: flex; align-items: center; gap: 8px; }
+    .comment-form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .comment-form-row select { min-width: 200px; }
+    .comment-form textarea { width: 100%; border: 1px solid #cbd5e0; border-radius: 8px; padding: 10px 12px; font-size: 13px; min-height: 110px; resize: vertical; }
+    .comment-empty { font-style: italic; color: #64748b; font-size: 13px; }
     .wo-controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
     .wo-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .wo-pill { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px; padding: 6px 12px; font-size: 12px; color: #4a5568; }
@@ -359,18 +381,16 @@
       <div class="breakdown-section">
         <h3>Comments</h3>
         <div class="comment-panel">
-          <div class="comment-entry">
-            <label for="commentType">Add Comment</label>
-            <div class="comment-entry-row">
+          <div class="comment-list" id="commentList"></div>
+          <div class="comment-form">
+            <div class="comment-form-header">Add New Comment</div>
+            <div class="comment-form-row">
               <select id="commentType"></select>
-              <textarea id="commentText" placeholder="Enter comment..."></textarea>
             </div>
+            <textarea id="commentText" placeholder="Enter your commentary..."></textarea>
             <div class="comment-actions">
               <button type="button" id="commentAdd">Add Comment</button>
             </div>
-          </div>
-          <div style="overflow-x: auto;">
-            <table class="comment-table" id="commentTable"></table>
           </div>
         </div>
       </div>
@@ -392,7 +412,9 @@
     const COMMENT_STORAGE_KEY = 'aprJobCommentsV2';
     const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
     const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
+    const REVIEW_STORAGE_KEY = 'aprReviewStatusV1';
     let commentStore = {};
+    let reviewStore = {};
     let currentCommentJob = null;
 
     function loadCommentStore() {
@@ -404,6 +426,42 @@
         console.warn('Failed to load comments:', err);
         commentStore = {};
       }
+    }
+
+    function loadReviewStore() {
+      try {
+        const raw = localStorage.getItem(REVIEW_STORAGE_KEY);
+        reviewStore = raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        console.warn('Failed to load review store:', err);
+        reviewStore = {};
+      }
+    }
+
+    function saveReviewStore() {
+      localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(reviewStore));
+    }
+
+    function isJobReviewed(jobNumber, stage) {
+      return Boolean(reviewStore?.[jobNumber]?.[stage]);
+    }
+
+    function markJobReviewed(jobNumber, stage) {
+      if (!reviewStore[jobNumber]) reviewStore[jobNumber] = {};
+      reviewStore[jobNumber][stage] = {
+        reviewedAt: new Date().toISOString()
+      };
+      saveReviewStore();
+    }
+
+    function reopenJobReview(jobNumber, stage) {
+      if (!reviewStore[jobNumber]) return;
+      if (!reviewStore[jobNumber][stage]) return;
+      delete reviewStore[jobNumber][stage];
+      if (!Object.keys(reviewStore[jobNumber]).length) {
+        delete reviewStore[jobNumber];
+      }
+      saveReviewStore();
     }
 
     function serializeForecastData(map) {
@@ -485,6 +543,7 @@
 
     function init() {
       loadCommentStore();
+      loadReviewStore();
       const forecastCache = loadForecastStore();
       if (typeof WORK_GROUP_SETS_RAW !== 'undefined') {
         WORK_GROUP_SETS_RAW.split('\n').slice(1).forEach(line => {
@@ -593,10 +652,7 @@
 
     function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage }) {
       const totalJobs = jobs.length;
-      const reviewedJobs = jobs.filter(job => {
-        const comments = commentStore[job.jn] || [];
-        return comments.some(entry => entry.category === reviewStage);
-      }).length;
+      const reviewedJobs = jobs.filter(job => isJobReviewed(job.jn, reviewStage)).length;
       const percent = totalJobs ? Math.round((reviewedJobs / totalJobs) * 100) : 0;
 
       const reviewedEl = document.getElementById('reviewedCount');
@@ -672,7 +728,7 @@
     function showBreakdownByJobNumber(jobNumber) {
       const job = currentJobsMap.get(jobNumber);
       if (!job) return;
-      showBreakdown(job);
+      showBreakdown(job, { scrollTop: true });
     }
 
     function updateWorkGroupFilterOptions() {
@@ -1211,21 +1267,95 @@
           const pd = period==='all' ? displayData.tot : displayData.periods[period];
           const { status: stat } = getVarianceStatus(pd);
           const vc = pd.v>0 ? 'positive' : pd.v<0 ? 'negative' : 'neutral';
+          const isPriority = ['009112', '009113'].includes(j.jn);
+          const isReviewed = isJobReviewed(j.jn, reviewStage);
+          const statusLabel = isReviewed ? 'Reviewed' : 'Needs Review';
+          const statusClass = isReviewed ? 'reviewed' : 'needs-review';
+          const commentCount = getJobComments(j.jn).length;
+          const varianceValue = `${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)}`;
+          const alertTitle = stat === 'bad'
+            ? 'Significant variance detected'
+            : stat === 'warning'
+              ? 'Variance requires review'
+              : isReviewed
+                ? 'Commentary complete'
+                : 'On track';
+          const alertDetail = stat === 'bad'
+            ? `Large variance (${varianceValue}). Root cause analysis required.`
+            : stat === 'warning'
+              ? `Variance (${varianceValue}). Provide commentary for ${reviewStage}.`
+              : isReviewed
+                ? `Reviewed for ${reviewStage}.`
+                : 'Variance within tolerance.';
           
           const card = document.createElement('div');
           card.className = `job-card ${stat}`;
           card.onclick = () => showBreakdown(j);
           
           card.innerHTML = `
-            <div class="job-number">${j.jn}</div>
-            <div class="job-desc">${j.desc}</div>
-            <div class="job-unit">Unit: ${j.unit}</div>
-            <div class="job-metrics">
-              <div><div class="metric-label">Planned</div><div class="metric-value">${pd.f.toFixed(2)}</div></div>
-              <div><div class="metric-label">Actual</div><div class="metric-value">${pd.a.toFixed(2)}</div></div>
-              <div><div class="metric-label">Variance</div><div class="metric-value ${vc}">${pd.v>0?'+':''}${pd.v.toFixed(2)}</div></div>
+            <div class="job-card-header">
+              <div class="job-pill-group">
+                ${isPriority ? '<span class="job-pill priority">Priority</span>' : ''}
+                <span class="job-pill ${statusClass}">${statusLabel}</span>
+              </div>
+            </div>
+            <div class="job-card-body">
+              <div class="job-details">
+                <div class="job-card-title">${j.jn} - ${j.desc}</div>
+                <div class="job-card-subtitle">Discipline: ${j.disc} • Unit: ${j.unit} • Status: ${statusLabel}</div>
+                <div class="job-alert ${stat}">
+                  <span>${alertTitle}</span>
+                  <span>${alertDetail}</span>
+                </div>
+              </div>
+              <div class="job-metrics">
+                <div class="metric-card">
+                  <div class="metric-label">Planned</div>
+                  <div class="metric-value">${pd.f.toFixed(1)}</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">Actual</div>
+                  <div class="metric-value">${pd.a.toFixed(1)}</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">Variance</div>
+                  <div class="metric-value ${vc}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)}</div>
+                </div>
+              </div>
+            </div>
+            <div class="job-actions">
+              <button type="button" class="primary-button" data-action="commentary">Add Commentary</button>
+              ${commentCount ? `<button type="button" class="secondary" data-action="view-comments">View Comments (${commentCount})</button>` : ''}
+              <button type="button" class="secondary" data-action="details">View Details</button>
+              ${isReviewed
+                ? '<button type="button" class="secondary" data-action="reopen">Reopen</button>'
+                : '<button type="button" class="success" data-action="reviewed">Mark Reviewed</button>'}
             </div>
           `;
+
+          card.querySelectorAll('button').forEach(button => {
+            button.addEventListener('click', event => {
+              event.stopPropagation();
+              const action = button.dataset.action;
+              if (action === 'details') {
+                showBreakdown(j, { scrollTop: true });
+              }
+              if (action === 'commentary') {
+                openCommentary(j);
+              }
+              if (action === 'view-comments') {
+                openCommentary(j);
+              }
+              if (action === 'reviewed' && !isReviewed) {
+                markJobReviewed(j.jn, reviewStage);
+                render();
+              }
+              if (action === 'reopen' && isReviewed) {
+                reopenJobReview(j.jn, reviewStage);
+                render();
+              }
+            });
+          });
           
           grid.appendChild(card);
         });
@@ -1256,9 +1386,11 @@
       if (breakdownNote) breakdownNote.textContent = message;
     }
 
-    function showBreakdown(job) {
+    function showBreakdown(job, options = {}) {
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
       const wgLabel = wgFilter === 'all' ? '' : ` • ${wgFilter}`;
+      const breakdownModal = document.getElementById('breakdown');
+      const modalContent = breakdownModal?.querySelector('.modal-content');
       document.getElementById('bdTitle').textContent = `${job.jn} - Breakdown`;
       document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc} • ${job.unit}${wgLabel}`;
       const displayData = (() => {
@@ -1439,35 +1571,49 @@
         addJobComment(job.jn, commentType.value, commentText.value);
         commentText.value = '';
         renderCommentsTable(job.jn);
+        render();
       };
       renderCommentsTable(job.jn);
       
-      document.getElementById('breakdown').classList.add('open');
+      breakdownModal.classList.add('open');
+      if (options.scrollTop && modalContent) {
+        modalContent.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+
+    function openCommentary(job) {
+      showBreakdown(job);
+      setTimeout(() => {
+        const commentText = document.getElementById('commentText');
+        if (commentText) commentText.focus();
+      }, 0);
     }
 
     function renderCommentsTable(jobNumber) {
-      const commentTable = document.getElementById('commentTable');
+      const commentList = document.getElementById('commentList');
       const comments = getJobComments(jobNumber);
       if (!comments.length) {
-        commentTable.innerHTML = '<thead><tr><th>Type</th><th>Comment</th><th>Date</th><th></th></tr></thead><tbody><tr><td colspan="4"><em>No comments yet.</em></td></tr></tbody>';
+        commentList.innerHTML = '<div class="comment-empty">No comments yet.</div>';
         return;
       }
-      const rows = comments.map(entry => `
-        <tr>
-          <td>${entry.category}</td>
-          <td>${entry.text}</td>
-          <td>${formatTimestamp(entry.timestamp)}</td>
-          <td><button type="button" class="comment-delete" data-id="${entry.id}">Delete</button></td>
-        </tr>
+      const cards = comments.map(entry => `
+        <div class="comment-card">
+          <div class="comment-card-header">
+            <span class="comment-type">${escapeHtml(entry.category)}</span>
+            <span class="comment-meta">${formatTimestamp(entry.timestamp)}</span>
+          </div>
+          <div class="comment-body">${escapeHtml(entry.text)}</div>
+          <div class="comment-actions">
+            <button type="button" class="comment-delete" data-id="${entry.id}">Delete</button>
+          </div>
+        </div>
       `).join('');
-      commentTable.innerHTML = `
-        <thead><tr><th>Type</th><th>Comment</th><th>Date</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      `;
-      commentTable.querySelectorAll('.comment-delete').forEach(btn => {
+      commentList.innerHTML = cards;
+      commentList.querySelectorAll('.comment-delete').forEach(btn => {
         btn.addEventListener('click', () => {
           deleteJobComment(jobNumber, btn.dataset.id);
           renderCommentsTable(jobNumber);
+          render();
         });
       });
     }
