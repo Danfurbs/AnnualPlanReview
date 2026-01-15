@@ -63,8 +63,8 @@
     .job-pill.needs-review { background: #fef3c7; color: #92400e; }
     .job-card-title { font-weight: 800; font-size: 16px; color: #0f172a; }
     .job-card-subtitle { color: #64748b; font-size: 13px; font-weight: 600; }
-    .job-card-body { display: flex; gap: 20px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
-    .job-details { flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px; }
+    .job-card-body { display: flex; gap: 20px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+    .job-details { flex: 1 1 320px; display: flex; flex-direction: column; gap: 6px; }
     .job-unit { color: #4a5568; font-size: 12px; }
     .job-alert { border-radius: 8px; padding: 10px 12px; font-size: 12px; font-weight: 600; display: flex; flex-direction: column; gap: 4px; }
     .job-alert.bad { background: #fef2f2; color: #b91c1c; border-left: 4px solid #ef4444; }
@@ -1299,15 +1299,15 @@
                 <span class="job-pill ${statusClass}">${statusLabel}</span>
               </div>
             </div>
-            <div class="job-details">
-              <div class="job-card-title">${j.jn} - ${j.desc}</div>
-              <div class="job-card-subtitle">Discipline: ${j.disc} • Unit: ${j.unit} • Status: ${statusLabel}</div>
-              <div class="job-alert ${stat}">
-                <span>${alertTitle}</span>
-                <span>${alertDetail}</span>
-              </div>
-            </div>
             <div class="job-card-body">
+              <div class="job-details">
+                <div class="job-card-title">${j.jn} - ${j.desc}</div>
+                <div class="job-card-subtitle">Discipline: ${j.disc} • Unit: ${j.unit} • Status: ${statusLabel}</div>
+                <div class="job-alert ${stat}">
+                  <span>${alertTitle}</span>
+                  <span>${alertDetail}</span>
+                </div>
+              </div>
               <div class="job-metrics">
                 <div class="metric-card">
                   <div class="metric-label">Planned</div>
@@ -1579,14 +1579,6 @@
       if (options.scrollTop && modalContent) {
         modalContent.scrollTo({ top: 0, behavior: 'smooth' });
       }
-    }
-
-    function openCommentary(job) {
-      showBreakdown(job);
-      setTimeout(() => {
-        const commentText = document.getElementById('commentText');
-        if (commentText) commentText.focus();
-      }, 0);
     }
 
     function openCommentary(job) {
