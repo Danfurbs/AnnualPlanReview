@@ -170,8 +170,33 @@
   <script>
     let fData = null, wData = null, stdJobs = new Map();
     let currentChart = null;
+    let currentJob = null;
+    let lastFilteredJobs = [];
+    const REVIEW_STORAGE_KEY = 'annualPlanReview.reviewedJobs';
+    let reviewedJobs = new Set();
+
+    function loadReviewedJobs() {
+      try {
+        const raw = localStorage.getItem(REVIEW_STORAGE_KEY);
+        if (!raw) return new Set();
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return new Set(parsed);
+      } catch (err) {
+        console.warn('Unable to load reviewed jobs from storage.', err);
+      }
+      return new Set();
+    }
+
+    function saveReviewedJobs() {
+      try {
+        localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify([...reviewedJobs]));
+      } catch (err) {
+        console.warn('Unable to save reviewed jobs to storage.', err);
+      }
+    }
 
     function init() {
+      reviewedJobs = loadReviewedJobs();
       // Check if external file loaded
       if (typeof STANDARD_JOBS_RAW !== 'undefined') {
         STANDARD_JOBS_RAW.split('\n').slice(1).forEach(line => {
@@ -327,6 +352,59 @@
       }
     }
 
+    function updateReviewProgress(jobs = lastFilteredJobs) {
+      const reviewedCount = document.getElementById('reviewedCount');
+      const totalJobs = document.getElementById('totalJobs');
+      const progressPercent = document.getElementById('reviewProgressPercent');
+      const progressBar = document.getElementById('reviewProgressBar');
+      const total = jobs.length;
+      const reviewed = jobs.filter(job => reviewedJobs.has(job.jn)).length;
+      const percent = total ? Math.round((reviewed / total) * 100) : 0;
+
+      reviewedCount.textContent = reviewed;
+      totalJobs.textContent = total;
+      progressPercent.textContent = `${percent}%`;
+      progressBar.style.width = `${percent}%`;
+    }
+
+    function updateReviewStatusDisplay(job) {
+      const status = document.getElementById('reviewStatusMessage');
+      const markBtn = document.getElementById('markReviewedBtn');
+      const unmarkBtn = document.getElementById('unmarkReviewedBtn');
+      const isReviewed = reviewedJobs.has(job.jn);
+
+      status.textContent = isReviewed ? 'This job has been reviewed for the current RF period.' : 'This job has not been reviewed yet.';
+      status.style.background = isReviewed ? '#f0fff4' : '#fff5f5';
+      status.style.color = isReviewed ? '#22543d' : '#742a2a';
+      markBtn.style.display = isReviewed ? 'none' : 'inline-flex';
+      unmarkBtn.style.display = isReviewed ? 'inline-flex' : 'none';
+    }
+
+    function renderTopVariances(jobs = lastFilteredJobs) {
+      const list = document.getElementById('topVariancesList');
+      const period = document.getElementById('period').value;
+      const sorted = [...jobs].sort((a, b) => {
+        const av = period === 'all' ? Math.abs(a.tot.v) : Math.abs(a.periods[period]?.v || 0);
+        const bv = period === 'all' ? Math.abs(b.tot.v) : Math.abs(b.periods[period]?.v || 0);
+        return bv - av;
+      });
+      const top = sorted.slice(0, 5);
+      if (!top.length) {
+        list.innerHTML = '<div class="helper-text">No variances to display yet.</div>';
+        return;
+      }
+      list.innerHTML = top.map(job => {
+        const pd = period === 'all' ? job.tot : job.periods[period];
+        const vc = pd.v > 0 ? 'positive' : pd.v < 0 ? 'negative' : 'neutral';
+        return `
+          <div class="breakdown-row" style="justify-content: space-between; padding: 6px 0;">
+            <span><strong>${job.jn}</strong> ${job.desc}</span>
+            <span class="${vc}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(2)}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
     function render() {
       const all = new Set([...(fData?.keys()||[]), ...(wData?.keys()||[])]);
       const jobs = [];
@@ -371,12 +449,13 @@
         if (!byDisc[j.disc]) byDisc[j.disc] = [];
         byDisc[j.disc].push(j);
       });
+      lastFilteredJobs = filtered;
 
       const cont = document.getElementById('jobs');
       cont.innerHTML = '';
       document.getElementById('jCount').textContent = filtered.length;
       
-      updateReviewProgress();
+      updateReviewProgress(filtered);
       renderTopVariances(filtered);
 
       Object.keys(byDisc).sort().forEach(disc => {
@@ -415,8 +494,10 @@
     }
 
     function showBreakdown(job) {
+      currentJob = job;
       document.getElementById('bdTitle').textContent = `${job.jn} - Breakdown`;
       document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc}`;
+      updateReviewStatusDisplay(job);
       
       // Build cumulative data
       const periods = [];
@@ -528,6 +609,20 @@
     
     document.getElementById('modal').onclick = e => { if (e.target.id==='modal') closeModal(); };
     document.getElementById('breakdown').onclick = e => { if (e.target.id==='breakdown') closeBreakdown(); };
+    document.getElementById('markReviewedBtn').onclick = () => {
+      if (!currentJob) return;
+      reviewedJobs.add(currentJob.jn);
+      saveReviewedJobs();
+      updateReviewStatusDisplay(currentJob);
+      updateReviewProgress();
+    };
+    document.getElementById('unmarkReviewedBtn').onclick = () => {
+      if (!currentJob) return;
+      reviewedJobs.delete(currentJob.jn);
+      saveReviewedJobs();
+      updateReviewStatusDisplay(currentJob);
+      updateReviewProgress();
+    };
 
     init();
     render();
