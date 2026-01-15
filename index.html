@@ -380,31 +380,6 @@
       unmarkBtn.style.display = isReviewed ? 'inline-flex' : 'none';
     }
 
-    function renderTopVariances(jobs = lastFilteredJobs) {
-      const list = document.getElementById('topVariancesList');
-      const period = document.getElementById('period').value;
-      const sorted = [...jobs].sort((a, b) => {
-        const av = period === 'all' ? Math.abs(a.tot.v) : Math.abs(a.periods[period]?.v || 0);
-        const bv = period === 'all' ? Math.abs(b.tot.v) : Math.abs(b.periods[period]?.v || 0);
-        return bv - av;
-      });
-      const top = sorted.slice(0, 5);
-      if (!top.length) {
-        list.innerHTML = '<div class="helper-text">No variances to display yet.</div>';
-        return;
-      }
-      list.innerHTML = top.map(job => {
-        const pd = period === 'all' ? job.tot : job.periods[period];
-        const vc = pd.v > 0 ? 'positive' : pd.v < 0 ? 'negative' : 'neutral';
-        return `
-          <div class="breakdown-row" style="justify-content: space-between; padding: 6px 0;">
-            <span><strong>${job.jn}</strong> ${job.desc}</span>
-            <span class="${vc}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(2)}</span>
-          </div>
-        `;
-      }).join('');
-    }
-
     function render() {
       const all = new Set([...(fData?.keys()||[]), ...(wData?.keys()||[])]);
       const jobs = [];
