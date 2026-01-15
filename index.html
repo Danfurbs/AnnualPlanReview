@@ -7,10 +7,10 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #f5f7fa; padding: 20px; color: #1a202c; }
     .container { max-width: 1400px; margin: 0 auto; }
-    header { background: white; padding: 24px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    header { background: white; padding: 16px 20px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     h1 { font-size: 24px; margin-bottom: 6px; }
     .subtitle { color: #718096; font-size: 14px; }
-    .top-bar { display: flex; flex-direction: column; gap: 20px; }
+    .top-bar { display: flex; flex-direction: column; gap: 12px; }
     .top-bar-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
     .top-bar-title { display: flex; align-items: center; gap: 14px; }
     .top-bar-icon { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: white; background: linear-gradient(135deg, #60a5fa, #818cf8, #ec4899); box-shadow: 0 8px 18px rgba(59, 130, 246, 0.25); }
@@ -38,8 +38,8 @@
     .rag-green { background: #dcfce7; color: #166534; }
     .comment-breakdown { list-style: none; display: flex; flex-direction: column; gap: 8px; }
     .comment-breakdown li { display: flex; justify-content: space-between; font-size: 12px; color: #475569; }
-    .variance-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-    .variance-item { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; font-size: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; }
+    .variance-list { list-style: none; display: flex; flex-direction: column; gap: 10px; max-height: 220px; overflow-y: auto; padding-right: 6px; }
+    .variance-item { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; font-size: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; cursor: pointer; }
     .variance-item:last-child { border-bottom: none; padding-bottom: 0; }
     .variance-job { display: flex; flex-direction: column; gap: 4px; }
     .variance-job strong { font-size: 13px; color: #0f172a; }
@@ -176,6 +176,15 @@
     </div>
 
     <div class="controls">
+      <div class="control-group">
+        <label for="reviewStage">Review stage</label>
+        <select id="reviewStage" onchange="render()">
+          <option value="RF3">RF3</option>
+          <option value="RF6">RF6</option>
+          <option value="RF9">RF9</option>
+          <option value="RF11">RF11</option>
+        </select>
+      </div>
       <div class="control-group">
         <label for="viewMode">View mode</label>
         <select id="viewMode" onchange="render()">
@@ -378,6 +387,7 @@
     let currentChart = null;
     let currentWorkOrders = [];
     let currentWorkOrderWorkGroup = 'all';
+    let currentJobsMap = new Map();
     const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11'];
     const COMMENT_STORAGE_KEY = 'aprJobCommentsV2';
     const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
@@ -581,9 +591,12 @@
       return { total, counts };
     }
 
-    function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData }) {
+    function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage }) {
       const totalJobs = jobs.length;
-      const reviewedJobs = wData ? wData.size : 0;
+      const reviewedJobs = jobs.filter(job => {
+        const comments = commentStore[job.jn] || [];
+        return comments.some(entry => entry.category === reviewStage);
+      }).length;
       const percent = totalJobs ? Math.round((reviewedJobs / totalJobs) * 100) : 0;
 
       const reviewedEl = document.getElementById('reviewedCount');
@@ -592,7 +605,7 @@
       const progressEl = document.getElementById('reviewProgress');
       if (reviewedEl) reviewedEl.textContent = reviewedJobs;
       if (totalEl) totalEl.textContent = totalJobs;
-      if (percentEl) percentEl.textContent = `${percent}% jobs reviewed`;
+      if (percentEl) percentEl.textContent = `${percent}% jobs reviewed at ${reviewStage}`;
       if (progressEl) progressEl.style.width = `${percent}%`;
 
       const ragCounts = { red: 0, amber: 0, green: 0 };
@@ -643,7 +656,7 @@
           varianceListEl.innerHTML = topVariances.map(({ job, variance }) => {
             const valueClass = variance > 0 ? 'positive' : variance < 0 ? 'negative' : 'neutral';
             return `
-              <li class="variance-item">
+              <li class="variance-item" onclick="showBreakdownByJobNumber('${escapeHtml(job.jn)}')">
                 <div class="variance-job">
                   <strong>${escapeHtml(job.jn)}</strong>
                   <span class="variance-desc">${escapeHtml(job.desc)}</span>
@@ -654,6 +667,12 @@
           }).join('');
         }
       }
+    }
+
+    function showBreakdownByJobNumber(jobNumber) {
+      const job = currentJobsMap.get(jobNumber);
+      if (!job) return;
+      showBreakdown(job);
     }
 
     function updateWorkGroupFilterOptions() {
@@ -1111,9 +1130,12 @@
         jobs.push(job);
       });
 
+      currentJobsMap = new Map(jobs.map(job => [job.jn, job]));
+
       const search = document.getElementById('search').value.toLowerCase();
       const period = document.getElementById('period').value;
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const reviewStage = document.getElementById('reviewStage')?.value || 'RF3';
       const getJobDisplayData = (job) => {
         if (wgFilter === 'all') {
           return { periods: job.periods, tot: job.tot };
@@ -1167,7 +1189,7 @@
 
       const cont = document.getElementById('jobs');
       cont.innerHTML = '';
-      updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData });
+      updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage });
 
       Object.keys(byDisc).sort().forEach(disc => {
         const sec = document.createElement('div');
