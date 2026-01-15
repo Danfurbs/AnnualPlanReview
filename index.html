@@ -11,6 +11,8 @@
     h1 { font-size: 24px; margin-bottom: 8px; }
     .subtitle { color: #718096; font-size: 14px; }
     .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+    .control-group { display: flex; flex-direction: column; gap: 6px; }
+    .control-group label { font-size: 12px; color: #4a5568; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
     button { background: #3182ce; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; }
     button:hover { background: #2c5aa0; }
     select, input { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; }
@@ -20,7 +22,9 @@
     .summary-card .value { font-size: 28px; font-weight: 700; }
     .discipline-section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .discipline-header { display: flex; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0; }
+    .discipline-header .header-actions { display: flex; align-items: center; gap: 8px; }
     .jobs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .discipline-section.collapsed .jobs-grid { display: none; }
     .job-card { padding: 16px; border: 2px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
     .job-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     .job-card.good { border-left: 4px solid #48bb78; }
@@ -28,6 +32,7 @@
     .job-card.bad { border-left: 4px solid #f56565; }
     .job-number { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
     .job-desc { color: #718096; font-size: 13px; margin-bottom: 12px; }
+    .job-unit { color: #4a5568; font-size: 12px; margin-bottom: 12px; }
     .job-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 13px; }
     .metric-label { color: #718096; font-size: 11px; text-transform: uppercase; }
     .metric-value { font-weight: 600; margin-top: 2px; }
@@ -37,6 +42,7 @@
     .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000; }
     .modal.open { display: flex; }
     .modal-content { background: white; border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .modal-content.modal-content--wide { max-width: 1100px; width: 95%; max-height: 90vh; }
     .modal-header { display: flex; justify-content: space-between; margin-bottom: 20px; }
     .close { background: none; color: #718096; font-size: 24px; padding: 0; width: 32px; height: 32px; cursor: pointer; }
     .file-input-group { margin-bottom: 16px; }
@@ -44,6 +50,59 @@
     .helper-text { font-size: 12px; color: #718096; margin-top: 4px; }
     .row-input { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
     input[type="number"] { width: 80px; }
+    .breakdown-section { margin-top: 20px; }
+    .breakdown-section h3 { margin-bottom: 12px; font-size: 16px; color: #2d3748; }
+    .wg-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    .wg-table thead th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; }
+    .wg-table thead th:first-child { text-align: left; }
+    .wg-table tbody td { padding: 10px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: right; }
+    .wg-table tbody td:first-child { text-align: left; color: #2d3748; }
+    .wg-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .wg-table tbody tr:hover { background: #edf2f7; }
+    .wg-summary { cursor: pointer; }
+    .wg-summary strong { display: inline-flex; align-items: center; gap: 8px; }
+    .wg-toggle { font-size: 11px; text-transform: uppercase; color: #64748b; }
+    .wg-detail { display: none; background: #f8fafc; }
+    .wg-detail.open { display: table-row; }
+    .wg-detail td { font-size: 12px; color: #4a5568; }
+    .wg-detail td:first-child { font-weight: 600; color: #1f2937; }
+    .breakdown-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+    .breakdown-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .breakdown-item strong { font-size: 13px; color: #2d3748; }
+    .breakdown-row { display: flex; justify-content: space-between; font-size: 12px; color: #4a5568; }
+    .comment-panel { display: flex; flex-direction: column; gap: 12px; }
+    .comment-entry { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .comment-entry label { font-size: 12px; font-weight: 700; color: #2d3748; text-transform: uppercase; letter-spacing: 0.04em; }
+    .comment-entry-row { display: flex; gap: 8px; align-items: stretch; }
+    .comment-entry-row select { min-width: 160px; }
+    .comment-entry-row textarea { flex: 1; border: 1px solid #cbd5e0; border-radius: 6px; padding: 8px; font-size: 13px; min-height: 90px; resize: vertical; }
+    .comment-actions { display: flex; justify-content: flex-end; }
+    .comment-table { width: 100%; border-collapse: collapse; }
+    .comment-table th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .comment-table td { padding: 10px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: top; }
+    .comment-table td:last-child { text-align: right; }
+    .comment-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .comment-table tbody tr:hover { background: #edf2f7; }
+    .comment-delete { background: #e53e3e; padding: 6px 12px; border-radius: 6px; font-size: 12px; }
+    .comment-delete:hover { background: #c53030; }
+    .wo-controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .wo-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .wo-pill { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px; padding: 6px 12px; font-size: 12px; color: #4a5568; }
+    .wo-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .wo-filters input[type="search"] { min-width: 220px; }
+    .wo-flag-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #4a5568; }
+    .wo-table { width: 100%; border-collapse: collapse; min-width: 860px; }
+    .wo-table thead th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .wo-table tbody td { padding: 10px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: top; }
+    .wo-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .wo-table tbody tr:hover { background: #edf2f7; }
+    .wo-units { text-align: right; font-variant-numeric: tabular-nums; }
+    .wo-flagged { border-left: 4px solid #f6ad55; }
+    .wo-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: #fef3c7; color: #92400e; margin-right: 6px; margin-bottom: 4px; }
+    .wo-empty { font-style: italic; color: #718096; }
+    .section-toggle { background: #edf2f7; color: #2d3748; border: 1px solid #cbd5e0; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; cursor: pointer; }
+    .section-toggle:hover { background: #e2e8f0; }
+    .collapsible-content.collapsed { display: none; }
   </style>
 </head>
 <body>
@@ -55,6 +114,48 @@
 
     <div class="controls">
       <button onclick="openModal()">Upload Files</button>
+      <div class="control-group">
+        <label for="viewMode">View mode</label>
+        <select id="viewMode" onchange="render()">
+          <option value="actual">Show Work Done Only</option>
+          <option value="forecast">Show Work Done &amp; Forecast</option>
+        </select>
+      </div>
+      <div class="control-group" id="forecastCutoffGroup">
+        <label for="forecastCutoff">Work done cutoff</label>
+        <select id="forecastCutoff" onchange="render()">
+          <option value="auto">Auto (latest work done period)</option>
+          <option value="P1">Period 1</option>
+          <option value="P2">Period 2</option>
+          <option value="P3">Period 3</option>
+          <option value="P4">Period 4</option>
+          <option value="P5">Period 5</option>
+          <option value="P6">Period 6</option>
+          <option value="P7">Period 7</option>
+          <option value="P8">Period 8</option>
+          <option value="P9">Period 9</option>
+          <option value="P10">Period 10</option>
+          <option value="P11">Period 11</option>
+          <option value="P12">Period 12</option>
+          <option value="P13">Period 13</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="wgFilter">Work group set</label>
+        <select id="wgFilter" onchange="render()">
+          <option value="all">All Work Group Sets</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="varianceFilter">Variance filter</label>
+        <select id="varianceFilter" onchange="render()">
+          <option value="all">Show All</option>
+          <option value="warning">Show Ambers</option>
+          <option value="bad">Show Reds</option>
+          <option value="variance">Show Any Variances</option>
+          <option value="good">Show Greens</option>
+        </select>
+      </div>
       <select id="period" onchange="render()">
         <option value="all">All Periods</option>
         <option value="P1">Period 1</option>
@@ -75,24 +176,9 @@
     </div>
 
     <div class="summary">
-      <div class="summary-card">
-        <h3>Review Progress (<span id="rfPeriodLabel">RF3</span>)</h3>
-        <div class="value"><span id="reviewedCount">0</span>/<span id="totalJobs">0</span></div>
-        <div style="font-size: 13px; color: #718096; margin-top: 4px;">
-          <div id="reviewProgressPercent">0%</div>
-          <div style="height: 6px; background: #e2e8f0; border-radius: 3px; margin-top: 8px; overflow: hidden;">
-            <div id="reviewProgressBar" style="height: 100%; background: linear-gradient(90deg, #48bb78, #38a169); width: 0%; transition: width 0.3s;"></div>
-          </div>
-        </div>
-      </div>
       <div class="summary-card"><h3>Forecast Rows</h3><div class="value" id="fCount">0</div></div>
       <div class="summary-card"><h3>Actual Rows</h3><div class="value" id="aCount">0</div></div>
       <div class="summary-card"><h3>Jobs Matched</h3><div class="value" id="jCount">0</div></div>
-    </div>
-
-    <div id="topVariances" style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;">
-      <h3 style="margin-bottom: 12px;">⚠️ Top 5 Variances</h3>
-      <div id="topVariancesList"></div>
     </div>
 
     <div id="jobs"></div>
@@ -104,6 +190,7 @@
         <h2>Upload Files</h2>
         <button class="close" onclick="closeModal()">&times;</button>
       </div>
+      <p class="helper-text" id="uploadModeNote"></p>
       <div class="file-input-group">
         <label>Forecast (must have "Results" sheet)</label>
         <input type="file" id="fFile" accept=".xlsx,.xls" onchange="loadForecast(event)">
@@ -122,11 +209,21 @@
         </div>
         <p class="helper-text">Try 1, 2, or 3 if not loading</p>
       </div>
+      <div class="file-input-group">
+        <label>Comments Upload</label>
+        <input type="file" id="cFile" accept=".xlsx,.xls" onchange="loadComments(event)">
+        <div class="row-input">
+          <label>Header row:</label>
+          <input type="number" id="cRow" value="1" min="1">
+        </div>
+        <p class="helper-text">Required columns: Standard Job Number, Comment Type, Comment</p>
+        <button type="button" onclick="exportComments()">Export Comments</button>
+      </div>
     </div>
   </div>
 
   <div id="breakdown" class="modal">
-    <div class="modal-content" style="max-width: 900px;">
+    <div class="modal-content modal-content--wide">
       <div class="modal-header">
         <div>
           <h2 id="bdTitle">Job Breakdown</h2>
@@ -134,18 +231,8 @@
         </div>
         <button class="close" onclick="closeBreakdown()">&times;</button>
       </div>
+      <p class="helper-text" id="breakdownModeNote"></p>
       
-      <div class="breakdown-section">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <h3>Review Status for <span id="bdRFPeriod">RF3</span></h3>
-          <div style="display: flex; gap: 8px;">
-            <button type="button" class="btn btn-secondary" id="markReviewedBtn">✓ Mark as Reviewed</button>
-            <button type="button" class="btn btn-secondary" id="unmarkReviewedBtn" style="display: none;">✗ Unmark Reviewed</button>
-          </div>
-        </div>
-        <div id="reviewStatusMessage" style="padding: 12px; border-radius: 6px; margin-bottom: 16px;"></div>
-      </div>
-
       <div class="breakdown-section">
         <h3>Cumulative Progress</h3>
         <canvas id="chart"></canvas>
@@ -159,26 +246,198 @@
       </div>
 
       <div class="breakdown-section">
-        <h3>Period Summary</h3>
-        <div class="breakdown-grid" id="periodGrid"></div>
+        <div class="discipline-header">
+          <h3>Period Summary</h3>
+          <div class="header-actions">
+            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('periodGrid', this)">Collapse</button>
+          </div>
+        </div>
+        <div class="breakdown-grid collapsible-content" id="periodGrid"></div>
+      </div>
+
+      <div class="breakdown-section">
+        <h3>Work Orders (Work Done)</h3>
+        <div class="wo-controls">
+          <div class="wo-summary">
+            <span class="wo-pill">Work Orders: <strong id="woTotal">0</strong></span>
+            <span class="wo-pill">Units Complete: <strong id="woUnits">0</strong></span>
+            <span class="wo-pill">Flagged: <strong id="woFlagged">0</strong></span>
+          </div>
+          <div class="wo-filters">
+            <input type="search" id="woSearch" placeholder="Search work orders...">
+            <label class="wo-flag-toggle"><input type="checkbox" id="woFlagOnly"> Show flagged only</label>
+          </div>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="wo-table" id="woTable"></table>
+        </div>
+      </div>
+
+      <div class="breakdown-section">
+        <h3>Work Orders (Work Done)</h3>
+        <div class="wo-controls">
+          <div class="wo-summary">
+            <span class="wo-pill">Work Orders: <strong id="woTotal">0</strong></span>
+            <span class="wo-pill">Units Complete: <strong id="woUnits">0</strong></span>
+            <span class="wo-pill">Flagged: <strong id="woFlagged">0</strong></span>
+          </div>
+          <div class="wo-filters">
+            <input type="search" id="woSearch" placeholder="Search work orders...">
+            <label class="wo-flag-toggle"><input type="checkbox" id="woFlagOnly"> Show flagged only</label>
+          </div>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="wo-table" id="woTable"></table>
+        </div>
+      </div>
+
+      <div class="breakdown-section">
+        <h3>Comments</h3>
+        <div class="comment-panel">
+          <div class="comment-entry">
+            <label for="commentType">Add Comment</label>
+            <div class="comment-entry-row">
+              <select id="commentType"></select>
+              <textarea id="commentText" placeholder="Enter comment..."></textarea>
+            </div>
+            <div class="comment-actions">
+              <button type="button" id="commentAdd">Add Comment</button>
+            </div>
+          </div>
+          <div style="overflow-x: auto;">
+            <table class="comment-table" id="commentTable"></table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+  <script src="work-group-sets-data.js"></script>
+  <script src="standard-jobs-data.js"></script>
   <script>
     let fData = null, wData = null, stdJobs = new Map();
+    let workGroupSets = new Map();
     let currentChart = null;
+    let currentWorkOrders = [];
+    let currentWorkOrderWorkGroup = 'all';
+    const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11'];
+    const COMMENT_STORAGE_KEY = 'aprJobCommentsV2';
+    const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
+    const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
+    let commentStore = {};
+    let currentCommentJob = null;
+
+    function loadCommentStore() {
+      try {
+        localStorage.removeItem(LEGACY_COMMENT_STORAGE_KEY);
+        const raw = localStorage.getItem(COMMENT_STORAGE_KEY);
+        commentStore = raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        console.warn('Failed to load comments:', err);
+        commentStore = {};
+      }
+    }
+
+    function serializeForecastData(map) {
+      const output = {};
+      map.forEach((value, key) => {
+        output[key] = value;
+      });
+      return output;
+    }
+
+    function hydrateForecastData(raw) {
+      const output = new Map();
+      Object.entries(raw || {}).forEach(([key, value]) => {
+        if (value && typeof value === 'object') {
+          output.set(key, value);
+        }
+      });
+      return output;
+    }
+
+    function loadForecastStore() {
+      try {
+        const raw = localStorage.getItem(FORECAST_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        const hydrated = hydrateForecastData(parsed.data);
+        if (!hydrated.size) return null;
+        fData = hydrated;
+        return {
+          rowCount: parsed.rowCount ?? hydrated.size,
+          savedAt: parsed.savedAt || null
+        };
+      } catch (err) {
+        console.warn('Failed to load forecast cache:', err);
+        return null;
+      }
+    }
+
+    function saveForecastStore(rowCount) {
+      try {
+        const payload = {
+          data: serializeForecastData(fData || new Map()),
+          rowCount: rowCount ?? null,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(FORECAST_STORAGE_KEY, JSON.stringify(payload));
+      } catch (err) {
+        console.warn('Failed to persist forecast cache:', err);
+      }
+    }
+
+    function saveCommentStore() {
+      localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
+    }
+
+    function getJobComments(jobNumber) {
+      return commentStore[jobNumber] || [];
+    }
+
+    function addJobComment(jobNumber, category, value) {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      if (!commentStore[jobNumber]) commentStore[jobNumber] = [];
+      commentStore[jobNumber].unshift({
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        category,
+        text: trimmed,
+        timestamp: new Date().toISOString()
+      });
+      saveCommentStore();
+    }
+
+    function deleteJobComment(jobNumber, id) {
+      if (!commentStore[jobNumber]) return;
+      commentStore[jobNumber] = commentStore[jobNumber].filter(entry => entry.id !== id);
+      saveCommentStore();
+    }
 
     function init() {
+      loadCommentStore();
+      const forecastCache = loadForecastStore();
+      if (typeof WORK_GROUP_SETS_RAW !== 'undefined') {
+        WORK_GROUP_SETS_RAW.split('\n').slice(1).forEach(line => {
+          const p = line.split('\t');
+          if (p.length >= 2) {
+            workGroupSets.set(p[0].trim(), p[1].trim());
+          }
+        });
+        console.log('✓ Work group sets loaded:', workGroupSets.size);
+      } else {
+        console.warn('⚠ work-group-sets-data.js not found - using raw values');
+      }
       // Check if external file loaded
       if (typeof STANDARD_JOBS_RAW !== 'undefined') {
         STANDARD_JOBS_RAW.split('\n').slice(1).forEach(line => {
           const p = line.split('\t');
-          if (p.length >= 4) {
+          if (p.length >= 5) {
             stdJobs.set(p[2].trim().padStart(6,'0'), {
-              disc: p[0].trim(), desc: p[3].trim()
+              disc: p[0].trim(), desc: p[3].trim(), unit: p[4].trim()
             });
           }
         });
@@ -187,6 +446,11 @@
         console.warn('⚠ standard-jobs-data.js not found - all jobs will be processed');
         // Process all jobs when no filter available
       }
+      if (forecastCache) {
+        document.getElementById('fCount').textContent = forecastCache.rowCount;
+        updateWorkGroupFilterOptions();
+        console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+      }
     }
 
     function extractJob(txt) {
@@ -194,6 +458,86 @@
       const s = String(txt).trim().split('-')[0].trim();
       const m = s.match(/(\d{6})/);
       return m ? m[1] : null;
+    }
+
+    function normalizeWorkGroupSet(raw) {
+      if (!raw) return 'Unspecified';
+      const text = String(raw).trim();
+      if (!text) return 'Unspecified';
+      const code = text.split(/\s+/)[0];
+      if (workGroupSets.has(code)) return workGroupSets.get(code);
+      if (workGroupSets.has(text)) return workGroupSets.get(text);
+      return text;
+    }
+
+    function extractWorkOrderNumber(row) {
+      const raw = row['Work Order'] ||
+        row['Work Order Number'] ||
+        row['Work Order No'] ||
+        row['WO Number'] ||
+        row['WO No'] ||
+        row['Work Order #'] ||
+        row['WO #'] ||
+        '';
+      const text = String(raw || '').trim();
+      return text || null;
+    }
+
+    function getVarianceStatus(pd) {
+      const variance = pd?.v || 0;
+      const forecast = pd?.f || 0;
+      const ratio = forecast ? Math.abs(variance / forecast) : (variance !== 0 ? 1 : 0);
+      const status = ratio > 0.5 ? 'bad' : ratio > 0.1 ? 'warning' : 'good';
+      return { status, hasVariance: variance !== 0 };
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function getWorkGroupOptions() {
+      const names = new Set();
+      [fData, wData].forEach(source => {
+        if (!source) return;
+        source.forEach(job => {
+          Object.keys(job.wgs || {}).forEach(wg => {
+            if (wg) names.add(wg);
+          });
+        });
+      });
+      return Array.from(names).sort((a, b) => a.localeCompare(b));
+    }
+
+    function updateWorkGroupFilterOptions() {
+      const select = document.getElementById('wgFilter');
+      if (!select) return;
+      const current = select.value || 'all';
+      const options = getWorkGroupOptions();
+      const optionHtml = [
+        '<option value="all">All Work Group Sets</option>',
+        ...options.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+      ].join('');
+      select.innerHTML = optionHtml;
+      select.value = options.includes(current) ? current : 'all';
+    }
+
+    function getMaxWorkDonePeriod() {
+      if (!wData) return 0;
+      let max = 0;
+      wData.forEach(job => {
+        Object.entries(job.periods || {}).forEach(([period, value]) => {
+          const numeric = parseInt(String(period).replace(/[^0-9]/g, ''), 10);
+          if (!Number.isNaN(numeric) && numeric > max && value !== 0) {
+            max = numeric;
+          }
+        });
+      });
+      return max;
     }
 
     async function loadForecast(e) {
@@ -229,7 +573,9 @@
             fData.set(jn, {periods:{}, wgs:{}});
           }
           const job = fData.get(jn);
-          const wg = r['Work Group Set'] || r['WGST_DESC'] || 'Unspecified';
+          const wg = normalizeWorkGroupSet(
+            r['Work Group Set'] || r['WGST_DESC'] || r['Work Group Set Description']
+          );
           
           // Look for P01-P13 or P1-P13
           for(let i=1; i<=13; i++) {
@@ -243,6 +589,8 @@
         });
         console.log('✓ Matched:', matched, 'of', rows.length);
         document.getElementById('fCount').textContent = rows.length;
+        saveForecastStore(rows.length);
+        updateWorkGroupFilterOptions();
         render();
         closeModal();
       } catch(err) {
@@ -305,11 +653,41 @@
           matched++;
           if (!wData.has(jn)) wData.set(jn, {periods:{}, wgs:{}});
           const job = wData.get(jn);
+          if (!job.workOrders) job.workOrders = [];
           const u = parseFloat(units||0);
           job.periods[per] = (job.periods[per]||0) + u;
-          const wg = r['Work Group Set'] || 'Unspecified';
+          const wg = normalizeWorkGroupSet(
+            r['Work Group Set'] || r['Work Group Set Description']
+          );
           if (!job.wgs[wg]) job.wgs[wg] = {};
           job.wgs[wg][per] = (job.wgs[wg][per]||0) + u;
+          const workOrderNumber = extractWorkOrderNumber(r);
+          const workOrder = {
+            id: `${jn}-${workOrderNumber || 'unknown'}-${job.workOrders.length + 1}`,
+            number: workOrderNumber || 'Unknown',
+            description: String(
+              r['Work Order Description'] ||
+              r['Work Order Desc'] ||
+              r['WO Description'] ||
+              r['Description'] ||
+              ''
+            ).trim(),
+            status: String(
+              r['Work Order Status'] ||
+              r['WO Status'] ||
+              r['Status'] ||
+              ''
+            ).trim(),
+            period: per,
+            units: u,
+            workGroup: wg,
+            closedDate: String(
+              r['Work Order Closed Date'] ||
+              r['Closed Date'] ||
+              ''
+            ).trim()
+          };
+          job.workOrders.push(workOrder);
         });
         
         console.log('Sample work done rows:');
@@ -319,6 +697,7 @@
         });
         console.log('✓ Matched:', matched, 'of', rows.length);
         document.getElementById('aCount').textContent = rows.length;
+        updateWorkGroupFilterOptions();
         render();
         closeModal();
       } catch(err) {
@@ -327,7 +706,223 @@
       }
     }
 
+    async function loadComments(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const ab = await file.arrayBuffer();
+        const wb = XLSX.read(ab);
+        const sheetName = wb.SheetNames[0];
+        if (!sheetName) {
+          alert('No worksheet found in comments file.');
+          return;
+        }
+        const row = parseInt(document.getElementById('cRow').value, 10) - 1;
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { range: row });
+        if (!rows.length) {
+          alert('No comment rows found.');
+          return;
+        }
+        const required = ['Standard Job Number', 'Comment Type', 'Comment'];
+        const missing = required.filter(key => !(key in rows[0]));
+        if (missing.length) {
+          alert(`Missing required columns: ${missing.join(', ')}`);
+          return;
+        }
+        let added = 0;
+        rows.forEach(r => {
+          const rawJob = String(r['Standard Job Number'] || '').trim();
+          const jn = rawJob.replace(/\D/g, '').padStart(6, '0');
+          const category = String(r['Comment Type'] || '').trim() || 'General';
+          const text = String(r['Comment'] || '').trim();
+          if (!jn || jn === '000000' || !text) return;
+          if (!commentStore[jn]) commentStore[jn] = [];
+          commentStore[jn].unshift({
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            category,
+            text,
+            timestamp: new Date().toISOString()
+          });
+          added += 1;
+        });
+        saveCommentStore();
+        if (currentCommentJob) {
+          renderCommentsTable(currentCommentJob);
+        }
+        alert(`Imported ${added} comments.`);
+      } catch (err) {
+        console.error(err);
+        alert('Error loading comments');
+      } finally {
+        e.target.value = '';
+      }
+    }
+
+    function exportComments() {
+      const rows = [];
+      Object.entries(commentStore).forEach(([jobNumber, comments]) => {
+        comments.forEach(entry => {
+          rows.push({
+            'Standard Job Number': jobNumber,
+            'Comment Type': entry.category,
+            'Comment': entry.text
+          });
+        });
+      });
+      if (!rows.length) {
+        alert('No comments to export.');
+        return;
+      }
+      const ws = XLSX.utils.json_to_sheet(rows, {
+        header: ['Standard Job Number', 'Comment Type', 'Comment']
+      });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Comments');
+      XLSX.writeFile(wb, 'apr-comments.xlsx');
+    }
+
+    function computeQuantile(sorted, q) {
+      if (!sorted.length) return 0;
+      const pos = (sorted.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      if (sorted[base + 1] !== undefined) {
+        return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+      }
+      return sorted[base];
+    }
+
+    function getWorkOrderStats(workOrders) {
+      const units = workOrders
+        .map(order => Number(order.units))
+        .filter(val => !Number.isNaN(val))
+        .sort((a, b) => a - b);
+      if (!units.length) {
+        return { median: 0, q1: 0, q3: 0, iqr: 0, mean: 0, highThreshold: 0 };
+      }
+      const q1 = computeQuantile(units, 0.25);
+      const q3 = computeQuantile(units, 0.75);
+      const median = computeQuantile(units, 0.5);
+      const iqr = q3 - q1;
+      const mean = units.reduce((sum, val) => sum + val, 0) / units.length;
+      let highThreshold = q3 + 1.5 * iqr;
+      if (highThreshold === 0) {
+        highThreshold = mean ? mean * 4 : 0;
+      }
+      if (median > 0) {
+        highThreshold = Math.max(highThreshold, median * 4);
+      }
+      return { median, q1, q3, iqr, mean, highThreshold };
+    }
+
+    function getWorkOrderFlags(order, stats) {
+      const flags = [];
+      const units = Number(order.units) || 0;
+      if (units === 0 && order.period) {
+        flags.push('Zero units in closed period');
+      }
+      if (stats.highThreshold > 0 && units > stats.highThreshold) {
+        flags.push('High units vs typical');
+      }
+      return flags;
+    }
+
+    function renderWorkOrders() {
+      const table = document.getElementById('woTable');
+      if (!table) return;
+      const workOrders = currentWorkOrders || [];
+      const stats = getWorkOrderStats(workOrders);
+      const search = (document.getElementById('woSearch')?.value || '').toLowerCase();
+      const flaggedOnly = document.getElementById('woFlagOnly')?.checked || false;
+
+      const enriched = workOrders.map(order => {
+        const flags = getWorkOrderFlags(order, stats);
+        return { ...order, flags };
+      });
+
+      const baseFiltered = enriched.filter(order => (
+        currentWorkOrderWorkGroup === 'all' || order.workGroup === currentWorkOrderWorkGroup
+      ));
+
+      const filtered = baseFiltered.filter(order => {
+        const haystack = [
+          order.number,
+          order.description,
+          order.status,
+          order.period,
+          order.workGroup,
+          order.closedDate,
+          ...order.flags
+        ].join(' ').toLowerCase();
+        if (flaggedOnly && order.flags.length === 0) return false;
+        if (search && !haystack.includes(search)) return false;
+        return true;
+      });
+
+      const flaggedCount = baseFiltered.filter(order => order.flags.length).length;
+      const totalUnits = baseFiltered.reduce((sum, order) => sum + (Number(order.units) || 0), 0);
+
+      const totalEl = document.getElementById('woTotal');
+      const unitsEl = document.getElementById('woUnits');
+      const flaggedEl = document.getElementById('woFlagged');
+      if (totalEl) totalEl.textContent = baseFiltered.length;
+      if (unitsEl) unitsEl.textContent = totalUnits.toFixed(2);
+      if (flaggedEl) flaggedEl.textContent = flaggedCount;
+
+      if (!workOrders.length) {
+        table.innerHTML = '<thead><tr><th>Work Orders</th></tr></thead><tbody><tr><td class="wo-empty">No work orders found in the work done report for this job.</td></tr></tbody>';
+        return;
+      }
+
+      if (!filtered.length) {
+        table.innerHTML = '<thead><tr><th>Work Orders</th></tr></thead><tbody><tr><td class="wo-empty">No work orders match the current filters.</td></tr></tbody>';
+        return;
+      }
+
+      const rows = filtered.map(order => {
+        const flagsHtml = order.flags.length
+          ? order.flags.map(flag => `<span class="wo-badge">${escapeHtml(flag)}</span>`).join('')
+          : '<span class="wo-empty">None</span>';
+        const rowClass = order.flags.length ? 'wo-flagged' : '';
+        return `
+          <tr class="${rowClass}">
+            <td><strong>${escapeHtml(order.number || 'Unknown')}</strong></td>
+            <td>${escapeHtml(order.description || '-')}</td>
+            <td>${escapeHtml(order.status || '-')}</td>
+            <td>${escapeHtml(order.period || '-')}</td>
+            <td>${escapeHtml(order.workGroup || '-')}</td>
+            <td class="wo-units">${(Number(order.units) || 0).toFixed(2)}</td>
+            <td>${flagsHtml}</td>
+          </tr>
+        `;
+      }).join('');
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Work Order</th>
+            <th>Description</th>
+            <th>Status</th>
+            <th>Closed Period</th>
+            <th>Work Group</th>
+            <th class="wo-units">Units</th>
+            <th>Flags</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      `;
+    }
+
     function render() {
+      const viewMode = document.getElementById('viewMode')?.value || 'actual';
+      const cutoffValue = document.getElementById('forecastCutoff')?.value || 'auto';
+      const varianceFilter = document.getElementById('varianceFilter')?.value || 'all';
+      const maxWorkDonePeriod = (() => {
+        if (viewMode !== 'forecast') return 0;
+        if (cutoffValue === 'auto') return getMaxWorkDonePeriod();
+        const numeric = parseInt(String(cutoffValue).replace(/[^0-9]/g, ''), 10);
+        return Number.isNaN(numeric) ? 0 : numeric;
+      })();
       const all = new Set([...(fData?.keys()||[]), ...(wData?.keys()||[])]);
       const jobs = [];
       all.forEach(jn => {
@@ -340,29 +935,85 @@
           jn, 
           disc: meta?.disc || 'Unknown', 
           desc: meta?.desc || `Job ${jn}`, 
+          unit: meta?.unit || 'Unit not specified',
           periods:{}, 
-          tot:{f:0,a:0,v:0}
+          tot:{f:0,a:0,v:0},
+          wgs: {}
         };
         for(let i=1; i<=13; i++) {
           const p = `P${i}`;
           const fv = f?.periods[p]||0;
-          const av = a?.periods[p]||0;
+          const avRaw = a?.periods[p]||0;
+          const useForecast = viewMode === 'forecast' && i > maxWorkDonePeriod;
+          const av = useForecast ? fv : avRaw;
           job.periods[p] = {f:fv, a:av, v:av-fv};
           job.tot.f += fv;
           job.tot.a += av;
           job.tot.v += av-fv;
         }
+
+        const wgNames = new Set([
+          ...Object.keys(f?.wgs || {}),
+          ...Object.keys(a?.wgs || {})
+        ]);
+        wgNames.forEach(wg => {
+          job.wgs[wg] = {periods: {}};
+          for(let i=1; i<=13; i++) {
+            const p = `P${i}`;
+            const fv = f?.wgs?.[wg]?.[p] || 0;
+            const avRaw = a?.wgs?.[wg]?.[p] || 0;
+            const useForecast = viewMode === 'forecast' && i > maxWorkDonePeriod;
+            const av = useForecast ? fv : avRaw;
+            job.wgs[wg].periods[p] = {f: fv, a: av, v: av - fv};
+          }
+        });
         jobs.push(job);
       });
 
       const search = document.getElementById('search').value.toLowerCase();
       const period = document.getElementById('period').value;
-      
-      let filtered = jobs.filter(j => !search || j.jn.includes(search) || j.desc.toLowerCase().includes(search) || j.disc.toLowerCase().includes(search));
+      const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const getJobDisplayData = (job) => {
+        if (wgFilter === 'all') {
+          return { periods: job.periods, tot: job.tot };
+        }
+        const wgData = job.wgs?.[wgFilter];
+        const periods = {};
+        const totals = { f: 0, a: 0, v: 0 };
+        for (let i = 1; i <= 13; i++) {
+          const p = `P${i}`;
+          const data = wgData?.periods?.[p] || { f: 0, a: 0, v: 0 };
+          periods[p] = data;
+          totals.f += data.f || 0;
+          totals.a += data.a || 0;
+          totals.v += data.v || 0;
+        }
+        return { periods, tot: totals };
+      };
+
+      let filtered = jobs.filter(j => {
+        const matchesSearch = !search || j.jn.includes(search) || j.desc.toLowerCase().includes(search) || j.disc.toLowerCase().includes(search);
+        if (!matchesSearch) return false;
+        if (wgFilter === 'all') return true;
+        const wgData = j.wgs[wgFilter];
+        if (!wgData) return false;
+        return Object.values(wgData.periods || {}).some(periodData => periodData.f !== 0 || periodData.a !== 0);
+      });
+
+      filtered = filtered.filter(j => {
+        const displayData = getJobDisplayData(j);
+        const pd = period === 'all' ? displayData.tot : displayData.periods[period];
+        const { status, hasVariance } = getVarianceStatus(pd);
+        if (varianceFilter === 'all') return true;
+        if (varianceFilter === 'variance') return hasVariance;
+        return status === varianceFilter;
+      });
       
       filtered.sort((a,b) => {
-        const av = period==='all' ? Math.abs(a.tot.v) : Math.abs(a.periods[period]?.v||0);
-        const bv = period==='all' ? Math.abs(b.tot.v) : Math.abs(b.periods[period]?.v||0);
+        const aDisplay = getJobDisplayData(a);
+        const bDisplay = getJobDisplayData(b);
+        const av = period==='all' ? Math.abs(aDisplay.tot.v) : Math.abs(aDisplay.periods[period]?.v||0);
+        const bv = period==='all' ? Math.abs(bDisplay.tot.v) : Math.abs(bDisplay.periods[period]?.v||0);
         return bv - av;
       });
 
@@ -375,21 +1026,26 @@
       const cont = document.getElementById('jobs');
       cont.innerHTML = '';
       document.getElementById('jCount').textContent = filtered.length;
-      
-      updateReviewProgress();
-      renderTopVariances(filtered);
 
       Object.keys(byDisc).sort().forEach(disc => {
         const sec = document.createElement('div');
         sec.className = 'discipline-section';
-        sec.innerHTML = `<div class="discipline-header"><h2>${disc}</h2><span>${byDisc[disc].length} jobs</span></div>`;
+        sec.innerHTML = `
+          <div class="discipline-header">
+            <h2>${disc}</h2>
+            <div class="header-actions">
+              <span>${byDisc[disc].length} jobs</span>
+              <button type="button" class="section-toggle" onclick="toggleDisciplineSection(this)">Collapse</button>
+            </div>
+          </div>
+        `;
         const grid = document.createElement('div');
         grid.className = 'jobs-grid';
         
         byDisc[disc].forEach(j => {
-          const pd = period==='all' ? j.tot : j.periods[period];
-          const vp = pd.f ? Math.abs(pd.v/pd.f) : (pd.v!==0?1:0);
-          const stat = vp>0.5 ? 'bad' : vp>0.1 ? 'warning' : 'good';
+          const displayData = getJobDisplayData(j);
+          const pd = period==='all' ? displayData.tot : displayData.periods[period];
+          const { status: stat } = getVarianceStatus(pd);
           const vc = pd.v>0 ? 'positive' : pd.v<0 ? 'negative' : 'neutral';
           
           const card = document.createElement('div');
@@ -399,6 +1055,7 @@
           card.innerHTML = `
             <div class="job-number">${j.jn}</div>
             <div class="job-desc">${j.desc}</div>
+            <div class="job-unit">Unit: ${j.unit}</div>
             <div class="job-metrics">
               <div><div class="metric-label">Planned</div><div class="metric-value">${pd.f.toFixed(2)}</div></div>
               <div><div class="metric-label">Actual</div><div class="metric-value">${pd.a.toFixed(2)}</div></div>
@@ -412,11 +1069,51 @@
         sec.appendChild(grid);
         cont.appendChild(sec);
       });
+      updateForecastCutoffVisibility(viewMode);
+      updateModalModeNotes(viewMode, maxWorkDonePeriod, cutoffValue);
+    }
+
+    function updateForecastCutoffVisibility(viewMode) {
+      const cutoffGroup = document.getElementById('forecastCutoffGroup');
+      if (!cutoffGroup) return;
+      cutoffGroup.style.display = viewMode === 'forecast' ? 'flex' : 'none';
+    }
+
+    function updateModalModeNotes(viewMode, maxWorkDonePeriod, cutoffValue) {
+      const isForecast = viewMode === 'forecast';
+      const cutoffLabel = cutoffValue === 'auto' ? 'Auto' : 'Selected';
+      const periodLabel = maxWorkDonePeriod > 0 ? `Period ${maxWorkDonePeriod}` : 'Period N/A';
+      const message = isForecast
+        ? `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining.`
+        : 'Units derived from Work Done only.';
+      const uploadNote = document.getElementById('uploadModeNote');
+      const breakdownNote = document.getElementById('breakdownModeNote');
+      if (uploadNote) uploadNote.textContent = message;
+      if (breakdownNote) breakdownNote.textContent = message;
     }
 
     function showBreakdown(job) {
+      const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const wgLabel = wgFilter === 'all' ? '' : ` • ${wgFilter}`;
       document.getElementById('bdTitle').textContent = `${job.jn} - Breakdown`;
-      document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc}`;
+      document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc} • ${job.unit}${wgLabel}`;
+      const displayData = (() => {
+        if (wgFilter === 'all') {
+          return { periods: job.periods, tot: job.tot };
+        }
+        const wgData = job.wgs?.[wgFilter];
+        const periods = {};
+        const totals = { f: 0, a: 0, v: 0 };
+        for (let i = 1; i <= 13; i++) {
+          const p = `P${i}`;
+          const data = wgData?.periods?.[p] || { f: 0, a: 0, v: 0 };
+          periods[p] = data;
+          totals.f += data.f || 0;
+          totals.a += data.a || 0;
+          totals.v += data.v || 0;
+        }
+        return { periods, tot: totals };
+      })();
       
       // Build cumulative data
       const periods = [];
@@ -426,8 +1123,8 @@
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
         periods.push(`Period ${i}`);
-        cumF += job.periods[p].f;
-        cumA += job.periods[p].a;
+        cumF += displayData.periods[p].f;
+        cumA += displayData.periods[p].a;
         cumForecast.push(cumF);
         cumActual.push(cumA);
       }
@@ -482,29 +1179,67 @@
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
       tableHTML += '<th>Total</th></tr></thead><tbody>';
       
-      Object.entries(job.wgs).forEach(([wg, data]) => {
-        let rowTotal = 0;
-        tableHTML += `<tr><td><strong>${wg}</strong></td>`;
-        for(let i=1; i<=13; i++) {
-          const p = `P${i}`;
-          const d = data.periods[p];
-          const v = d.v;
-          rowTotal += v;
-          const cl = v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
-          tableHTML += `<td class="${cl}">${v > 0 ? '+' : ''}${v.toFixed(1)}</td>`;
-        }
-        const tcl = rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral';
-        tableHTML += `<td class="${tcl}"><strong>${rowTotal > 0 ? '+' : ''}${rowTotal.toFixed(1)}</strong></td></tr>`;
-      });
+      const isFiltered = wgFilter !== 'all';
+      const wgEntries = Object.entries(job.wgs || {}).filter(([wg]) => !isFiltered || wg === wgFilter);
+      if (wgEntries.length === 0) {
+        tableHTML += '<tr><td colspan="15"><em>No work group data available.</em></td></tr>';
+      } else {
+        wgEntries.forEach(([wg, data], idx) => {
+          let rowTotal = 0;
+          const summaryOpen = isFiltered;
+          tableHTML += `<tr class="wg-summary${summaryOpen ? ' is-open' : ''}" data-wg="${idx}"><td><strong>${wg} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
+          for(let i=1; i<=13; i++) {
+            const p = `P${i}`;
+            const d = data.periods[p] || {v: 0};
+            const v = d.v || 0;
+            rowTotal += v;
+            const cl = v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
+            tableHTML += `<td class="${cl}">${v > 0 ? '+' : ''}${v.toFixed(1)}</td>`;
+          }
+          const tcl = rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral';
+          tableHTML += `<td class="${tcl}"><strong>${rowTotal > 0 ? '+' : ''}${rowTotal.toFixed(1)}</strong></td></tr>`;
+
+          const detailRows = [
+            { label: 'Planned', key: 'f' },
+            { label: 'Actual', key: 'a' },
+            { label: 'Variance', key: 'v' }
+          ];
+          detailRows.forEach(({ label, key }) => {
+            let detailTotal = 0;
+            tableHTML += `<tr class="wg-detail${summaryOpen ? ' open' : ''}" data-wg="${idx}"><td>${label}</td>`;
+            for(let i=1; i<=13; i++) {
+              const p = `P${i}`;
+              const d = data.periods[p] || {f: 0, a: 0, v: 0};
+              const val = d[key] || 0;
+              detailTotal += val;
+              const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
+              tableHTML += `<td class="${cl}">${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}</td>`;
+            }
+            const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
+            tableHTML += `<td class="${tcl}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+          });
+        });
+      }
       tableHTML += '</tbody>';
       wgTable.innerHTML = tableHTML;
+
+      wgTable.querySelectorAll('.wg-summary').forEach(row => {
+        row.addEventListener('click', () => {
+          const key = row.dataset.wg;
+          const details = wgTable.querySelectorAll(`.wg-detail[data-wg="${key}"]`);
+          const isOpen = row.classList.toggle('is-open');
+          details.forEach(detail => detail.classList.toggle('open', isOpen));
+          const toggle = row.querySelector('.wg-toggle');
+          if (toggle) toggle.textContent = isOpen ? 'Hide details' : 'Show details';
+        });
+      });
       
       // Period summary
       const periodGrid = document.getElementById('periodGrid');
       periodGrid.innerHTML = '';
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
-        const d = job.periods[p];
+        const d = displayData.periods[p];
         const vc = d.v > 0 ? 'positive' : d.v < 0 ? 'negative' : 'neutral';
         periodGrid.innerHTML += `
           <div class="breakdown-item">
@@ -515,8 +1250,83 @@
           </div>
         `;
       }
+
+      // Work orders
+      currentWorkOrders = (wData?.get(job.jn)?.workOrders || []).slice();
+      currentWorkOrderWorkGroup = wgFilter;
+      const woSearch = document.getElementById('woSearch');
+      const woFlagOnly = document.getElementById('woFlagOnly');
+      if (woSearch) woSearch.value = '';
+      if (woFlagOnly) woFlagOnly.checked = false;
+      if (woSearch) woSearch.oninput = renderWorkOrders;
+      if (woFlagOnly) woFlagOnly.onchange = renderWorkOrders;
+      renderWorkOrders();
+
+      // Comments section
+      currentCommentJob = job.jn;
+      const commentType = document.getElementById('commentType');
+      const commentText = document.getElementById('commentText');
+      const commentAdd = document.getElementById('commentAdd');
+      if (!commentType.options.length) {
+        commentType.innerHTML = COMMENT_CATEGORIES.map(category => `<option value="${category}">${category}</option>`).join('');
+      }
+      commentText.value = '';
+      commentAdd.onclick = () => {
+        addJobComment(job.jn, commentType.value, commentText.value);
+        commentText.value = '';
+        renderCommentsTable(job.jn);
+      };
+      renderCommentsTable(job.jn);
       
       document.getElementById('breakdown').classList.add('open');
+    }
+
+    function renderCommentsTable(jobNumber) {
+      const commentTable = document.getElementById('commentTable');
+      const comments = getJobComments(jobNumber);
+      if (!comments.length) {
+        commentTable.innerHTML = '<thead><tr><th>Type</th><th>Comment</th><th>Date</th><th></th></tr></thead><tbody><tr><td colspan="4"><em>No comments yet.</em></td></tr></tbody>';
+        return;
+      }
+      const rows = comments.map(entry => `
+        <tr>
+          <td>${entry.category}</td>
+          <td>${entry.text}</td>
+          <td>${formatTimestamp(entry.timestamp)}</td>
+          <td><button type="button" class="comment-delete" data-id="${entry.id}">Delete</button></td>
+        </tr>
+      `).join('');
+      commentTable.innerHTML = `
+        <thead><tr><th>Type</th><th>Comment</th><th>Date</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      `;
+      commentTable.querySelectorAll('.comment-delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+          deleteJobComment(jobNumber, btn.dataset.id);
+          renderCommentsTable(jobNumber);
+        });
+      });
+    }
+
+    function formatTimestamp(value) {
+      if (!value) return '';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString();
+    }
+
+    function toggleDisciplineSection(button) {
+      const section = button.closest('.discipline-section');
+      if (!section) return;
+      const isCollapsed = section.classList.toggle('collapsed');
+      button.textContent = isCollapsed ? 'Expand' : 'Collapse';
+    }
+
+    function toggleBreakdownSection(targetId, button) {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      const isCollapsed = target.classList.toggle('collapsed');
+      button.textContent = isCollapsed ? 'Expand' : 'Collapse';
     }
 
     function closeBreakdown() {
