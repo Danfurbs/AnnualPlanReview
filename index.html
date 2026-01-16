@@ -361,8 +361,8 @@
       </div>
       <form id="groupForm" class="group-form">
         <div class="file-input-group">
-          <label for="groupMnt">MNT Number</label>
-          <input type="text" id="groupMnt" placeholder="e.g. MNT-1002" required>
+          <label for="groupName">Group Name</label>
+          <input type="text" id="groupName" placeholder="Group name" required>
         </div>
         <div class="file-input-group">
           <label for="groupJobSearch">Standard Jobs</label>
@@ -373,12 +373,8 @@
           <p class="group-help" id="groupJobCount">0 jobs selected.</p>
         </div>
         <div class="file-input-group">
-          <label for="groupDesc">Description</label>
+          <label for="groupDesc">Group Description</label>
           <input type="text" id="groupDesc" placeholder="Group description" required>
-        </div>
-        <div class="file-input-group">
-          <label for="groupUnit">Units of Measure</label>
-          <input type="text" id="groupUnit" placeholder="e.g. Hours" required>
         </div>
         <div class="file-input-group">
           <label class="row-input">
@@ -629,14 +625,21 @@
     }
 
     function getGroupName(group) {
-      const mnt = group.mntNumber ? String(group.mntNumber).trim() : '';
+      const name = group.name ? String(group.name).trim() : '';
       const desc = group.description ? String(group.description).trim() : '';
-      if (mnt && desc) return `${mnt} - ${desc}`;
-      return mnt || desc || 'Unnamed Group';
+      if (name && desc) return `${name} - ${desc}`;
+      return name || desc || 'Unnamed Group';
     }
 
     function getUnitForJob(jobNumber) {
       return stdJobs.get(jobNumber)?.unit || currentJobsMap.get(jobNumber)?.unit || '';
+    }
+
+    function getGroupUnitLabel(group) {
+      const units = getGroupUnits(group.jobNumbers || []);
+      if (units.length === 1) return units[0].toUpperCase();
+      if (units.length > 1) return 'Multiple Units';
+      return 'Unit not specified';
     }
 
     function getGroupUnits(jobNumbers) {
@@ -646,13 +649,10 @@
       return Array.from(new Set(units.map(unit => unit.toLowerCase().trim()))).filter(Boolean);
     }
 
-    function validateGroupRollup(jobNumbers, unitLabel) {
+    function validateGroupRollup(jobNumbers) {
       const units = getGroupUnits(jobNumbers);
       if (units.length > 1) {
         return { ok: false, message: 'Units of measure do not match across the selected jobs.' };
-      }
-      if (units.length === 1 && unitLabel && units[0] !== unitLabel.toLowerCase().trim()) {
-        return { ok: false, message: 'The roll up unit must match the selected jobs.' };
       }
       return { ok: true };
     }
@@ -680,7 +680,7 @@
         <div class="group-item">
           <div>
             <h4>${escapeHtml(getGroupName(group))}</h4>
-            <p>${escapeHtml(group.jobNumbers.join(', '))} • Unit: ${escapeHtml(group.unit || '-')}${group.rollUp ? ' • Roll Up' : ''}</p>
+            <p>${escapeHtml(group.jobNumbers.join(', '))} • Unit: ${escapeHtml(getGroupUnitLabel(group))}${group.rollUp ? ' • Roll Up' : ''}</p>
           </div>
           <div class="group-item-actions">
             <button type="button" class="group-action-button" data-group-edit="${escapeHtml(group.id)}">Edit</button>
@@ -794,9 +794,8 @@
           editingGroupId = groupId;
           document.getElementById('groupModalTitle').textContent = 'Edit Group';
           document.getElementById('groupSubmit').textContent = 'Update Group';
-          document.getElementById('groupMnt').value = group.mntNumber || '';
+          document.getElementById('groupName').value = group.name || '';
           document.getElementById('groupDesc').value = group.description || '';
-          document.getElementById('groupUnit').value = group.unit || '';
           document.getElementById('groupRollup').checked = Boolean(group.rollUp);
         }
       }
@@ -827,17 +826,16 @@
 
     function handleGroupSubmit(event) {
       event.preventDefault();
-      const mntNumber = document.getElementById('groupMnt').value.trim();
+      const name = document.getElementById('groupName').value.trim();
       const jobNumbers = getSelectedGroupJobNumbers();
       const description = document.getElementById('groupDesc').value.trim();
-      const unit = document.getElementById('groupUnit').value.trim();
       const rollUp = document.getElementById('groupRollup').checked;
       if (!jobNumbers.length) {
         alert('Please enter at least one Standard Job Number.');
         return;
       }
       if (rollUp) {
-        const validation = validateGroupRollup(jobNumbers, unit);
+        const validation = validateGroupRollup(jobNumbers);
         if (!validation.ok) {
           alert(validation.message);
           return;
@@ -845,10 +843,9 @@
       }
       const groupPayload = {
         id: editingGroupId || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        mntNumber,
+        name,
         jobNumbers: Array.from(new Set(jobNumbers)),
         description,
-        unit,
         rollUp
       };
 
@@ -868,14 +865,13 @@
       const help = document.getElementById('groupRollupHelp');
       if (!help) return;
       const jobNumbers = getSelectedGroupJobNumbers();
-      const unit = document.getElementById('groupUnit').value.trim();
       const rollUp = document.getElementById('groupRollup').checked;
       if (!rollUp) {
         help.textContent = 'Units must match across jobs to roll up.';
         help.style.color = '#64748b';
         return;
       }
-      const validation = validateGroupRollup(jobNumbers, unit);
+      const validation = validateGroupRollup(jobNumbers);
       if (!validation.ok) {
         help.textContent = validation.message;
         help.style.color = '#b91c1c';
@@ -1005,14 +1001,12 @@
         groupForm.addEventListener('submit', handleGroupSubmit);
       }
       const groupJobSearch = document.getElementById('groupJobSearch');
-      const groupUnitInput = document.getElementById('groupUnit');
       const groupRollupInput = document.getElementById('groupRollup');
       if (groupJobSearch) {
         groupJobSearch.addEventListener('input', () => {
           renderGroupJobTable({ filterText: groupJobSearch.value });
         });
       }
-      if (groupUnitInput) groupUnitInput.addEventListener('input', updateGroupRollupHelp);
       if (groupRollupInput) groupRollupInput.addEventListener('change', updateGroupRollupHelp);
     }
 
@@ -1497,10 +1491,10 @@
       const groupJobs = jobs.filter(job => group.jobNumbers.includes(job.jn));
       if (!groupJobs.length) return null;
       const rollup = {
-        jn: group.mntNumber || `GRP-${group.id}`,
+        jn: group.name || `GRP-${group.id}`,
         disc: 'Group Rollups',
         desc: group.description || getGroupName(group),
-        unit: group.unit || 'Unit not specified',
+        unit: getGroupUnitLabel(group),
         periods: {},
         tot: { f: 0, a: 0, v: 0 },
         wgs: {},
