@@ -38,6 +38,7 @@
     .rag-red { background: #fee2e2; color: #991b1b; }
     .rag-amber { background: #fef3c7; color: #92400e; }
     .rag-green { background: #dcfce7; color: #166534; }
+    .rag-explainer { font-size: 12px; color: #64748b; margin-top: 8px; line-height: 1.4; }
     .comment-breakdown { list-style: none; display: flex; flex-direction: column; gap: 8px; }
     .comment-breakdown li { display: flex; justify-content: space-between; font-size: 12px; color: #475569; }
     .variance-list { list-style: none; display: flex; flex-direction: column; gap: 10px; max-height: 220px; overflow-y: auto; padding-right: 6px; }
@@ -187,6 +188,12 @@
     .group-table tbody tr:nth-child(even) { background: #f8fafc; }
     .group-table tbody tr:hover { background: #edf2f7; }
     .group-table input[type="checkbox"] { transform: scale(1.05); }
+    .review-stage-chip { display: inline-flex; align-items: center; gap: 6px; background: #e0f2fe; color: #075985; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .review-stage-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: #64748b; }
+    .stage-selection { display: flex; flex-direction: column; gap: 16px; }
+    .stage-selection-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; }
+    .stage-button { background: #e2e8f0; color: #1f2937; border-radius: 12px; font-weight: 700; font-size: 14px; padding: 12px; border: 1px solid #cbd5e1; }
+    .stage-button:hover { background: #cbd5f5; }
   </style>
 </head>
 <body>
@@ -211,6 +218,10 @@
           <span id="reviewedCount">0</span>
           <span class="card-sub">/<span id="totalCount">0</span></span>
         </div>
+        <div class="review-stage-meta">
+          <span>Review stage</span>
+          <span class="review-stage-chip" id="reviewStageDisplay">RF3</span>
+        </div>
         <div class="card-meta" id="reviewPercent">0% jobs reviewed</div>
         <div class="progress-bar"><div class="progress-fill" id="reviewProgress"></div></div>
       </div>
@@ -221,6 +232,7 @@
           <div class="rag-pill rag-amber" role="button" tabindex="0" data-filter="warning"><span id="ragAmber">0</span><small>Amber</small></div>
           <div class="rag-pill rag-green" role="button" tabindex="0" data-filter="good"><span id="ragGreen">0</span><small>Green</small></div>
         </div>
+        <p class="rag-explainer">RAG is derived from the absolute variance ratio versus forecast: &gt;50% is red, &gt;10% is amber, otherwise green.</p>
       </div>
       <div class="summary-card">
         <div class="card-title">Comments</div>
@@ -235,15 +247,6 @@
     </div>
 
     <div class="controls">
-      <div class="control-group">
-        <label for="reviewStage">Review stage</label>
-        <select id="reviewStage" onchange="render()">
-          <option value="RF3">RF3</option>
-          <option value="RF6">RF6</option>
-          <option value="RF9">RF9</option>
-          <option value="RF11">RF11</option>
-        </select>
-      </div>
       <div class="control-group">
         <label for="viewMode">View mode</label>
         <select id="viewMode" onchange="render()">
@@ -453,6 +456,18 @@
     </div>
   </div>
 
+  <div id="stageModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Select review stage</h2>
+      </div>
+      <div class="stage-selection">
+        <p class="helper-text">Choose the RF stage to track review completion before continuing.</p>
+        <div class="stage-selection-grid" id="stageSelectionGrid"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
   <script src="work-group-sets-data.js"></script>
@@ -471,12 +486,15 @@
     const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
     const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
     const REVIEW_STORAGE_KEY = 'aprReviewStatusV1';
+    const REVIEW_STAGE_KEY = 'aprReviewStageV1';
     const WORK_ORDER_AMENDMENTS_KEY = 'aprWorkOrderAmendmentsV1';
     const GROUP_STORAGE_KEY = 'aprGroupStoreV1';
+    const REVIEW_STAGES = ['RF3', 'RF6', 'RF9', 'RF11'];
     let commentStore = {};
     let reviewStore = {};
     let workOrderAmendments = {};
     let currentCommentJob = null;
+    let currentReviewStage = null;
 
     function loadCommentStore() {
       try {
@@ -501,6 +519,42 @@
 
     function saveReviewStore() {
       localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(reviewStore));
+    }
+
+    function loadReviewStage() {
+      const saved = localStorage.getItem(REVIEW_STAGE_KEY);
+      if (REVIEW_STAGES.includes(saved)) currentReviewStage = saved;
+    }
+
+    function setReviewStage(stage, { persist = true } = {}) {
+      if (!REVIEW_STAGES.includes(stage)) return;
+      currentReviewStage = stage;
+      if (persist) localStorage.setItem(REVIEW_STAGE_KEY, stage);
+      const stageDisplay = document.getElementById('reviewStageDisplay');
+      if (stageDisplay) stageDisplay.textContent = stage;
+      closeStageModal();
+      render();
+    }
+
+    function openStageModal() {
+      const modal = document.getElementById('stageModal');
+      if (!modal) return;
+      const grid = document.getElementById('stageSelectionGrid');
+      if (grid && !grid.childElementCount) {
+        grid.innerHTML = REVIEW_STAGES
+          .map(stage => `<button type="button" class="stage-button" data-stage="${stage}">${stage}</button>`)
+          .join('');
+        grid.querySelectorAll('[data-stage]').forEach(button => {
+          button.addEventListener('click', () => {
+            setReviewStage(button.dataset.stage);
+          });
+        });
+      }
+      modal.classList.add('open');
+    }
+
+    function closeStageModal() {
+      document.getElementById('stageModal')?.classList.remove('open');
     }
 
     function isJobReviewed(jobNumber, stage) {
@@ -946,8 +1000,11 @@
     function init() {
       loadCommentStore();
       loadReviewStore();
+      loadReviewStage();
       loadWorkOrderAmendments();
       loadGroupStore();
+      const stageDisplay = document.getElementById('reviewStageDisplay');
+      if (stageDisplay && currentReviewStage) stageDisplay.textContent = currentReviewStage;
       const forecastCache = loadForecastStore();
       if (typeof WORK_GROUP_SETS_RAW !== 'undefined') {
         WORK_GROUP_SETS_RAW.split('\n').slice(1).forEach(line => {
@@ -1076,10 +1133,12 @@
       const totalEl = document.getElementById('totalCount');
       const percentEl = document.getElementById('reviewPercent');
       const progressEl = document.getElementById('reviewProgress');
+      const stageDisplay = document.getElementById('reviewStageDisplay');
       if (reviewedEl) reviewedEl.textContent = reviewedJobs;
       if (totalEl) totalEl.textContent = totalJobs;
       if (percentEl) percentEl.textContent = `${percent}% jobs reviewed at ${reviewStage}`;
       if (progressEl) progressEl.style.width = `${percent}%`;
+      if (stageDisplay) stageDisplay.textContent = reviewStage;
 
       const ragCounts = { red: 0, amber: 0, green: 0 };
       baseFiltered.forEach(job => {
@@ -1695,6 +1754,10 @@
     }
 
     function render() {
+      if (!currentReviewStage) {
+        openStageModal();
+        return;
+      }
       const viewMode = document.getElementById('viewMode')?.value || 'actual';
       const cutoffValue = document.getElementById('forecastCutoff')?.value || 'auto';
       const varianceFilter = document.getElementById('varianceFilter')?.value || 'all';
@@ -1756,7 +1819,7 @@
       const search = document.getElementById('search')?.value.toLowerCase() || '';
       const period = document.getElementById('period')?.value || 'all';
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
-      const reviewStage = document.getElementById('reviewStage')?.value || 'RF3';
+      const reviewStage = currentReviewStage;
       const getJobDisplayData = (job) => {
         if (wgFilter === 'all') {
           return { periods: job.periods, tot: job.tot };
