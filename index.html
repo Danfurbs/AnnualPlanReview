@@ -150,6 +150,10 @@
     .wo-unit-meta { font-size: 11px; color: #64748b; margin-top: 4px; text-align: right; }
     .wo-amend { background: #e2e8f0; color: #1f2937; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; }
     .wo-amend:hover { background: #cbd5f5; }
+    .wo-unit-value.amended { color: #b45309; font-weight: 700; }
+    .wo-unit-value.amended::after { content: ' • Amended'; font-size: 11px; color: #92400e; font-weight: 600; }
+    .wo-revert { background: #fee2e2; color: #991b1b; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; }
+    .wo-revert:hover { background: #fecaca; }
     .wo-unit-edit { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
     .wo-unit-edit input { width: 110px; text-align: right; }
     .wo-unit-actions { display: flex; gap: 6px; }
@@ -356,38 +360,27 @@
       </div>
 
       <div class="breakdown-section">
-        <h3>Work Orders (Work Done)</h3>
-        <div class="wo-controls">
-          <div class="wo-summary">
-            <span class="wo-pill">Work Orders: <strong id="woTotal">0</strong></span>
-            <span class="wo-pill">Units Complete: <strong id="woUnits">0</strong></span>
-            <span class="wo-pill">Flagged: <strong id="woFlagged">0</strong></span>
-          </div>
-          <div class="wo-filters">
-            <input type="search" id="woSearch" placeholder="Search work orders...">
-            <label class="wo-flag-toggle"><input type="checkbox" id="woFlagOnly"> Show flagged only</label>
+        <div class="discipline-header">
+          <h3>Work Orders (Work Done)</h3>
+          <div class="header-actions">
+            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('workOrdersSection', this)">Collapse</button>
           </div>
         </div>
-        <div style="overflow-x: auto;">
-          <table class="wo-table" id="woTable"></table>
-        </div>
-      </div>
-
-      <div class="breakdown-section">
-        <h3>Work Orders (Work Done)</h3>
-        <div class="wo-controls">
-          <div class="wo-summary">
-            <span class="wo-pill">Work Orders: <strong id="woTotal">0</strong></span>
-            <span class="wo-pill">Units Complete: <strong id="woUnits">0</strong></span>
-            <span class="wo-pill">Flagged: <strong id="woFlagged">0</strong></span>
+        <div class="collapsible-content" id="workOrdersSection">
+          <div class="wo-controls">
+            <div class="wo-summary">
+              <span class="wo-pill">Work Orders: <strong id="woTotal">0</strong></span>
+              <span class="wo-pill">Units Complete: <strong id="woUnits">0</strong></span>
+              <span class="wo-pill">Flagged: <strong id="woFlagged">0</strong></span>
+            </div>
+            <div class="wo-filters">
+              <input type="search" id="woSearch" placeholder="Search work orders...">
+              <label class="wo-flag-toggle"><input type="checkbox" id="woFlagOnly"> Show flagged only</label>
+            </div>
           </div>
-          <div class="wo-filters">
-            <input type="search" id="woSearch" placeholder="Search work orders...">
-            <label class="wo-flag-toggle"><input type="checkbox" id="woFlagOnly"> Show flagged only</label>
+          <div style="overflow-x: auto;">
+            <table class="wo-table" id="woTable"></table>
           </div>
-        </div>
-        <div style="overflow-x: auto;">
-          <table class="wo-table" id="woTable"></table>
         </div>
       </div>
 
@@ -1196,9 +1189,16 @@
           ? order.flags.map(flag => `<span class="wo-badge">${escapeHtml(flag)}</span>`).join('')
           : '<span class="wo-empty">None</span>';
         const rowClass = order.flags.length ? 'wo-flagged' : '';
-        const amendedNote = order.isAmended && Number.isFinite(order.originalUnits)
-          ? `<div class="wo-unit-meta">Amended from ${formatUnits(order.originalUnits)}</div>`
+        const canRevert = order.isAmended && Number.isFinite(order.originalUnits);
+        const amendedNote = canRevert
+          ? `
+            <div class="wo-unit-meta">
+              Amended from ${formatUnits(order.originalUnits)}
+              <button type="button" class="wo-revert" data-id="${escapeHtml(order.id)}">Revert</button>
+            </div>
+          `
           : '';
+        const unitClass = canRevert ? 'wo-unit-value amended' : 'wo-unit-value';
         return `
           <tr class="${rowClass}">
             <td><strong>${escapeHtml(order.number || 'Unknown')}</strong></td>
@@ -1208,7 +1208,7 @@
             <td>${escapeHtml(order.workGroup || '-')}</td>
             <td class="wo-units" data-units-cell data-order-id="${escapeHtml(order.id)}">
               <div class="wo-unit-cell">
-                <span class="wo-unit-value">${formatUnits(order.units)}</span>
+                <span class="${unitClass}">${formatUnits(order.units)}</span>
                 <button type="button" class="wo-amend" data-id="${escapeHtml(order.id)}">Amend</button>
               </div>
               ${amendedNote}
@@ -1232,6 +1232,15 @@
         </thead>
         <tbody>${rows}</tbody>
       `;
+
+      table.querySelectorAll('.wo-revert').forEach(button => {
+        button.addEventListener('click', () => {
+          const orderId = button.dataset.id;
+          const order = currentWorkOrders.find(item => item.id === orderId);
+          if (!order || !Number.isFinite(order.originalUnits)) return;
+          applyWorkOrderUnitAmendment(orderId, order.originalUnits);
+        });
+      });
 
       table.querySelectorAll('.wo-amend').forEach(button => {
         button.addEventListener('click', () => {
