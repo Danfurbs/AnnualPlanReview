@@ -469,10 +469,6 @@
             <select id="forecastEditorYear"></select>
           </div>
           <div class="control-group">
-            <label for="forecastEditorStage">RF stage</label>
-            <select id="forecastEditorStage"></select>
-          </div>
-          <div class="control-group">
             <label for="forecastEditorPlan">Plan version</label>
             <select id="forecastEditorPlan"></select>
           </div>
@@ -523,13 +519,6 @@
           <div class="forecast-toolbar">
             <input type="search" id="forecastEditorSearch" placeholder="Search job number..." oninput="filterForecastEditorTable()">
           </div>
-        </div>
-        <div class="forecast-template-bar">
-          <button class="forecast-template-button" type="button">Quick Fill Template</button>
-          <button class="forecast-template-button" type="button">Linear Distribution</button>
-          <button class="forecast-template-button" type="button">Q1 Heavy</button>
-          <button class="forecast-template-button" type="button">Q4 Heavy</button>
-          <button class="forecast-template-button" type="button">Even Split</button>
         </div>
         <form id="forecastEditorForm" class="forecast-editor-form">
           <div class="forecast-editor-table">
@@ -1070,8 +1059,7 @@
     }
 
     function normalizeJobNumberInput(value) {
-      const digits = String(value || '').replace(/\D/g, '');
-      return digits ? digits.padStart(6, '0') : '';
+      return String(value || '').trim();
     }
 
     function getAllWorkGroupSetNames() {
@@ -1135,10 +1123,9 @@
 
     function renderForecastEditorSelectors() {
       const yearSelect = document.getElementById('forecastEditorYear');
-      const stageSelect = document.getElementById('forecastEditorStage');
       const planSelect = document.getElementById('forecastEditorPlan');
       const workGroupSelect = document.getElementById('forecastEditorWorkGroup');
-      if (!yearSelect || !stageSelect || !planSelect || !workGroupSelect) return;
+      if (!yearSelect || !planSelect || !workGroupSelect) return;
 
       const yearOptions = getFinancialYearOptions();
       yearSelect.innerHTML = yearOptions.map(year => `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`).join('');
@@ -1147,13 +1134,9 @@
         : (currentFinancialYear || yearOptions[0] || '');
       yearSelect.value = forecastEditorState.year;
 
-      stageSelect.innerHTML = REVIEW_STAGES
-        .map(stage => `<option value="${stage}">${stage}</option>`)
-        .join('');
       forecastEditorState.stage = REVIEW_STAGES.includes(forecastEditorState.stage)
         ? forecastEditorState.stage
         : (currentReviewStage || REVIEW_STAGES[0]);
-      stageSelect.value = forecastEditorState.stage;
 
       planSelect.innerHTML = getPlanVersionOptions()
         .map(plan => `<option value="${escapeHtml(plan.id)}">${escapeHtml(plan.label)}</option>`)
@@ -1396,12 +1379,12 @@
     function handleForecastEditorSubmit(event) {
       event.preventDefault();
       const year = document.getElementById('forecastEditorYear')?.value || '';
-      const stage = document.getElementById('forecastEditorStage')?.value || '';
+      const stage = forecastEditorState.stage || currentReviewStage || REVIEW_STAGES[0];
       const planVersion = document.getElementById('forecastEditorPlan')?.value || '';
       const workGroup = document.getElementById('forecastEditorWorkGroup')?.value || '';
 
       if (!year || !stage || !planVersion || !workGroup) {
-        alert('Please select a financial year, RF stage, plan version, and work group set.');
+        alert('Please select a financial year, plan version, and work group set.');
         return;
       }
 
@@ -1455,10 +1438,10 @@
 
     function downloadForecastEditorExport() {
       const year = document.getElementById('forecastEditorYear')?.value || '';
-      const stage = document.getElementById('forecastEditorStage')?.value || '';
+      const stage = forecastEditorState.stage || currentReviewStage || REVIEW_STAGES[0];
       const planVersion = document.getElementById('forecastEditorPlan')?.value || '';
       if (!year || !stage || !planVersion) {
-        alert('Select a financial year, RF stage, and plan version before exporting.');
+        alert('Select a financial year and plan version before exporting.');
         return;
       }
       if (!fData || !fData.size) {
@@ -1539,7 +1522,7 @@
 
     function handleForecastEditorContextChange() {
       const year = document.getElementById('forecastEditorYear')?.value || '';
-      const stage = document.getElementById('forecastEditorStage')?.value || '';
+      const stage = forecastEditorState.stage || currentReviewStage || REVIEW_STAGES[0];
       const planVersion = document.getElementById('forecastEditorPlan')?.value || '';
       forecastEditorState = {
         ...forecastEditorState,
