@@ -181,6 +181,12 @@
     .group-item-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .group-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; background: #e0f2fe; color: #0369a1; }
     .group-help { font-size: 12px; color: #64748b; }
+    .group-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    .group-table thead th { background: #f1f5f9; color: #4a5568; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .group-table tbody td { padding: 8px 10px; border-bottom: 1px solid #edf2f7; font-size: 12px; vertical-align: top; }
+    .group-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .group-table tbody tr:hover { background: #edf2f7; }
+    .group-table input[type="checkbox"] { transform: scale(1.05); }
   </style>
 </head>
 <body>
@@ -359,9 +365,12 @@
           <input type="text" id="groupMnt" placeholder="e.g. MNT-1002" required>
         </div>
         <div class="file-input-group">
-          <label for="groupJobs">Standard Job Number(s)</label>
-          <input type="text" id="groupJobs" placeholder="e.g. 009112, 009113" required>
-          <p class="group-help">Separate multiple jobs with commas or spaces.</p>
+          <label for="groupJobSearch">Standard Jobs</label>
+          <input type="search" id="groupJobSearch" placeholder="Filter standard jobs...">
+          <div style="overflow-x: auto; margin-top: 8px;">
+            <table class="group-table" id="groupJobTable"></table>
+          </div>
+          <p class="group-help" id="groupJobCount">0 jobs selected.</p>
         </div>
         <div class="file-input-group">
           <label for="groupDesc">Description</label>
@@ -626,15 +635,6 @@
       return mnt || desc || 'Unnamed Group';
     }
 
-    function parseJobNumbers(value) {
-      return String(value || '')
-        .split(/[,\s]+/)
-        .map(entry => entry.trim())
-        .filter(Boolean)
-        .map(entry => entry.replace(/\D/g, '').padStart(6, '0'))
-        .filter(entry => entry && entry !== '000000');
-    }
-
     function getUnitForJob(jobNumber) {
       return stdJobs.get(jobNumber)?.unit || currentJobsMap.get(jobNumber)?.unit || '';
     }
@@ -702,6 +702,75 @@
       });
     }
 
+    function getSelectedGroupJobNumbers() {
+      const selected = Array.from(document.querySelectorAll('#groupJobTable input[type="checkbox"]:checked'))
+        .map(input => input.value)
+        .filter(Boolean);
+      return selected;
+    }
+
+    function updateGroupSelectionCount() {
+      const countEl = document.getElementById('groupJobCount');
+      if (!countEl) return;
+      const selectedCount = getSelectedGroupJobNumbers().length;
+      countEl.textContent = `${selectedCount} job${selectedCount === 1 ? '' : 's'} selected.`;
+    }
+
+    function renderGroupJobTable({ filterText = '', selectedJobs = null } = {}) {
+      const table = document.getElementById('groupJobTable');
+      if (!table) return;
+      const normalizedFilter = filterText.toLowerCase().trim();
+      const selectedSet = new Set(selectedJobs || getSelectedGroupJobNumbers());
+      const jobs = Array.from(stdJobs.entries()).map(([jobNumber, meta]) => ({
+        jobNumber,
+        disc: meta?.disc || '',
+        desc: meta?.desc || '',
+        unit: meta?.unit || '',
+        mnt: meta?.mnt || ''
+      }));
+      const filtered = jobs.filter(job => {
+        if (!normalizedFilter) return true;
+        const haystack = [job.jobNumber, job.disc, job.desc, job.unit, job.mnt].join(' ').toLowerCase();
+        return haystack.includes(normalizedFilter);
+      });
+
+      const rows = filtered.map(job => `
+        <tr>
+          <td>
+            <input type="checkbox" value="${escapeHtml(job.jobNumber)}" ${selectedSet.has(job.jobNumber) ? 'checked' : ''}>
+          </td>
+          <td>${escapeHtml(job.disc)}</td>
+          <td>${escapeHtml(job.mnt)}</td>
+          <td>${escapeHtml(job.jobNumber)}</td>
+          <td>${escapeHtml(job.desc)}</td>
+          <td>${escapeHtml(job.unit)}</td>
+        </tr>
+      `).join('');
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Select</th>
+            <th>Discipline</th>
+            <th>MNT</th>
+            <th>Job</th>
+            <th>Description</th>
+            <th>Unit</th>
+          </tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="6"><em>No standard jobs match the current filter.</em></td></tr>'}</tbody>
+      `;
+
+      table.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        input.addEventListener('change', () => {
+          updateGroupSelectionCount();
+          updateGroupRollupHelp();
+        });
+      });
+
+      updateGroupSelectionCount();
+    }
+
     function resetGroupForm() {
       const form = document.getElementById('groupForm');
       if (!form) return;
@@ -709,6 +778,9 @@
       editingGroupId = null;
       document.getElementById('groupModalTitle').textContent = 'Create Group';
       document.getElementById('groupSubmit').textContent = 'Save Group';
+      const searchInput = document.getElementById('groupJobSearch');
+      if (searchInput) searchInput.value = '';
+      renderGroupJobTable({ filterText: '', selectedJobs: [] });
       updateGroupRollupHelp();
     }
 
@@ -723,13 +795,16 @@
           document.getElementById('groupModalTitle').textContent = 'Edit Group';
           document.getElementById('groupSubmit').textContent = 'Update Group';
           document.getElementById('groupMnt').value = group.mntNumber || '';
-          document.getElementById('groupJobs').value = group.jobNumbers.join(', ');
           document.getElementById('groupDesc').value = group.description || '';
           document.getElementById('groupUnit').value = group.unit || '';
           document.getElementById('groupRollup').checked = Boolean(group.rollUp);
         }
       }
       renderGroupList();
+      renderGroupJobTable({
+        filterText: document.getElementById('groupJobSearch')?.value || '',
+        selectedJobs: groupId ? groupStore.find(entry => entry.id === groupId)?.jobNumbers || [] : []
+      });
       updateGroupRollupHelp();
       modal.classList.add('open');
     }
@@ -753,7 +828,7 @@
     function handleGroupSubmit(event) {
       event.preventDefault();
       const mntNumber = document.getElementById('groupMnt').value.trim();
-      const jobNumbers = parseJobNumbers(document.getElementById('groupJobs').value);
+      const jobNumbers = getSelectedGroupJobNumbers();
       const description = document.getElementById('groupDesc').value.trim();
       const unit = document.getElementById('groupUnit').value.trim();
       const rollUp = document.getElementById('groupRollup').checked;
@@ -792,7 +867,7 @@
     function updateGroupRollupHelp() {
       const help = document.getElementById('groupRollupHelp');
       if (!help) return;
-      const jobNumbers = parseJobNumbers(document.getElementById('groupJobs').value);
+      const jobNumbers = getSelectedGroupJobNumbers();
       const unit = document.getElementById('groupUnit').value.trim();
       const rollUp = document.getElementById('groupRollup').checked;
       if (!rollUp) {
@@ -911,7 +986,7 @@
           const p = line.split('\t');
           if (p.length >= 5) {
             stdJobs.set(p[2].trim().padStart(6,'0'), {
-              disc: p[0].trim(), desc: p[3].trim(), unit: p[4].trim()
+              disc: p[0].trim(), mnt: p[1].trim(), desc: p[3].trim(), unit: p[4].trim()
             });
           }
         });
@@ -929,10 +1004,14 @@
       if (groupForm) {
         groupForm.addEventListener('submit', handleGroupSubmit);
       }
-      const groupJobsInput = document.getElementById('groupJobs');
+      const groupJobSearch = document.getElementById('groupJobSearch');
       const groupUnitInput = document.getElementById('groupUnit');
       const groupRollupInput = document.getElementById('groupRollup');
-      if (groupJobsInput) groupJobsInput.addEventListener('input', updateGroupRollupHelp);
+      if (groupJobSearch) {
+        groupJobSearch.addEventListener('input', () => {
+          renderGroupJobTable({ filterText: groupJobSearch.value });
+        });
+      }
       if (groupUnitInput) groupUnitInput.addEventListener('input', updateGroupRollupHelp);
       if (groupRollupInput) groupRollupInput.addEventListener('change', updateGroupRollupHelp);
     }
