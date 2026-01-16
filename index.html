@@ -31,7 +31,9 @@
     .progress-bar { width: 100%; height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
     .progress-fill { height: 100%; width: 0%; background: #22c55e; border-radius: 999px; transition: width 0.3s ease; }
     .rag-grid { display: flex; gap: 10px; }
-    .rag-pill { flex: 1; padding: 10px 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; font-size: 12px; font-weight: 700; }
+    .rag-pill { flex: 1; padding: 10px 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; font-size: 12px; font-weight: 700; border: 1px solid transparent; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+    .rag-pill:hover { transform: translateY(-1px); box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08); }
+    .rag-pill.active { border-color: #1e293b; box-shadow: 0 0 0 2px rgba(30, 41, 59, 0.2); }
     .rag-pill span { font-size: 20px; }
     .rag-red { background: #fee2e2; color: #991b1b; }
     .rag-amber { background: #fef3c7; color: #92400e; }
@@ -144,6 +146,17 @@
     .wo-table tbody tr:nth-child(even) { background: #f8fafc; }
     .wo-table tbody tr:hover { background: #edf2f7; }
     .wo-units { text-align: right; font-variant-numeric: tabular-nums; }
+    .wo-unit-cell { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; width: 100%; }
+    .wo-unit-meta { font-size: 11px; color: #64748b; margin-top: 4px; text-align: right; }
+    .wo-amend { background: #e2e8f0; color: #1f2937; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; }
+    .wo-amend:hover { background: #cbd5f5; }
+    .wo-unit-edit { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+    .wo-unit-edit input { width: 110px; text-align: right; }
+    .wo-unit-actions { display: flex; gap: 6px; }
+    .wo-unit-save { background: #22c55e; padding: 4px 10px; font-size: 11px; font-weight: 700; }
+    .wo-unit-save:hover { background: #16a34a; }
+    .wo-unit-cancel { background: #e2e8f0; color: #1f2937; padding: 4px 10px; font-size: 11px; font-weight: 700; }
+    .wo-unit-cancel:hover { background: #cbd5f5; }
     .wo-flagged { border-left: 4px solid #f6ad55; }
     .wo-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: #fef3c7; color: #92400e; margin-right: 6px; margin-bottom: 4px; }
     .wo-empty { font-style: italic; color: #718096; }
@@ -180,9 +193,9 @@
       <div class="summary-card">
         <div class="card-title">RAG Status</div>
         <div class="rag-grid">
-          <div class="rag-pill rag-red"><span id="ragRed">0</span><small>Red</small></div>
-          <div class="rag-pill rag-amber"><span id="ragAmber">0</span><small>Amber</small></div>
-          <div class="rag-pill rag-green"><span id="ragGreen">0</span><small>Green</small></div>
+          <div class="rag-pill rag-red" role="button" tabindex="0" data-filter="bad"><span id="ragRed">0</span><small>Red</small></div>
+          <div class="rag-pill rag-amber" role="button" tabindex="0" data-filter="warning"><span id="ragAmber">0</span><small>Amber</small></div>
+          <div class="rag-pill rag-green" role="button" tabindex="0" data-filter="good"><span id="ragGreen">0</span><small>Green</small></div>
         </div>
       </div>
       <div class="summary-card">
@@ -413,8 +426,10 @@
     const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
     const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
     const REVIEW_STORAGE_KEY = 'aprReviewStatusV1';
+    const WORK_ORDER_AMENDMENTS_KEY = 'aprWorkOrderAmendmentsV1';
     let commentStore = {};
     let reviewStore = {};
+    let workOrderAmendments = {};
     let currentCommentJob = null;
 
     function loadCommentStore() {
@@ -518,6 +533,75 @@
       localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
     }
 
+    function loadWorkOrderAmendments() {
+      try {
+        const raw = localStorage.getItem(WORK_ORDER_AMENDMENTS_KEY);
+        workOrderAmendments = raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        console.warn('Failed to load work order amendments:', err);
+        workOrderAmendments = {};
+      }
+    }
+
+    function saveWorkOrderAmendments() {
+      localStorage.setItem(WORK_ORDER_AMENDMENTS_KEY, JSON.stringify(workOrderAmendments));
+    }
+
+    function getWorkOrderAmendment(orderId) {
+      return workOrderAmendments?.[orderId] || null;
+    }
+
+    function updateWorkOrderAmendment(orderId, units, originalUnits) {
+      const numeric = Number(units);
+      if (!Number.isFinite(numeric)) return;
+      const original = Number(originalUnits);
+      const isSame = Number.isFinite(original) && Math.abs(numeric - original) < 0.0001;
+      if (isSame) {
+        delete workOrderAmendments[orderId];
+      } else {
+        workOrderAmendments[orderId] = {
+          units: numeric,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      saveWorkOrderAmendments();
+    }
+
+    function formatUnits(value) {
+      return (Number(value) || 0).toFixed(2);
+    }
+
+    function applyWorkOrderUnitAmendment(orderId, nextUnits) {
+      const updatedUnits = Number(nextUnits);
+      if (!Number.isFinite(updatedUnits)) return false;
+      const order = currentWorkOrders.find(item => item.id === orderId);
+      if (!order) return false;
+      const job = wData?.get(order.jobNumber);
+      if (!job) return false;
+      const previousUnits = Number(order.units) || 0;
+      if (Math.abs(previousUnits - updatedUnits) < 0.0001) return false;
+      const delta = updatedUnits - previousUnits;
+      order.units = updatedUnits;
+      order.isAmended = Number.isFinite(order.originalUnits)
+        ? Math.abs(updatedUnits - order.originalUnits) >= 0.0001
+        : true;
+      const jobOrder = job.workOrders?.find(item => item.id === orderId);
+      if (jobOrder) {
+        jobOrder.units = updatedUnits;
+        jobOrder.isAmended = order.isAmended;
+      }
+      job.periods[order.period] = (job.periods[order.period] || 0) + delta;
+      if (!job.wgs[order.workGroup]) job.wgs[order.workGroup] = {};
+      job.wgs[order.workGroup][order.period] = (job.wgs[order.workGroup][order.period] || 0) + delta;
+      updateWorkOrderAmendment(orderId, updatedUnits, order.originalUnits);
+      render();
+      const updatedJob = currentJobsMap.get(order.jobNumber);
+      if (updatedJob) {
+        showBreakdown(updatedJob, { scrollTop: false });
+      }
+      return true;
+    }
+
     function getJobComments(jobNumber) {
       return commentStore[jobNumber] || [];
     }
@@ -544,6 +628,7 @@
     function init() {
       loadCommentStore();
       loadReviewStore();
+      loadWorkOrderAmendments();
       const forecastCache = loadForecastStore();
       if (typeof WORK_GROUP_SETS_RAW !== 'undefined') {
         WORK_GROUP_SETS_RAW.split('\n').slice(1).forEach(line => {
@@ -650,7 +735,7 @@
       return { total, counts };
     }
 
-    function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage }) {
+    function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter }) {
       const totalJobs = jobs.length;
       const reviewedJobs = jobs.filter(job => isJobReviewed(job.jn, reviewStage)).length;
       const percent = totalJobs ? Math.round((reviewedJobs / totalJobs) * 100) : 0;
@@ -679,6 +764,10 @@
       if (ragRed) ragRed.textContent = ragCounts.red;
       if (ragAmber) ragAmber.textContent = ragCounts.amber;
       if (ragGreen) ragGreen.textContent = ragCounts.green;
+      document.querySelectorAll('.rag-pill').forEach(pill => {
+        const filter = pill.dataset.filter;
+        pill.classList.toggle('active', filter && filter === varianceFilter);
+      });
 
       const { total: commentTotal, counts: commentCounts } = getCommentSummary();
       const commentTotalEl = document.getElementById('commentTotal');
@@ -871,16 +960,21 @@
           if (!wData.has(jn)) wData.set(jn, {periods:{}, wgs:{}});
           const job = wData.get(jn);
           if (!job.workOrders) job.workOrders = [];
-          const u = parseFloat(units||0);
-          job.periods[per] = (job.periods[per]||0) + u;
+          const rawUnits = parseFloat(units || 0);
+          const workOrderNumber = extractWorkOrderNumber(r);
+          const workOrderId = `${jn}-${workOrderNumber || 'unknown'}-${job.workOrders.length + 1}`;
+          const amendment = getWorkOrderAmendment(workOrderId);
+          const amendedUnits = Number.isFinite(Number(amendment?.units)) ? Number(amendment.units) : rawUnits;
+          const u = amendedUnits;
+          job.periods[per] = (job.periods[per] || 0) + u;
           const wg = normalizeWorkGroupSet(
             r['Work Group Set'] || r['Work Group Set Description']
           );
           if (!job.wgs[wg]) job.wgs[wg] = {};
-          job.wgs[wg][per] = (job.wgs[wg][per]||0) + u;
-          const workOrderNumber = extractWorkOrderNumber(r);
+          job.wgs[wg][per] = (job.wgs[wg][per] || 0) + u;
           const workOrder = {
-            id: `${jn}-${workOrderNumber || 'unknown'}-${job.workOrders.length + 1}`,
+            id: workOrderId,
+            jobNumber: jn,
             number: workOrderNumber || 'Unknown',
             description: String(
               r['Work Order Description'] ||
@@ -897,6 +991,8 @@
             ).trim(),
             period: per,
             units: u,
+            originalUnits: rawUnits,
+            isAmended: Number.isFinite(Number(amendment?.units)) && Math.abs(amendedUnits - rawUnits) >= 0.0001,
             workGroup: wg,
             closedDate: String(
               r['Work Order Closed Date'] ||
@@ -1100,6 +1196,9 @@
           ? order.flags.map(flag => `<span class="wo-badge">${escapeHtml(flag)}</span>`).join('')
           : '<span class="wo-empty">None</span>';
         const rowClass = order.flags.length ? 'wo-flagged' : '';
+        const amendedNote = order.isAmended && Number.isFinite(order.originalUnits)
+          ? `<div class="wo-unit-meta">Amended from ${formatUnits(order.originalUnits)}</div>`
+          : '';
         return `
           <tr class="${rowClass}">
             <td><strong>${escapeHtml(order.number || 'Unknown')}</strong></td>
@@ -1107,7 +1206,13 @@
             <td>${escapeHtml(order.status || '-')}</td>
             <td>${escapeHtml(order.period || '-')}</td>
             <td>${escapeHtml(order.workGroup || '-')}</td>
-            <td class="wo-units">${(Number(order.units) || 0).toFixed(2)}</td>
+            <td class="wo-units" data-units-cell data-order-id="${escapeHtml(order.id)}">
+              <div class="wo-unit-cell">
+                <span class="wo-unit-value">${formatUnits(order.units)}</span>
+                <button type="button" class="wo-amend" data-id="${escapeHtml(order.id)}">Amend</button>
+              </div>
+              ${amendedNote}
+            </td>
             <td>${flagsHtml}</td>
           </tr>
         `;
@@ -1127,6 +1232,50 @@
         </thead>
         <tbody>${rows}</tbody>
       `;
+
+      table.querySelectorAll('.wo-amend').forEach(button => {
+        button.addEventListener('click', () => {
+          const orderId = button.dataset.id;
+          const order = currentWorkOrders.find(item => item.id === orderId);
+          if (!order) return;
+          const row = button.closest('tr');
+          const unitCell = row?.querySelector('[data-units-cell]');
+          if (!unitCell) return;
+          unitCell.innerHTML = `
+            <div class="wo-unit-edit">
+              <input type="number" class="wo-unit-input" step="0.01" value="${formatUnits(order.units)}">
+              <div class="wo-unit-actions">
+                <button type="button" class="wo-unit-save">Save</button>
+                <button type="button" class="wo-unit-cancel">Cancel</button>
+              </div>
+            </div>
+          `;
+          const input = unitCell.querySelector('.wo-unit-input');
+          const saveBtn = unitCell.querySelector('.wo-unit-save');
+          const cancelBtn = unitCell.querySelector('.wo-unit-cancel');
+          if (input) input.focus();
+          const handleSave = () => {
+            const nextValue = Number(input?.value);
+            if (!Number.isFinite(nextValue)) {
+              alert('Please enter a valid number for units.');
+              return;
+            }
+            applyWorkOrderUnitAmendment(orderId, nextValue);
+          };
+          saveBtn?.addEventListener('click', handleSave);
+          cancelBtn?.addEventListener('click', renderWorkOrders);
+          input?.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              handleSave();
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              renderWorkOrders();
+            }
+          });
+        });
+      });
     }
 
     function render() {
@@ -1245,7 +1394,7 @@
 
       const cont = document.getElementById('jobs');
       cont.innerHTML = '';
-      updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage });
+      updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter });
 
       Object.keys(byDisc).sort().forEach(disc => {
         const sec = document.createElement('div');
@@ -1645,9 +1794,29 @@
 
     function openModal() { document.getElementById('modal').classList.add('open'); }
     function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+    function applyRagFilter(filter) {
+      const select = document.getElementById('varianceFilter');
+      if (!select) return;
+      const nextFilter = select.value === filter ? 'all' : filter;
+      select.value = nextFilter;
+      render();
+    }
     
     document.getElementById('modal').onclick = e => { if (e.target.id==='modal') closeModal(); };
     document.getElementById('breakdown').onclick = e => { if (e.target.id==='breakdown') closeBreakdown(); };
+
+    document.querySelectorAll('.rag-pill').forEach(pill => {
+      const filter = pill.dataset.filter;
+      if (!filter) return;
+      pill.addEventListener('click', () => applyRagFilter(filter));
+      pill.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          applyRagFilter(filter);
+        }
+      });
+    });
 
     init();
     render();
