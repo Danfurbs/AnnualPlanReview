@@ -1546,6 +1546,13 @@
       return rollup;
     }
 
+    function getWorkOrdersForGroup(groupId) {
+      if (!groupId) return [];
+      const group = groupStore.find(entry => entry.id === groupId);
+      if (!group) return [];
+      return group.jobNumbers.flatMap(jobNumber => wData?.get(jobNumber)?.workOrders || []);
+    }
+
     function renderWorkOrders() {
       const table = document.getElementById('woTable');
       if (!table) return;
@@ -2158,7 +2165,9 @@
       }
 
       // Work orders
-      currentWorkOrders = (wData?.get(job.jn)?.workOrders || []).slice();
+      currentWorkOrders = job.isGroupRollup
+        ? getWorkOrdersForGroup(job.groupId).slice()
+        : (wData?.get(job.jn)?.workOrders || []).slice();
       currentWorkOrderWorkGroup = wgFilter;
       const woSearch = document.getElementById('woSearch');
       const woFlagOnly = document.getElementById('woFlagOnly');
