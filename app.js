@@ -197,8 +197,8 @@
     }
 
     function getForecastStorageKey(year, stage, planVersion) {
-      if (!year || !stage || !planVersion) return FORECAST_STORAGE_KEY;
-      return `${FORECAST_STORAGE_KEY}:${year}:${stage}:${planVersion}`;
+      if (!year || !planVersion) return FORECAST_STORAGE_KEY;
+      return `${FORECAST_STORAGE_KEY}:${year}:${planVersion}`;
     }
 
     function loadForecastStore(year = currentFinancialYear, stage = currentReviewStage, planVersion = currentPlanVersion) {
@@ -220,16 +220,10 @@
       }
     }
 
-    function saveForecastStore(rowCount, year = currentFinancialYear, stage = currentReviewStage, planVersion = currentPlanVersion, { syncAcrossStages = true } = {}) {
+    function saveForecastStore(rowCount, year = currentFinancialYear, stage = currentReviewStage, planVersion = currentPlanVersion) {
       try {
         if (!year || !planVersion) {
           console.warn('Missing forecast context; skipping forecast cache save.');
-          return;
-        }
-        const stagesToSave = syncAcrossStages ? REVIEW_STAGES : [stage];
-        const validStages = stagesToSave.filter(Boolean);
-        if (!validStages.length) {
-          console.warn('Missing review stage; skipping forecast cache save.');
           return;
         }
         const payload = {
@@ -237,9 +231,7 @@
           rowCount: rowCount ?? null,
           savedAt: new Date().toISOString()
         };
-        validStages.forEach(targetStage => {
-          localStorage.setItem(getForecastStorageKey(year, targetStage, planVersion), JSON.stringify(payload));
-        });
+        localStorage.setItem(getForecastStorageKey(year, stage, planVersion), JSON.stringify(payload));
       } catch (err) {
         console.warn('Failed to persist forecast cache:', err);
       }
