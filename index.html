@@ -199,6 +199,16 @@
     .forecast-editor-field input { width: 100%; text-align: right; }
     .forecast-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .forecast-editor-meta { font-size: 12px; color: #64748b; }
+    .forecast-editor-table { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+    .forecast-editor-table-wrapper { width: 100%; overflow-x: auto; }
+    .forecast-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    .forecast-table thead th { background: #f1f5f9; color: #4a5568; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .forecast-table tbody td { padding: 8px 10px; border-bottom: 1px solid #edf2f7; font-size: 12px; vertical-align: middle; }
+    .forecast-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .forecast-table tbody tr:hover { background: #edf2f7; }
+    .forecast-table .forecast-job-input { width: 120px; }
+    .forecast-table .forecast-period-input { width: 90px; text-align: right; }
+    .forecast-cell-muted { color: #94a3b8; font-style: italic; }
     .review-stage-chip { display: inline-flex; align-items: center; gap: 6px; background: #e0f2fe; color: #075985; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
     .review-stage-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: #64748b; }
     .stage-selection { display: flex; flex-direction: column; gap: 16px; }
@@ -444,21 +454,17 @@
                 <select id="forecastEditorWorkGroup"></select>
               </div>
             </div>
-            <div class="forecast-editor-row">
-              <div class="control-group" style="flex: 1 1 260px;">
-                <label for="forecastEditorJobSearch">Standard job</label>
-                <input type="search" id="forecastEditorJobSearch" placeholder="Search standard jobs...">
-                <select id="forecastEditorJob"></select>
-                <p class="forecast-editor-meta" id="forecastEditorJobMeta"></p>
+            <div class="forecast-editor-table">
+              <label>Standard job forecast table</label>
+              <div class="forecast-editor-table-wrapper">
+                <table class="forecast-table" id="forecastEditorTable"></table>
               </div>
-            </div>
-            <div>
-              <label>Volumes by period</label>
-              <div class="forecast-editor-grid" id="forecastEditorVolumes"></div>
+              <datalist id="forecastEditorJobOptions"></datalist>
             </div>
             <div class="forecast-editor-actions">
-              <button type="submit">Save Forecast Entry</button>
-              <button type="button" class="group-action-button" onclick="clearForecastEditorVolumes()">Clear Volumes</button>
+              <button type="submit">Save Forecast Entries</button>
+              <button type="button" class="group-action-button" onclick="addForecastEditorRow()">Add Row</button>
+              <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear Table</button>
               <button type="button" class="group-action-button" onclick="downloadForecastEditorExport()">Export Forecast JSON</button>
             </div>
             <p class="forecast-editor-meta" id="forecastEditorStatus"></p>
@@ -624,8 +630,7 @@
       stage: '',
       planVersion: '',
       workGroup: '',
-      jobNumber: '',
-      searchText: ''
+      rows: []
     };
     const REVIEW_STAGES = ['RF3', 'RF6', 'RF9', 'RF11'];
     const DEFAULT_FINANCIAL_YEARS = ['FY27', 'FY28', 'FY29', 'FY30'];
@@ -1064,8 +1069,7 @@
       const stageSelect = document.getElementById('forecastEditorStage');
       const planSelect = document.getElementById('forecastEditorPlan');
       const workGroupSelect = document.getElementById('forecastEditorWorkGroup');
-      const jobSelect = document.getElementById('forecastEditorJob');
-      if (!yearSelect || !stageSelect || !planSelect || !workGroupSelect || !jobSelect) return;
+      if (!yearSelect || !stageSelect || !planSelect || !workGroupSelect) return;
 
       const yearOptions = getFinancialYearOptions();
       yearSelect.innerHTML = yearOptions.map(year => `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`).join('');
@@ -1100,83 +1104,199 @@
         : (workGroupOptions[0] || '');
       workGroupSelect.value = forecastEditorState.workGroup;
 
+      ensureForecastEditorRows();
       renderForecastEditorJobOptions();
+      renderForecastEditorTable();
       updateForecastEditorSummary();
     }
 
-    function renderForecastEditorJobOptions() {
-      const jobSelect = document.getElementById('forecastEditorJob');
-      if (!jobSelect) return;
-      const searchText = (forecastEditorState.searchText || '').toLowerCase();
-      const jobs = getStandardJobListForWorkGroup(forecastEditorState.workGroup)
-        .filter(job => {
-          if (!searchText) return true;
-          return job.jobNumber.includes(searchText) || job.desc.toLowerCase().includes(searchText);
-        });
-      if (!jobs.length) {
-        jobSelect.innerHTML = '<option value="">No standard jobs available</option>';
-        forecastEditorState.jobNumber = '';
-        updateForecastEditorJobMeta();
-        loadForecastEditorVolumes();
-        return;
+    function ensureForecastEditorRows() {
+      if (!Array.isArray(forecastEditorState.rows)) {
+        forecastEditorState.rows = [];
       }
-      jobSelect.innerHTML = jobs
+      if (!forecastEditorState.rows.length) {
+        forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
+      }
+    }
+
+    function createForecastEditorRow() {
+      return {
+        jobNumber: '',
+        desc: '',
+        unit: '',
+        volumes: {}
+      };
+    }
+
+    function getForecastEditorJobMeta(jobNumber) {
+      if (!jobNumber) return {};
+      const stdMeta = stdJobs.get(jobNumber);
+      if (stdMeta) return stdMeta;
+      const currentMeta = currentJobsMap.get(jobNumber);
+      return currentMeta || {};
+    }
+
+    function renderForecastEditorJobOptions() {
+      const datalist = document.getElementById('forecastEditorJobOptions');
+      if (!datalist) return;
+      const jobs = getStandardJobListForWorkGroup(forecastEditorState.workGroup);
+      datalist.innerHTML = jobs
         .map(job => (
           `<option value="${escapeHtml(job.jobNumber)}">${escapeHtml(job.jobNumber)} • ${escapeHtml(job.desc)}${job.unit ? ` (${escapeHtml(job.unit)})` : ''}</option>`
         ))
         .join('');
-      const jobNumbers = jobs.map(job => job.jobNumber);
-      forecastEditorState.jobNumber = jobNumbers.includes(forecastEditorState.jobNumber)
-        ? forecastEditorState.jobNumber
-        : (jobNumbers[0] || '');
-      jobSelect.value = forecastEditorState.jobNumber;
-      updateForecastEditorJobMeta();
-      loadForecastEditorVolumes();
     }
 
-    function updateForecastEditorJobMeta() {
-      const metaEl = document.getElementById('forecastEditorJobMeta');
-      if (!metaEl) return;
-      if (!forecastEditorState.jobNumber) {
-        metaEl.textContent = 'Select a standard job to view details.';
-        return;
+    function renderForecastEditorTable() {
+      const table = document.getElementById('forecastEditorTable');
+      if (!table) return;
+      ensureForecastEditorRows();
+      const header = `
+        <thead>
+          <tr>
+            <th>Standard job</th>
+            <th>Description</th>
+            <th>Unit</th>
+            ${FORECAST_PERIODS.map(period => `<th>${period}</th>`).join('')}
+          </tr>
+        </thead>
+      `;
+      const body = `
+        <tbody>
+          ${forecastEditorState.rows.map((row, index) => {
+            const desc = row.desc || '';
+            const unit = row.unit || '';
+            return `
+              <tr data-row="${index}">
+                <td>
+                  <input
+                    type="text"
+                    class="forecast-job-input"
+                    data-row="${index}"
+                    list="forecastEditorJobOptions"
+                    placeholder="Std job #"
+                    value="${escapeHtml(row.jobNumber || '')}"
+                  >
+                </td>
+                <td data-role="desc" class="${desc ? '' : 'forecast-cell-muted'}">${escapeHtml(desc || 'Auto-fill')}</td>
+                <td data-role="unit" class="${unit ? '' : 'forecast-cell-muted'}">${escapeHtml(unit || 'Auto-fill')}</td>
+                ${FORECAST_PERIODS.map(period => {
+                  const value = Number(row.volumes?.[period] || 0);
+                  return `
+                    <td>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        class="forecast-period-input"
+                        data-row="${index}"
+                        data-period="${period}"
+                        value="${value ? value : ''}"
+                      >
+                    </td>
+                  `;
+                }).join('')}
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      `;
+      table.innerHTML = `${header}${body}`;
+    }
+
+    function updateForecastEditorRowFromJob(rowIndex, jobNumber) {
+      if (!forecastEditorState.rows[rowIndex]) {
+        forecastEditorState.rows[rowIndex] = createForecastEditorRow();
       }
-      const meta = stdJobs.get(forecastEditorState.jobNumber);
-      const desc = meta?.desc || `Job ${forecastEditorState.jobNumber}`;
-      const unit = meta?.unit ? ` • Unit: ${meta.unit}` : '';
-      metaEl.textContent = `${desc}${unit}`;
+      const meta = getForecastEditorJobMeta(jobNumber);
+      const desc = meta?.desc || '';
+      const unit = meta?.unit || '';
+      forecastEditorState.rows[rowIndex] = {
+        ...forecastEditorState.rows[rowIndex],
+        jobNumber,
+        desc,
+        unit,
+        volumes: loadForecastEditorRowVolumes(jobNumber, forecastEditorState.workGroup)
+      };
     }
 
-    function renderForecastEditorVolumes(values = {}) {
-      const container = document.getElementById('forecastEditorVolumes');
-      if (!container) return;
-      container.innerHTML = FORECAST_PERIODS.map(period => {
-        const value = Number(values[period] || 0);
-        return `
-          <label class="forecast-editor-field">
-            <span>${period}</span>
-            <input type="number" step="0.01" min="0" data-period="${period}" value="${value ? value : ''}">
-          </label>
-        `;
-      }).join('');
-    }
-
-    function loadForecastEditorVolumes() {
-      const jobNumber = forecastEditorState.jobNumber;
-      const workGroup = forecastEditorState.workGroup;
-      if (!jobNumber || !workGroup) {
-        renderForecastEditorVolumes();
-        return;
-      }
+    function loadForecastEditorRowVolumes(jobNumber, workGroup) {
+      if (!jobNumber || !workGroup) return {};
       const job = fData?.get(jobNumber);
-      const volumes = job?.wgs?.[workGroup] || {};
-      renderForecastEditorVolumes(volumes);
+      return job?.wgs?.[workGroup] ? { ...job.wgs[workGroup] } : {};
     }
 
-    function clearForecastEditorVolumes() {
-      renderForecastEditorVolumes();
+    function addForecastEditorRow() {
+      ensureForecastEditorRows();
+      forecastEditorState.rows.push(createForecastEditorRow());
+      renderForecastEditorTable();
+    }
+
+    function clearForecastEditorTable() {
+      forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
+      renderForecastEditorTable();
       const statusEl = document.getElementById('forecastEditorStatus');
-      if (statusEl) statusEl.textContent = 'Volumes cleared (not saved).';
+      if (statusEl) statusEl.textContent = 'Table cleared (not saved).';
+    }
+
+    function syncForecastEditorTableState() {
+      const rows = [];
+      document.querySelectorAll('#forecastEditorTable tbody tr').forEach((rowEl, index) => {
+        const jobInput = rowEl.querySelector('.forecast-job-input');
+        const jobNumber = normalizeJobNumberInput(jobInput?.value || '');
+        const meta = getForecastEditorJobMeta(jobNumber);
+        const volumes = {};
+        rowEl.querySelectorAll('input[data-period]').forEach(input => {
+          const period = input.dataset.period;
+          const value = parseFloat(input.value);
+          volumes[period] = Number.isFinite(value) ? value : 0;
+        });
+        rows[index] = {
+          jobNumber,
+          desc: meta?.desc || '',
+          unit: meta?.unit || '',
+          volumes
+        };
+      });
+      forecastEditorState.rows = rows;
+    }
+
+    function handleForecastEditorTableInput(event) {
+      const rowEl = event.target.closest('tr');
+      if (!rowEl) return;
+      const rowIndex = Number(rowEl.dataset.row);
+      if (!Number.isFinite(rowIndex)) return;
+      ensureForecastEditorRows();
+      if (!forecastEditorState.rows[rowIndex]) {
+        forecastEditorState.rows[rowIndex] = createForecastEditorRow();
+      }
+      if (event.target.classList.contains('forecast-job-input')) {
+        const jobNumber = normalizeJobNumberInput(event.target.value || '');
+        event.target.value = jobNumber;
+        updateForecastEditorRowFromJob(rowIndex, jobNumber);
+        const descCell = rowEl.querySelector('[data-role="desc"]');
+        const unitCell = rowEl.querySelector('[data-role="unit"]');
+        const rowData = forecastEditorState.rows[rowIndex];
+        if (descCell) {
+          descCell.textContent = rowData.desc || 'Auto-fill';
+          descCell.classList.toggle('forecast-cell-muted', !rowData.desc);
+        }
+        if (unitCell) {
+          unitCell.textContent = rowData.unit || 'Auto-fill';
+          unitCell.classList.toggle('forecast-cell-muted', !rowData.unit);
+        }
+        rowEl.querySelectorAll('input[data-period]').forEach(input => {
+          const period = input.dataset.period;
+          const value = Number(rowData.volumes?.[period] || 0);
+          input.value = value ? value : '';
+        });
+        return;
+      }
+      if (event.target.matches('input[data-period]')) {
+        const period = event.target.dataset.period;
+        const value = parseFloat(event.target.value);
+        forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
+      }
     }
 
     function handleForecastEditorSubmit(event) {
@@ -1185,19 +1305,18 @@
       const stage = document.getElementById('forecastEditorStage')?.value || '';
       const planVersion = document.getElementById('forecastEditorPlan')?.value || '';
       const workGroup = document.getElementById('forecastEditorWorkGroup')?.value || '';
-      const jobNumber = normalizeJobNumberInput(document.getElementById('forecastEditorJob')?.value || '');
 
-      if (!year || !stage || !planVersion || !workGroup || !jobNumber) {
-        alert('Please select a financial year, RF stage, plan version, work group set, and standard job.');
+      if (!year || !stage || !planVersion || !workGroup) {
+        alert('Please select a financial year, RF stage, plan version, and work group set.');
         return;
       }
 
-      const volumeInputs = {};
-      document.querySelectorAll('#forecastEditorVolumes input[data-period]').forEach(input => {
-        const period = input.dataset.period;
-        const value = parseFloat(input.value);
-        volumeInputs[period] = Number.isFinite(value) ? value : 0;
-      });
+      syncForecastEditorTableState();
+      const rowsToSave = forecastEditorState.rows.filter(row => row.jobNumber);
+      if (!rowsToSave.length) {
+        alert('Enter at least one standard job to save forecast entries.');
+        return;
+      }
 
       setForecastContext(stage, year, planVersion);
       forecastEditorState = {
@@ -1205,38 +1324,38 @@
         year,
         stage,
         planVersion,
-        workGroup,
-        jobNumber
+        workGroup
       };
 
       if (!fData) fData = new Map();
-      if (!fData.has(jobNumber)) {
-        fData.set(jobNumber, { periods: {}, wgs: {} });
-      }
-      const job = fData.get(jobNumber);
-      if (!job.wgs) job.wgs = {};
-      job.wgs[workGroup] = {};
-      const totals = {};
-      FORECAST_PERIODS.forEach(period => {
-        job.wgs[workGroup][period] = Number(volumeInputs[period]) || 0;
-      });
-      Object.values(job.wgs).forEach(wgData => {
+      rowsToSave.forEach(row => {
+        if (!fData.has(row.jobNumber)) {
+          fData.set(row.jobNumber, { periods: {}, wgs: {} });
+        }
+        const job = fData.get(row.jobNumber);
+        if (!job.wgs) job.wgs = {};
+        job.wgs[workGroup] = {};
+        const totals = {};
         FORECAST_PERIODS.forEach(period => {
-          totals[period] = (totals[period] || 0) + (Number(wgData?.[period]) || 0);
+          job.wgs[workGroup][period] = Number(row.volumes?.[period]) || 0;
         });
+        Object.values(job.wgs).forEach(wgData => {
+          FORECAST_PERIODS.forEach(period => {
+            totals[period] = (totals[period] || 0) + (Number(wgData?.[period]) || 0);
+          });
+        });
+        job.periods = totals;
+        fData.set(row.jobNumber, job);
       });
-      job.periods = totals;
-      fData.set(jobNumber, job);
       lastForecastRowCount = fData.size;
       saveForecastStore(fData.size, year, stage, planVersion);
       updateWorkGroupFilterOptions();
       render();
       updateForecastEditorSummary();
       renderForecastEditorSelectors();
-      loadForecastEditorVolumes();
       const statusEl = document.getElementById('forecastEditorStatus');
       if (statusEl) {
-        statusEl.textContent = `Saved forecast for ${jobNumber} (${workGroup}) in ${year} ${stage} ${planVersion.toUpperCase()}.`;
+        statusEl.textContent = `Saved ${rowsToSave.length} forecast entr${rowsToSave.length === 1 ? 'y' : 'ies'} for ${workGroup} in ${year} ${stage} ${planVersion.toUpperCase()}.`;
       }
     }
 
@@ -1288,12 +1407,9 @@
         stage: currentReviewStage || REVIEW_STAGES[0],
         planVersion: currentPlanVersion || PLAN_VERSIONS[0]?.id || '',
         workGroup: forecastEditorState.workGroup || '',
-        jobNumber: forecastEditorState.jobNumber || '',
-        searchText: ''
+        rows: forecastEditorState.rows?.length ? forecastEditorState.rows : []
       };
       renderForecastEditorSelectors();
-      const searchInput = document.getElementById('forecastEditorJobSearch');
-      if (searchInput) searchInput.value = '';
       const statusEl = document.getElementById('forecastEditorStatus');
       if (statusEl) statusEl.textContent = '';
       modal.classList.add('open');
@@ -1323,28 +1439,11 @@
       const workGroup = document.getElementById('forecastEditorWorkGroup')?.value || '';
       forecastEditorState = {
         ...forecastEditorState,
-        workGroup
+        workGroup,
+        rows: Array.from({ length: 5 }, () => createForecastEditorRow())
       };
       renderForecastEditorJobOptions();
-    }
-
-    function handleForecastEditorJobChange() {
-      const jobNumber = normalizeJobNumberInput(document.getElementById('forecastEditorJob')?.value || '');
-      forecastEditorState = {
-        ...forecastEditorState,
-        jobNumber
-      };
-      updateForecastEditorJobMeta();
-      loadForecastEditorVolumes();
-    }
-
-    function handleForecastEditorSearchChange() {
-      const searchText = document.getElementById('forecastEditorJobSearch')?.value || '';
-      forecastEditorState = {
-        ...forecastEditorState,
-        searchText
-      };
-      renderForecastEditorJobOptions();
+      renderForecastEditorTable();
     }
 
     function handleFinancialYearChange() {
@@ -1803,14 +1902,12 @@
       const forecastEditorStage = document.getElementById('forecastEditorStage');
       const forecastEditorPlan = document.getElementById('forecastEditorPlan');
       const forecastEditorWorkGroup = document.getElementById('forecastEditorWorkGroup');
-      const forecastEditorJob = document.getElementById('forecastEditorJob');
-      const forecastEditorJobSearch = document.getElementById('forecastEditorJobSearch');
+      const forecastEditorTable = document.getElementById('forecastEditorTable');
       if (forecastEditorYear) forecastEditorYear.addEventListener('change', handleForecastEditorContextChange);
       if (forecastEditorStage) forecastEditorStage.addEventListener('change', handleForecastEditorContextChange);
       if (forecastEditorPlan) forecastEditorPlan.addEventListener('change', handleForecastEditorContextChange);
       if (forecastEditorWorkGroup) forecastEditorWorkGroup.addEventListener('change', handleForecastEditorWorkGroupChange);
-      if (forecastEditorJob) forecastEditorJob.addEventListener('change', handleForecastEditorJobChange);
-      if (forecastEditorJobSearch) forecastEditorJobSearch.addEventListener('input', handleForecastEditorSearchChange);
+      if (forecastEditorTable) forecastEditorTable.addEventListener('input', handleForecastEditorTableInput);
     }
 
     function extractJob(txt) {
