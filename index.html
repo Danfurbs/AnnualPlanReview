@@ -881,14 +881,26 @@
       }
     }
 
-    function saveForecastStore(rowCount, year = currentFinancialYear, stage = currentReviewStage, planVersion = currentPlanVersion) {
+    function saveForecastStore(rowCount, year = currentFinancialYear, stage = currentReviewStage, planVersion = currentPlanVersion, { syncAcrossStages = true } = {}) {
       try {
+        if (!year || !planVersion) {
+          console.warn('Missing forecast context; skipping forecast cache save.');
+          return;
+        }
+        const stagesToSave = syncAcrossStages ? REVIEW_STAGES : [stage];
+        const validStages = stagesToSave.filter(Boolean);
+        if (!validStages.length) {
+          console.warn('Missing review stage; skipping forecast cache save.');
+          return;
+        }
         const payload = {
           data: serializeForecastData(fData || new Map()),
           rowCount: rowCount ?? null,
           savedAt: new Date().toISOString()
         };
-        localStorage.setItem(getForecastStorageKey(year, stage, planVersion), JSON.stringify(payload));
+        validStages.forEach(targetStage => {
+          localStorage.setItem(getForecastStorageKey(year, targetStage, planVersion), JSON.stringify(payload));
+        });
       } catch (err) {
         console.warn('Failed to persist forecast cache:', err);
       }
