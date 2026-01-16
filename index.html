@@ -556,6 +556,7 @@
     let currentReviewStage = null;
     let currentFinancialYear = null;
     let currentPlanVersion = 'v1';
+    let requiresContextSelection = true;
 
     function loadCommentStore() {
       try {
@@ -604,6 +605,7 @@
       currentReviewStage = stage;
       currentFinancialYear = year || currentFinancialYear;
       currentPlanVersion = getPreferredPlanVersion(currentFinancialYear, stage);
+      requiresContextSelection = false;
       if (persist) {
         localStorage.setItem(REVIEW_STAGE_KEY, stage);
         if (currentFinancialYear) {
@@ -2035,6 +2037,10 @@
     }
 
     function render() {
+      if (requiresContextSelection) {
+        openStageModal();
+        return;
+      }
       if (!currentReviewStage || !currentFinancialYear) {
         openStageModal();
         return;
