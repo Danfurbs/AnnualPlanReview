@@ -189,7 +189,29 @@
     .group-table tbody tr:hover { background: #edf2f7; }
     .group-table input[type="checkbox"] { transform: scale(1.05); }
     .top-bar-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-    .forecast-editor-layout { display: grid; grid-template-columns: minmax(320px, 1.1fr) minmax(280px, 1fr); gap: 20px; }
+    .page.is-hidden { display: none; }
+    .forecast-page-header { background: white; padding: 16px 20px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
+    .forecast-page-title { display: flex; align-items: center; gap: 12px; }
+    .forecast-page-icon { width: 36px; height: 36px; border-radius: 10px; background: #6366f1; color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
+    .forecast-page-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .forecast-page-layout { display: grid; grid-template-columns: minmax(260px, 0.9fr) minmax(0, 3fr); gap: 20px; align-items: start; }
+    .forecast-sidebar { display: flex; flex-direction: column; gap: 16px; }
+    .forecast-card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 10px; }
+    .forecast-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+    .forecast-stat { font-size: 20px; font-weight: 700; color: #0f172a; }
+    .forecast-card small { color: #94a3b8; font-size: 12px; }
+    .forecast-action-list { display: flex; flex-direction: column; gap: 8px; }
+    .forecast-action-list button { width: 100%; font-size: 12px; }
+    .forecast-tips { list-style: none; display: flex; flex-direction: column; gap: 6px; color: #64748b; font-size: 12px; }
+    .forecast-main { background: white; border-radius: 12px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 16px; }
+    .forecast-main-header { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .forecast-main-header h3 { font-size: 16px; font-weight: 700; }
+    .forecast-main-header .badge { background: #e0e7ff; color: #4338ca; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .forecast-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .forecast-template-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+    .forecast-template-button { background: #f8fafc; color: #1f2937; border: 1px solid #e2e8f0; font-weight: 600; border-radius: 10px; padding: 8px 10px; font-size: 12px; }
+    .forecast-template-button:hover { background: #e2e8f0; }
+    .forecast-editor-layout { display: flex; flex-direction: column; gap: 14px; }
     .forecast-editor-panel { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     .forecast-editor-form { display: flex; flex-direction: column; gap: 12px; }
     .forecast-editor-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
@@ -218,7 +240,7 @@
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="container page" id="dashboardPage">
     <header class="top-bar">
       <div class="top-bar-hero">
         <div class="top-bar-title">
@@ -422,60 +444,107 @@
     </div>
   </div>
 
-  <div id="forecastEditorModal" class="modal">
-    <div class="modal-content modal-content--wide">
-      <div class="modal-header">
+  </div>
+
+  <div class="container page is-hidden" id="forecastPage">
+    <div class="forecast-page-header">
+      <div class="forecast-page-title">
+        <div class="forecast-page-icon">FB</div>
         <div>
-          <h2>Forecast Builder</h2>
-          <p class="helper-text">Create or edit forecast volumes by standard job and work group set (FY-wide).</p>
-        </div>
-        <button class="close" onclick="closeForecastEditor()">&times;</button>
-      </div>
-      <div class="forecast-editor-layout">
-        <div class="forecast-editor-panel">
-          <form id="forecastEditorForm" class="forecast-editor-form">
-            <div class="forecast-editor-row">
-              <div class="control-group">
-                <label for="forecastEditorYear">Financial year</label>
-                <select id="forecastEditorYear"></select>
-              </div>
-              <div class="control-group">
-                <label for="forecastEditorStage">RF stage</label>
-                <select id="forecastEditorStage"></select>
-              </div>
-              <div class="control-group">
-                <label for="forecastEditorPlan">Plan version</label>
-                <select id="forecastEditorPlan"></select>
-              </div>
-            </div>
-            <div class="forecast-editor-row">
-              <div class="control-group" style="flex: 1 1 260px;">
-                <label for="forecastEditorWorkGroup">Work group set</label>
-                <select id="forecastEditorWorkGroup"></select>
-              </div>
-            </div>
-            <div class="forecast-editor-table">
-              <label>Standard job forecast table</label>
-              <div class="forecast-editor-table-wrapper">
-                <table class="forecast-table" id="forecastEditorTable"></table>
-              </div>
-              <datalist id="forecastEditorJobOptions"></datalist>
-            </div>
-            <div class="forecast-editor-actions">
-              <button type="submit">Save Forecast Entries</button>
-              <button type="button" class="group-action-button" onclick="addForecastEditorRow()">Add Row</button>
-              <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear Table</button>
-              <button type="button" class="group-action-button" onclick="downloadForecastEditorExport()">Export Forecast JSON</button>
-            </div>
-            <p class="forecast-editor-meta" id="forecastEditorStatus"></p>
-          </form>
-        </div>
-        <div class="forecast-editor-panel">
-          <h3>How this works</h3>
-          <p class="forecast-editor-meta">Forecast entries are saved locally per financial year, RF stage, and plan version. Use “Export Forecast JSON” to capture the updated library payload for sharing or updates to <code>forecast-library.js</code>.</p>
-          <div class="forecast-editor-meta" id="forecastEditorSummary"></div>
+          <h1>Forecast Builder</h1>
+          <p class="subtitle">Build the FY-wide forecast for RF3, RF6, RF9, and RF11.</p>
         </div>
       </div>
+      <div class="forecast-page-actions">
+        <button class="group-action-button" onclick="closeForecastEditor()">Back to Dashboard</button>
+        <button class="primary-button" type="button" onclick="submitForecastEditorForm()">Save All Changes</button>
+      </div>
+    </div>
+    <div class="forecast-page-layout">
+      <aside class="forecast-sidebar">
+        <div class="forecast-card">
+          <h4>Forecast context</h4>
+          <div class="control-group">
+            <label for="forecastEditorYear">Financial year</label>
+            <select id="forecastEditorYear"></select>
+          </div>
+          <div class="control-group">
+            <label for="forecastEditorStage">RF stage</label>
+            <select id="forecastEditorStage"></select>
+          </div>
+          <div class="control-group">
+            <label for="forecastEditorPlan">Plan version</label>
+            <select id="forecastEditorPlan"></select>
+          </div>
+          <div class="control-group">
+            <label for="forecastEditorWorkGroup">Work group set</label>
+            <select id="forecastEditorWorkGroup"></select>
+          </div>
+          <small>Forecasts are FY-wide and must exist for RF3, RF6, RF9, and RF11.</small>
+        </div>
+        <div class="forecast-card">
+          <h4>Current status</h4>
+          <div>
+            <div class="forecast-stat" id="forecastEditorJobCount">0</div>
+            <small>Jobs configured</small>
+          </div>
+          <div>
+            <div class="forecast-stat" id="forecastEditorTotalVolume">0</div>
+            <small>Total volume across periods</small>
+          </div>
+          <div>
+            <div class="forecast-stat" id="forecastEditorRowCount">0</div>
+            <small>Rows in edit table</small>
+          </div>
+        </div>
+        <div class="forecast-card">
+          <h4>Quick actions</h4>
+          <div class="forecast-action-list">
+            <button type="button" onclick="addForecastEditorRow()">+ Add Row</button>
+            <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear Table</button>
+            <button type="button" class="group-action-button" onclick="downloadForecastEditorExport()">Export Forecast JSON</button>
+          </div>
+        </div>
+        <div class="forecast-card">
+          <h4>Tips</h4>
+          <ul class="forecast-tips">
+            <li>Use the job number list to auto-fill description and unit.</li>
+            <li>Forecast values are stored per FY and RF stage.</li>
+            <li>Remember to export after updating the FY-wide library.</li>
+          </ul>
+        </div>
+      </aside>
+      <main class="forecast-main">
+        <div class="forecast-main-header">
+          <div>
+            <h3>Forecast Entries <span class="badge" id="forecastEditorLoadedBadge">0 jobs loaded</span></h3>
+            <p class="forecast-editor-meta" id="forecastEditorSummary"></p>
+          </div>
+          <div class="forecast-toolbar">
+            <input type="search" id="forecastEditorSearch" placeholder="Search job number..." oninput="filterForecastEditorTable()">
+          </div>
+        </div>
+        <div class="forecast-template-bar">
+          <button class="forecast-template-button" type="button">Quick Fill Template</button>
+          <button class="forecast-template-button" type="button">Linear Distribution</button>
+          <button class="forecast-template-button" type="button">Q1 Heavy</button>
+          <button class="forecast-template-button" type="button">Q4 Heavy</button>
+          <button class="forecast-template-button" type="button">Even Split</button>
+        </div>
+        <form id="forecastEditorForm" class="forecast-editor-form">
+          <div class="forecast-editor-table">
+            <label>Standard job forecast table</label>
+            <div class="forecast-editor-table-wrapper">
+              <table class="forecast-table" id="forecastEditorTable"></table>
+            </div>
+            <datalist id="forecastEditorJobOptions"></datalist>
+          </div>
+          <div class="forecast-editor-actions">
+            <button type="submit">Save Forecast Entries</button>
+          </div>
+          <p class="forecast-editor-meta" id="forecastEditorStatus"></p>
+        </form>
+      </main>
     </div>
   </div>
 
@@ -956,8 +1025,8 @@
           }
         }
       }
-      const editorModal = document.getElementById('forecastEditorModal');
-      if (editorModal?.classList.contains('open')) {
+      const forecastPage = document.getElementById('forecastPage');
+      if (forecastPage && !forecastPage.classList.contains('is-hidden')) {
         renderForecastEditorSelectors();
       }
     }
@@ -1166,8 +1235,9 @@
           ${forecastEditorState.rows.map((row, index) => {
             const desc = row.desc || '';
             const unit = row.unit || '';
+            const searchValue = `${row.jobNumber || ''} ${desc || ''}`.toLowerCase();
             return `
-              <tr data-row="${index}">
+              <tr data-row="${index}" data-search="${escapeHtml(searchValue)}">
                 <td>
                   <input
                     type="text"
@@ -1202,6 +1272,8 @@
         </tbody>
       `;
       table.innerHTML = `${header}${body}`;
+      filterForecastEditorTable();
+      updateForecastEditorSummary();
     }
 
     function updateForecastEditorRowFromJob(rowIndex, jobNumber) {
@@ -1237,6 +1309,24 @@
       renderForecastEditorTable();
       const statusEl = document.getElementById('forecastEditorStatus');
       if (statusEl) statusEl.textContent = 'Table cleared (not saved).';
+    }
+
+    function submitForecastEditorForm() {
+      const form = document.getElementById('forecastEditorForm');
+      if (!form) return;
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+      } else {
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    }
+
+    function filterForecastEditorTable() {
+      const query = (document.getElementById('forecastEditorSearch')?.value || '').trim().toLowerCase();
+      document.querySelectorAll('#forecastEditorTable tbody tr').forEach(row => {
+        const haystack = row.dataset.search || '';
+        row.style.display = !query || haystack.includes(query) ? '' : 'none';
+      });
     }
 
     function syncForecastEditorTableState() {
@@ -1290,12 +1380,16 @@
           const value = Number(rowData.volumes?.[period] || 0);
           input.value = value ? value : '';
         });
+        const searchValue = `${rowData.jobNumber || ''} ${rowData.desc || ''}`.toLowerCase();
+        rowEl.dataset.search = searchValue;
+        updateForecastEditorSummary();
         return;
       }
       if (event.target.matches('input[data-period]')) {
         const period = event.target.dataset.period;
         const value = parseFloat(event.target.value);
         forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
+        updateForecastEditorSummary();
       }
     }
 
@@ -1396,12 +1490,29 @@
       if (!summaryEl) return;
       const totalJobs = fData?.size || 0;
       const workGroups = getAllWorkGroupSetNames();
-      summaryEl.textContent = `Current context: ${forecastEditorState.year || 'FY'} ${forecastEditorState.stage || 'RF'} ${forecastEditorState.planVersion || ''}. Forecast jobs loaded: ${totalJobs}. Work group sets available: ${workGroups.length}.`;
+      summaryEl.textContent = `Current context: ${forecastEditorState.year || 'FY'} ${forecastEditorState.stage || 'RF'} ${forecastEditorState.planVersion || ''}. FY-wide forecasts should be kept in sync for RF3, RF6, RF9, and RF11. Forecast jobs loaded: ${totalJobs}. Work group sets available: ${workGroups.length}.`;
+
+      const rowsWithJobs = forecastEditorState.rows?.filter(row => row.jobNumber).length || 0;
+      const rowCount = forecastEditorState.rows?.length || 0;
+      const totalVolume = (forecastEditorState.rows || []).reduce((sum, row) => {
+        return sum + FORECAST_PERIODS.reduce((periodSum, period) => {
+          return periodSum + (Number(row.volumes?.[period]) || 0);
+        }, 0);
+      }, 0);
+      const jobCountEl = document.getElementById('forecastEditorJobCount');
+      if (jobCountEl) jobCountEl.textContent = rowsWithJobs.toLocaleString();
+      const volumeEl = document.getElementById('forecastEditorTotalVolume');
+      if (volumeEl) volumeEl.textContent = totalVolume.toLocaleString();
+      const rowCountEl = document.getElementById('forecastEditorRowCount');
+      if (rowCountEl) rowCountEl.textContent = rowCount.toLocaleString();
+      const badgeEl = document.getElementById('forecastEditorLoadedBadge');
+      if (badgeEl) badgeEl.textContent = `${totalJobs} jobs loaded`;
     }
 
     function openForecastEditor() {
-      const modal = document.getElementById('forecastEditorModal');
-      if (!modal) return;
+      const forecastPage = document.getElementById('forecastPage');
+      const dashboardPage = document.getElementById('dashboardPage');
+      if (!forecastPage || !dashboardPage) return;
       forecastEditorState = {
         year: currentFinancialYear || getFinancialYearOptions()[0] || '',
         stage: currentReviewStage || REVIEW_STAGES[0],
@@ -1412,11 +1523,18 @@
       renderForecastEditorSelectors();
       const statusEl = document.getElementById('forecastEditorStatus');
       if (statusEl) statusEl.textContent = '';
-      modal.classList.add('open');
+      const searchInput = document.getElementById('forecastEditorSearch');
+      if (searchInput) searchInput.value = '';
+      dashboardPage.classList.add('is-hidden');
+      forecastPage.classList.remove('is-hidden');
     }
 
     function closeForecastEditor() {
-      document.getElementById('forecastEditorModal')?.classList.remove('open');
+      const forecastPage = document.getElementById('forecastPage');
+      const dashboardPage = document.getElementById('dashboardPage');
+      if (!forecastPage || !dashboardPage) return;
+      forecastPage.classList.add('is-hidden');
+      dashboardPage.classList.remove('is-hidden');
     }
 
     function handleForecastEditorContextChange() {
@@ -3367,7 +3485,6 @@
     
     document.getElementById('modal').onclick = e => { if (e.target.id==='modal') closeModal(); };
     document.getElementById('groupModal').onclick = e => { if (e.target.id === 'groupModal') closeGroupModal(); };
-    document.getElementById('forecastEditorModal').onclick = e => { if (e.target.id === 'forecastEditorModal') closeForecastEditor(); };
     document.getElementById('breakdown').onclick = e => { if (e.target.id==='breakdown') closeBreakdown(); };
     document.getElementById('forecastCompare').onclick = e => { if (e.target.id === 'forecastCompare') closeForecastComparison(); };
 
