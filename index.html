@@ -88,8 +88,11 @@
     .neutral { color: #718096; }
     .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000; }
     .modal.open { display: flex; }
-    .modal-content { background: white; border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .modal-content { background: white; border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; border: 2px solid transparent; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18); }
     .modal-content.modal-content--wide { max-width: 1100px; width: 95%; max-height: 90vh; }
+    .modal-content.rag-good { border-color: #22c55e; }
+    .modal-content.rag-warning { border-color: #f59e0b; }
+    .modal-content.rag-bad { border-color: #ef4444; }
     .modal-header { display: flex; justify-content: space-between; margin-bottom: 20px; }
     .close { background: none; color: #718096; font-size: 24px; padding: 0; width: 32px; height: 32px; cursor: pointer; }
     .file-input-group { margin-bottom: 16px; }
@@ -167,6 +170,23 @@
     .section-toggle { background: #edf2f7; color: #2d3748; border: 1px solid #cbd5e0; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; cursor: pointer; }
     .section-toggle:hover { background: #e2e8f0; }
     .collapsible-content.collapsed { display: none; }
+    .group-action-button { background: #e2e8f0; color: #1f2937; }
+    .group-action-button:hover { background: #cbd5f5; }
+    .group-form { display: flex; flex-direction: column; gap: 12px; }
+    .group-form .row-input { margin-top: 0; }
+    .group-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+    .group-item { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; gap: 12px; align-items: center; background: #f8fafc; }
+    .group-item h4 { font-size: 14px; color: #1f2937; }
+    .group-item p { font-size: 12px; color: #64748b; }
+    .group-item-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .group-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; background: #e0f2fe; color: #0369a1; }
+    .group-help { font-size: 12px; color: #64748b; }
+    .group-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    .group-table thead th { background: #f1f5f9; color: #4a5568; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .group-table tbody td { padding: 8px 10px; border-bottom: 1px solid #edf2f7; font-size: 12px; vertical-align: top; }
+    .group-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .group-table tbody tr:hover { background: #edf2f7; }
+    .group-table input[type="checkbox"] { transform: scale(1.05); }
   </style>
 </head>
 <body>
@@ -257,6 +277,12 @@
         </select>
       </div>
       <div class="control-group">
+        <label for="groupFilter">Group filter</label>
+        <select id="groupFilter" onchange="render()">
+          <option value="all">All Standard Jobs</option>
+        </select>
+      </div>
+      <div class="control-group">
         <label for="varianceFilter">Variance filter</label>
         <select id="varianceFilter" onchange="render()">
           <option value="all">Show All</option>
@@ -283,6 +309,7 @@
         <option value="P13">Period 13</option>
       </select>
       <input type="search" id="search" placeholder="Search..." oninput="render()">
+      <button type="button" class="group-action-button" onclick="openGroupModal()">Manage Groups</button>
     </div>
 
     <div id="jobs"></div>
@@ -323,6 +350,49 @@
         <p class="helper-text">Required columns: Standard Job Number, Comment Type, Comment</p>
         <button type="button" onclick="exportComments()">Export Comments</button>
       </div>
+    </div>
+  </div>
+
+  <div id="groupModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="groupModalTitle">Create Group</h2>
+        <button class="close" onclick="closeGroupModal()">&times;</button>
+      </div>
+      <form id="groupForm" class="group-form">
+        <div class="file-input-group">
+          <label for="groupMnt">MNT Number</label>
+          <input type="text" id="groupMnt" placeholder="e.g. MNT-1002" required>
+        </div>
+        <div class="file-input-group">
+          <label for="groupJobSearch">Standard Jobs</label>
+          <input type="search" id="groupJobSearch" placeholder="Filter standard jobs...">
+          <div style="overflow-x: auto; margin-top: 8px;">
+            <table class="group-table" id="groupJobTable"></table>
+          </div>
+          <p class="group-help" id="groupJobCount">0 jobs selected.</p>
+        </div>
+        <div class="file-input-group">
+          <label for="groupDesc">Description</label>
+          <input type="text" id="groupDesc" placeholder="Group description" required>
+        </div>
+        <div class="file-input-group">
+          <label for="groupUnit">Units of Measure</label>
+          <input type="text" id="groupUnit" placeholder="e.g. Hours" required>
+        </div>
+        <div class="file-input-group">
+          <label class="row-input">
+            <input type="checkbox" id="groupRollup">
+            Roll Up units into a single card
+          </label>
+          <p class="group-help" id="groupRollupHelp">Units must match across jobs to roll up.</p>
+        </div>
+        <div class="comment-actions">
+          <button type="submit" id="groupSubmit">Save Group</button>
+        </div>
+      </form>
+
+      <div class="group-list" id="groupList"></div>
     </div>
   </div>
 
@@ -410,6 +480,8 @@
   <script>
     let fData = null, wData = null, stdJobs = new Map();
     let workGroupSets = new Map();
+    let groupStore = [];
+    let editingGroupId = null;
     let currentChart = null;
     let currentWorkOrders = [];
     let currentWorkOrderWorkGroup = 'all';
@@ -420,6 +492,7 @@
     const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
     const REVIEW_STORAGE_KEY = 'aprReviewStatusV1';
     const WORK_ORDER_AMENDMENTS_KEY = 'aprWorkOrderAmendmentsV1';
+    const GROUP_STORAGE_KEY = 'aprGroupStoreV1';
     let commentStore = {};
     let reviewStore = {};
     let workOrderAmendments = {};
@@ -540,6 +613,278 @@
       localStorage.setItem(WORK_ORDER_AMENDMENTS_KEY, JSON.stringify(workOrderAmendments));
     }
 
+    function loadGroupStore() {
+      try {
+        const raw = localStorage.getItem(GROUP_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        groupStore = Array.isArray(parsed) ? parsed : [];
+      } catch (err) {
+        console.warn('Failed to load group store:', err);
+        groupStore = [];
+      }
+    }
+
+    function saveGroupStore() {
+      localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(groupStore));
+    }
+
+    function getGroupName(group) {
+      const mnt = group.mntNumber ? String(group.mntNumber).trim() : '';
+      const desc = group.description ? String(group.description).trim() : '';
+      if (mnt && desc) return `${mnt} - ${desc}`;
+      return mnt || desc || 'Unnamed Group';
+    }
+
+    function getUnitForJob(jobNumber) {
+      return stdJobs.get(jobNumber)?.unit || currentJobsMap.get(jobNumber)?.unit || '';
+    }
+
+    function getGroupUnits(jobNumbers) {
+      const units = jobNumbers
+        .map(jobNumber => getUnitForJob(jobNumber))
+        .filter(Boolean);
+      return Array.from(new Set(units.map(unit => unit.toLowerCase().trim()))).filter(Boolean);
+    }
+
+    function validateGroupRollup(jobNumbers, unitLabel) {
+      const units = getGroupUnits(jobNumbers);
+      if (units.length > 1) {
+        return { ok: false, message: 'Units of measure do not match across the selected jobs.' };
+      }
+      if (units.length === 1 && unitLabel && units[0] !== unitLabel.toLowerCase().trim()) {
+        return { ok: false, message: 'The roll up unit must match the selected jobs.' };
+      }
+      return { ok: true };
+    }
+
+    function updateGroupFilterOptions() {
+      const select = document.getElementById('groupFilter');
+      if (!select) return;
+      const current = select.value || 'all';
+      const options = [
+        '<option value="all">All Standard Jobs</option>',
+        ...groupStore.map(group => `<option value="${escapeHtml(group.id)}">${escapeHtml(getGroupName(group))}</option>`)
+      ];
+      select.innerHTML = options.join('');
+      select.value = groupStore.some(group => group.id === current) ? current : 'all';
+    }
+
+    function renderGroupList() {
+      const list = document.getElementById('groupList');
+      if (!list) return;
+      if (!groupStore.length) {
+        list.innerHTML = '<p class="group-help">No groups created yet.</p>';
+        return;
+      }
+      list.innerHTML = groupStore.map(group => `
+        <div class="group-item">
+          <div>
+            <h4>${escapeHtml(getGroupName(group))}</h4>
+            <p>${escapeHtml(group.jobNumbers.join(', '))} • Unit: ${escapeHtml(group.unit || '-')}${group.rollUp ? ' • Roll Up' : ''}</p>
+          </div>
+          <div class="group-item-actions">
+            <button type="button" class="group-action-button" data-group-edit="${escapeHtml(group.id)}">Edit</button>
+            <button type="button" class="comment-delete" data-group-delete="${escapeHtml(group.id)}">Delete</button>
+          </div>
+        </div>
+      `).join('');
+
+      list.querySelectorAll('[data-group-edit]').forEach(button => {
+        button.addEventListener('click', () => {
+          openGroupModal(button.dataset.groupEdit);
+        });
+      });
+
+      list.querySelectorAll('[data-group-delete]').forEach(button => {
+        button.addEventListener('click', () => {
+          deleteGroup(button.dataset.groupDelete);
+        });
+      });
+    }
+
+    function getSelectedGroupJobNumbers() {
+      const selected = Array.from(document.querySelectorAll('#groupJobTable input[type="checkbox"]:checked'))
+        .map(input => input.value)
+        .filter(Boolean);
+      return selected;
+    }
+
+    function updateGroupSelectionCount() {
+      const countEl = document.getElementById('groupJobCount');
+      if (!countEl) return;
+      const selectedCount = getSelectedGroupJobNumbers().length;
+      countEl.textContent = `${selectedCount} job${selectedCount === 1 ? '' : 's'} selected.`;
+    }
+
+    function renderGroupJobTable({ filterText = '', selectedJobs = null } = {}) {
+      const table = document.getElementById('groupJobTable');
+      if (!table) return;
+      const normalizedFilter = filterText.toLowerCase().trim();
+      const selectedSet = new Set(selectedJobs || getSelectedGroupJobNumbers());
+      const jobs = Array.from(stdJobs.entries()).map(([jobNumber, meta]) => ({
+        jobNumber,
+        disc: meta?.disc || '',
+        desc: meta?.desc || '',
+        unit: meta?.unit || '',
+        mnt: meta?.mnt || ''
+      }));
+      const filtered = jobs.filter(job => {
+        if (!normalizedFilter) return true;
+        const haystack = [job.jobNumber, job.disc, job.desc, job.unit, job.mnt].join(' ').toLowerCase();
+        return haystack.includes(normalizedFilter);
+      });
+
+      const rows = filtered.map(job => `
+        <tr>
+          <td>
+            <input type="checkbox" value="${escapeHtml(job.jobNumber)}" ${selectedSet.has(job.jobNumber) ? 'checked' : ''}>
+          </td>
+          <td>${escapeHtml(job.disc)}</td>
+          <td>${escapeHtml(job.mnt)}</td>
+          <td>${escapeHtml(job.jobNumber)}</td>
+          <td>${escapeHtml(job.desc)}</td>
+          <td>${escapeHtml(job.unit)}</td>
+        </tr>
+      `).join('');
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Select</th>
+            <th>Discipline</th>
+            <th>MNT</th>
+            <th>Job</th>
+            <th>Description</th>
+            <th>Unit</th>
+          </tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="6"><em>No standard jobs match the current filter.</em></td></tr>'}</tbody>
+      `;
+
+      table.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        input.addEventListener('change', () => {
+          updateGroupSelectionCount();
+          updateGroupRollupHelp();
+        });
+      });
+
+      updateGroupSelectionCount();
+    }
+
+    function resetGroupForm() {
+      const form = document.getElementById('groupForm');
+      if (!form) return;
+      form.reset();
+      editingGroupId = null;
+      document.getElementById('groupModalTitle').textContent = 'Create Group';
+      document.getElementById('groupSubmit').textContent = 'Save Group';
+      const searchInput = document.getElementById('groupJobSearch');
+      if (searchInput) searchInput.value = '';
+      renderGroupJobTable({ filterText: '', selectedJobs: [] });
+      updateGroupRollupHelp();
+    }
+
+    function openGroupModal(groupId = null) {
+      const modal = document.getElementById('groupModal');
+      if (!modal) return;
+      resetGroupForm();
+      if (groupId) {
+        const group = groupStore.find(entry => entry.id === groupId);
+        if (group) {
+          editingGroupId = groupId;
+          document.getElementById('groupModalTitle').textContent = 'Edit Group';
+          document.getElementById('groupSubmit').textContent = 'Update Group';
+          document.getElementById('groupMnt').value = group.mntNumber || '';
+          document.getElementById('groupDesc').value = group.description || '';
+          document.getElementById('groupUnit').value = group.unit || '';
+          document.getElementById('groupRollup').checked = Boolean(group.rollUp);
+        }
+      }
+      renderGroupList();
+      renderGroupJobTable({
+        filterText: document.getElementById('groupJobSearch')?.value || '',
+        selectedJobs: groupId ? groupStore.find(entry => entry.id === groupId)?.jobNumbers || [] : []
+      });
+      updateGroupRollupHelp();
+      modal.classList.add('open');
+    }
+
+    function closeGroupModal() {
+      document.getElementById('groupModal').classList.remove('open');
+    }
+
+    function deleteGroup(groupId) {
+      const group = groupStore.find(entry => entry.id === groupId);
+      if (!group) return;
+      const confirmed = confirm(`Delete group "${getGroupName(group)}"?`);
+      if (!confirmed) return;
+      groupStore = groupStore.filter(entry => entry.id !== groupId);
+      saveGroupStore();
+      updateGroupFilterOptions();
+      renderGroupList();
+      render();
+    }
+
+    function handleGroupSubmit(event) {
+      event.preventDefault();
+      const mntNumber = document.getElementById('groupMnt').value.trim();
+      const jobNumbers = getSelectedGroupJobNumbers();
+      const description = document.getElementById('groupDesc').value.trim();
+      const unit = document.getElementById('groupUnit').value.trim();
+      const rollUp = document.getElementById('groupRollup').checked;
+      if (!jobNumbers.length) {
+        alert('Please enter at least one Standard Job Number.');
+        return;
+      }
+      if (rollUp) {
+        const validation = validateGroupRollup(jobNumbers, unit);
+        if (!validation.ok) {
+          alert(validation.message);
+          return;
+        }
+      }
+      const groupPayload = {
+        id: editingGroupId || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        mntNumber,
+        jobNumbers: Array.from(new Set(jobNumbers)),
+        description,
+        unit,
+        rollUp
+      };
+
+      if (editingGroupId) {
+        groupStore = groupStore.map(entry => (entry.id === editingGroupId ? groupPayload : entry));
+      } else {
+        groupStore.push(groupPayload);
+      }
+      saveGroupStore();
+      updateGroupFilterOptions();
+      renderGroupList();
+      render();
+      resetGroupForm();
+    }
+
+    function updateGroupRollupHelp() {
+      const help = document.getElementById('groupRollupHelp');
+      if (!help) return;
+      const jobNumbers = getSelectedGroupJobNumbers();
+      const unit = document.getElementById('groupUnit').value.trim();
+      const rollUp = document.getElementById('groupRollup').checked;
+      if (!rollUp) {
+        help.textContent = 'Units must match across jobs to roll up.';
+        help.style.color = '#64748b';
+        return;
+      }
+      const validation = validateGroupRollup(jobNumbers, unit);
+      if (!validation.ok) {
+        help.textContent = validation.message;
+        help.style.color = '#b91c1c';
+      } else {
+        help.textContent = 'Units match. This group can be rolled up.';
+        help.style.color = '#15803d';
+      }
+    }
+
     function getWorkOrderAmendment(orderId) {
       return workOrderAmendments?.[orderId] || null;
     }
@@ -622,6 +967,7 @@
       loadCommentStore();
       loadReviewStore();
       loadWorkOrderAmendments();
+      loadGroupStore();
       const forecastCache = loadForecastStore();
       if (typeof WORK_GROUP_SETS_RAW !== 'undefined') {
         WORK_GROUP_SETS_RAW.split('\n').slice(1).forEach(line => {
@@ -640,7 +986,7 @@
           const p = line.split('\t');
           if (p.length >= 5) {
             stdJobs.set(p[2].trim().padStart(6,'0'), {
-              disc: p[0].trim(), desc: p[3].trim(), unit: p[4].trim()
+              disc: p[0].trim(), mnt: p[1].trim(), desc: p[3].trim(), unit: p[4].trim()
             });
           }
         });
@@ -653,6 +999,21 @@
         updateWorkGroupFilterOptions();
         console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
       }
+      updateGroupFilterOptions();
+      const groupForm = document.getElementById('groupForm');
+      if (groupForm) {
+        groupForm.addEventListener('submit', handleGroupSubmit);
+      }
+      const groupJobSearch = document.getElementById('groupJobSearch');
+      const groupUnitInput = document.getElementById('groupUnit');
+      const groupRollupInput = document.getElementById('groupRollup');
+      if (groupJobSearch) {
+        groupJobSearch.addEventListener('input', () => {
+          renderGroupJobTable({ filterText: groupJobSearch.value });
+        });
+      }
+      if (groupUnitInput) groupUnitInput.addEventListener('input', updateGroupRollupHelp);
+      if (groupRollupInput) groupRollupInput.addEventListener('change', updateGroupRollupHelp);
     }
 
     function extractJob(txt) {
@@ -1132,6 +1493,65 @@
       return flags;
     }
 
+    function buildGroupRollupJob(group, jobs) {
+      const groupJobs = jobs.filter(job => group.jobNumbers.includes(job.jn));
+      if (!groupJobs.length) return null;
+      const rollup = {
+        jn: group.mntNumber || `GRP-${group.id}`,
+        disc: 'Group Rollups',
+        desc: group.description || getGroupName(group),
+        unit: group.unit || 'Unit not specified',
+        periods: {},
+        tot: { f: 0, a: 0, v: 0 },
+        wgs: {},
+        isGroupRollup: true,
+        groupId: group.id,
+        groupName: getGroupName(group),
+        groupJobCount: groupJobs.length
+      };
+
+      for (let i = 1; i <= 13; i++) {
+        const p = `P${i}`;
+        const periodTotals = groupJobs.reduce(
+          (acc, job) => {
+            const data = job.periods[p] || { f: 0, a: 0, v: 0 };
+            acc.f += data.f || 0;
+            acc.a += data.a || 0;
+            acc.v += data.v || 0;
+            return acc;
+          },
+          { f: 0, a: 0, v: 0 }
+        );
+        rollup.periods[p] = periodTotals;
+        rollup.tot.f += periodTotals.f;
+        rollup.tot.a += periodTotals.a;
+        rollup.tot.v += periodTotals.v;
+      }
+
+      const wgNames = new Set();
+      groupJobs.forEach(job => {
+        Object.keys(job.wgs || {}).forEach(wg => wgNames.add(wg));
+      });
+      wgNames.forEach(wg => {
+        rollup.wgs[wg] = { periods: {} };
+        for (let i = 1; i <= 13; i++) {
+          const p = `P${i}`;
+          const totals = groupJobs.reduce(
+            (acc, job) => {
+              const data = job.wgs?.[wg]?.periods?.[p] || { f: 0, a: 0, v: 0 };
+              acc.f += data.f || 0;
+              acc.a += data.a || 0;
+              acc.v += data.v || 0;
+              return acc;
+            },
+            { f: 0, a: 0, v: 0 }
+          );
+          rollup.wgs[wg].periods[p] = totals;
+        }
+      });
+      return rollup;
+    }
+
     function renderWorkOrders() {
       const table = document.getElementById('woTable');
       if (!table) return;
@@ -1298,7 +1718,7 @@
         return Number.isNaN(numeric) ? 0 : numeric;
       })();
       const all = new Set([...(fData?.keys()||[]), ...(wData?.keys()||[])]);
-      const jobs = [];
+      const baseJobs = [];
       all.forEach(jn => {
         // Get metadata from standard jobs if available
         const meta = stdJobs.get(jn);
@@ -1341,10 +1761,10 @@
             job.wgs[wg].periods[p] = {f: fv, a: av, v: av - fv};
           }
         });
-        jobs.push(job);
+        baseJobs.push(job);
       });
-
-      currentJobsMap = new Map(jobs.map(job => [job.jn, job]));
+      const groupFilter = document.getElementById('groupFilter')?.value || 'all';
+      const activeGroup = groupStore.find(group => group.id === groupFilter);
 
       const search = document.getElementById('search').value.toLowerCase();
       const period = document.getElementById('period').value;
@@ -1368,24 +1788,39 @@
         return { periods, tot: totals };
       };
 
-      let filtered = jobs.filter(j => {
-        const matchesSearch = !search || j.jn.includes(search) || j.desc.toLowerCase().includes(search) || j.disc.toLowerCase().includes(search);
+      const filterByGroup = (job) => {
+        if (groupFilter === 'all') return true;
+        if (!activeGroup) return false;
+        if (job.isGroupRollup) return job.groupId === activeGroup.id;
+        return activeGroup.jobNumbers.includes(job.jn);
+      };
+
+      const filterBySearch = (job) => {
+        const matchesSearch = !search || job.jn.includes(search) || job.desc.toLowerCase().includes(search) || job.disc.toLowerCase().includes(search);
         if (!matchesSearch) return false;
         if (wgFilter === 'all') return true;
-        const wgData = j.wgs[wgFilter];
+        const wgData = job.wgs[wgFilter];
         if (!wgData) return false;
         return Object.values(wgData.periods || {}).some(periodData => periodData.f !== 0 || periodData.a !== 0);
-      });
+      };
 
-      const baseFiltered = filtered;
-      filtered = filtered.filter(j => {
-        const displayData = getJobDisplayData(j);
+      const baseFiltered = baseJobs.filter(job => filterByGroup(job) && filterBySearch(job));
+      const rollupJobs = groupStore
+        .filter(group => group.rollUp)
+        .map(group => buildGroupRollupJob(group, baseJobs))
+        .filter(Boolean);
+      const rollupFiltered = rollupJobs.filter(job => filterByGroup(job) && filterBySearch(job));
+
+      const applyVarianceFilter = (job) => {
+        const displayData = getJobDisplayData(job);
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
         const { status, hasVariance } = getVarianceStatus(pd);
         if (varianceFilter === 'all') return true;
         if (varianceFilter === 'variance') return hasVariance;
         return status === varianceFilter;
-      });
+      };
+
+      const filtered = [...baseFiltered.filter(applyVarianceFilter), ...rollupFiltered.filter(applyVarianceFilter)];
       
       filtered.sort((a,b) => {
         const aDisplay = getJobDisplayData(a);
@@ -1403,7 +1838,8 @@
 
       const cont = document.getElementById('jobs');
       cont.innerHTML = '';
-      updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter });
+      currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
+      updateTopBarStats({ jobs: baseJobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter });
 
       Object.keys(byDisc).sort().forEach(disc => {
         const sec = document.createElement('div');
@@ -1425,11 +1861,12 @@
           const pd = period==='all' ? displayData.tot : displayData.periods[period];
           const { status: stat } = getVarianceStatus(pd);
           const vc = pd.v>0 ? 'positive' : pd.v<0 ? 'negative' : 'neutral';
-          const isPriority = ['009112', '009113'].includes(j.jn);
-          const isReviewed = isJobReviewed(j.jn, reviewStage);
-          const statusLabel = isReviewed ? 'Reviewed' : 'Needs Review';
-          const statusClass = isReviewed ? 'reviewed' : 'needs-review';
-          const commentCount = getJobComments(j.jn).length;
+          const isGroupRollup = Boolean(j.isGroupRollup);
+          const isPriority = !isGroupRollup && ['009112', '009113'].includes(j.jn);
+          const isReviewed = !isGroupRollup && isJobReviewed(j.jn, reviewStage);
+          const statusLabel = isGroupRollup ? 'Group Rollup' : (isReviewed ? 'Reviewed' : 'Needs Review');
+          const statusClass = isGroupRollup ? 'group-rollup' : (isReviewed ? 'reviewed' : 'needs-review');
+          const commentCount = isGroupRollup ? 0 : getJobComments(j.jn).length;
           const varianceValue = `${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)}`;
           const alertTitle = stat === 'bad'
             ? 'Significant variance detected'
@@ -1437,14 +1874,22 @@
               ? 'Variance requires review'
               : isReviewed
                 ? 'Commentary complete'
-                : 'On track';
+                : isGroupRollup
+                  ? 'Aggregated group totals'
+                  : 'On track';
           const alertDetail = stat === 'bad'
             ? `Large variance (${varianceValue}). Root cause analysis required.`
             : stat === 'warning'
               ? `Variance (${varianceValue}). Provide commentary for ${reviewStage}.`
               : isReviewed
                 ? `Reviewed for ${reviewStage}.`
-                : 'Variance within tolerance.';
+                : isGroupRollup
+                  ? `Includes ${j.groupJobCount} standard job${j.groupJobCount === 1 ? '' : 's'}.`
+                  : 'Variance within tolerance.';
+          const titleText = isGroupRollup ? j.groupName : `${j.jn} - ${j.desc}`;
+          const subtitleText = isGroupRollup
+            ? `Group of ${j.groupJobCount} job${j.groupJobCount === 1 ? '' : 's'} • Unit: ${j.unit}`
+            : `Discipline: ${j.disc} • Unit: ${j.unit} • Status: ${statusLabel}`;
           
           const card = document.createElement('div');
           card.className = `job-card ${stat}`;
@@ -1454,13 +1899,14 @@
             <div class="job-card-header">
               <div class="job-pill-group">
                 ${isPriority ? '<span class="job-pill priority">Priority</span>' : ''}
-                <span class="job-pill ${statusClass}">${statusLabel}</span>
+                ${isGroupRollup ? '<span class="group-pill">Group</span>' : ''}
+                ${!isGroupRollup ? `<span class="job-pill ${statusClass}">${statusLabel}</span>` : ''}
               </div>
             </div>
             <div class="job-card-body">
               <div class="job-details">
-                <div class="job-card-title">${j.jn} - ${j.desc}</div>
-                <div class="job-card-subtitle">Discipline: ${j.disc} • Unit: ${j.unit} • Status: ${statusLabel}</div>
+                <div class="job-card-title">${escapeHtml(titleText)}</div>
+                <div class="job-card-subtitle">${escapeHtml(subtitleText)}</div>
                 <div class="job-alert ${stat}">
                   <span>${alertTitle}</span>
                   <span>${alertDetail}</span>
@@ -1482,12 +1928,14 @@
               </div>
             </div>
             <div class="job-actions">
-              <button type="button" class="primary-button" data-action="commentary">Add Commentary</button>
-              ${commentCount ? `<button type="button" class="secondary" data-action="view-comments">View Comments (${commentCount})</button>` : ''}
+              ${isGroupRollup
+                ? '<button type="button" class="group-action-button" data-action="manage-group">Manage Group</button>'
+                : '<button type="button" class="primary-button" data-action="commentary">Add Commentary</button>'}
+              ${!isGroupRollup && commentCount ? `<button type="button" class="secondary" data-action="view-comments">View Comments (${commentCount})</button>` : ''}
               <button type="button" class="secondary" data-action="details">View Details</button>
-              ${isReviewed
+              ${!isGroupRollup && (isReviewed
                 ? '<button type="button" class="secondary" data-action="reopen">Reopen</button>'
-                : '<button type="button" class="success" data-action="reviewed">Mark Reviewed</button>'}
+                : '<button type="button" class="success" data-action="reviewed">Mark Reviewed</button>')}
             </div>
           `;
 
@@ -1503,6 +1951,9 @@
               }
               if (action === 'view-comments') {
                 openCommentary(j);
+              }
+              if (action === 'manage-group' && j.groupId) {
+                openGroupModal(j.groupId);
               }
               if (action === 'reviewed' && !isReviewed) {
                 markJobReviewed(j.jn, reviewStage);
@@ -1546,6 +1997,7 @@
 
     function showBreakdown(job, options = {}) {
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const period = document.getElementById('period')?.value || 'all';
       const wgLabel = wgFilter === 'all' ? '' : ` • ${wgFilter}`;
       const breakdownModal = document.getElementById('breakdown');
       const modalContent = breakdownModal?.querySelector('.modal-content');
@@ -1568,6 +2020,12 @@
         }
         return { periods, tot: totals };
       })();
+      if (modalContent) {
+        const pd = period === 'all' ? displayData.tot : displayData.periods[period];
+        const { status } = getVarianceStatus(pd);
+        modalContent.classList.remove('rag-good', 'rag-warning', 'rag-bad');
+        modalContent.classList.add(`rag-${status}`);
+      }
       
       // Build cumulative data
       const periods = [];
@@ -1813,6 +2271,7 @@
     }
     
     document.getElementById('modal').onclick = e => { if (e.target.id==='modal') closeModal(); };
+    document.getElementById('groupModal').onclick = e => { if (e.target.id === 'groupModal') closeGroupModal(); };
     document.getElementById('breakdown').onclick = e => { if (e.target.id==='breakdown') closeBreakdown(); };
 
     document.querySelectorAll('.rag-pill').forEach(pill => {
