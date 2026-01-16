@@ -90,9 +90,9 @@
     .modal.open { display: flex; }
     .modal-content { background: white; border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; border: 2px solid transparent; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18); }
     .modal-content.modal-content--wide { max-width: 1100px; width: 95%; max-height: 90vh; }
-    .modal-content.rag-good { border-color: #22c55e; }
-    .modal-content.rag-warning { border-color: #f59e0b; }
-    .modal-content.rag-bad { border-color: #ef4444; }
+    .modal-content.rag-good { border-color: #22c55e; border-width: 4px; }
+    .modal-content.rag-warning { border-color: #f59e0b; border-width: 4px; }
+    .modal-content.rag-bad { border-color: #ef4444; border-width: 4px; }
     .modal-header { display: flex; justify-content: space-between; margin-bottom: 20px; }
     .close { background: none; color: #718096; font-size: 24px; padding: 0; width: 32px; height: 32px; cursor: pointer; }
     .file-input-group { margin-bottom: 16px; }
@@ -292,22 +292,6 @@
           <option value="good">Show Greens</option>
         </select>
       </div>
-      <select id="period" onchange="render()">
-        <option value="all">All Periods</option>
-        <option value="P1">Period 1</option>
-        <option value="P2">Period 2</option>
-        <option value="P3">Period 3</option>
-        <option value="P4">Period 4</option>
-        <option value="P5">Period 5</option>
-        <option value="P6">Period 6</option>
-        <option value="P7">Period 7</option>
-        <option value="P8">Period 8</option>
-        <option value="P9">Period 9</option>
-        <option value="P10">Period 10</option>
-        <option value="P11">Period 11</option>
-        <option value="P12">Period 12</option>
-        <option value="P13">Period 13</option>
-      </select>
       <input type="search" id="search" placeholder="Search..." oninput="render()">
       <button type="button" class="group-action-button" onclick="openGroupModal()">Manage Groups</button>
     </div>
@@ -482,7 +466,7 @@
     let currentWorkOrders = [];
     let currentWorkOrderWorkGroup = 'all';
     let currentJobsMap = new Map();
-    const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11'];
+    const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11', 'IME'];
     const COMMENT_STORAGE_KEY = 'aprJobCommentsV2';
     const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
     const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
@@ -1331,10 +1315,12 @@
               r['Description'] ||
               ''
             ).trim(),
-            status: String(
-              r['Work Order Status'] ||
-              r['WO Status'] ||
-              r['Status'] ||
+            workOrderType: String(
+              r['Work Order Type Code & Desc'] ||
+              r['Work Order Type Code'] ||
+              r['Work Order Type Description'] ||
+              r['Work Order Type'] ||
+              r['WO Type'] ||
               ''
             ).trim(),
             period: per,
@@ -1574,7 +1560,7 @@
         const haystack = [
           order.number,
           order.description,
-          order.status,
+          order.workOrderType,
           order.period,
           order.workGroup,
           order.closedDate,
@@ -1624,7 +1610,7 @@
           <tr class="${rowClass}">
             <td><strong>${escapeHtml(order.number || 'Unknown')}</strong></td>
             <td>${escapeHtml(order.description || '-')}</td>
-            <td>${escapeHtml(order.status || '-')}</td>
+            <td>${escapeHtml(order.workOrderType || '-')}</td>
             <td>${escapeHtml(order.period || '-')}</td>
             <td>${escapeHtml(order.workGroup || '-')}</td>
             <td class="wo-units" data-units-cell data-order-id="${escapeHtml(order.id)}">
@@ -1644,7 +1630,7 @@
           <tr>
             <th>Work Order</th>
             <th>Description</th>
-            <th>Status</th>
+            <th>Work Order Type</th>
             <th>Closed Period</th>
             <th>Work Group</th>
             <th class="wo-units">Units</th>
@@ -1767,8 +1753,8 @@
       const groupFilter = document.getElementById('groupFilter')?.value || 'all';
       const activeGroup = groupStore.find(group => group.id === groupFilter);
 
-      const search = document.getElementById('search').value.toLowerCase();
-      const period = document.getElementById('period').value;
+      const search = document.getElementById('search')?.value.toLowerCase() || '';
+      const period = document.getElementById('period')?.value || 'all';
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
       const reviewStage = document.getElementById('reviewStage')?.value || 'RF3';
       const getJobDisplayData = (job) => {
