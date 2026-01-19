@@ -1,44 +1,35 @@
-    let fData = null, wData = null, stdJobs = new Map();
-    let workGroupSets = new Map();
+    // Core data (exposed on window for forecast modules)
+    window.window.wData = null;
+    window.window.stdJobs = new Map();
+    window.window.workGroupSets = new Map();
+    window.window.currentJobsMap = new Map();
+
+    // UI state (not in modules)
     let groupStore = [];
     let editingGroupId = null;
     let currentChart = null;
     let currentWorkOrders = [];
     let currentWorkOrderWorkGroup = 'all';
-    let currentJobsMap = new Map();
     let lastForecastRowCount = null;
+    let requiresContextSelection = true;
+
+    // Comment-related (not in modules)
     const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11', 'IME'];
     const COMMENT_STORAGE_KEY = 'aprJobCommentsV2';
     const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
-    const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
-    const REVIEW_STORAGE_KEY = 'aprReviewStatusV1';
-    const REVIEW_STAGE_KEY = 'aprReviewStageV1';
-    const FINANCIAL_YEAR_KEY = 'aprFinancialYearV1';
-    const PLAN_VERSION_KEY = 'aprPlanVersionV1';
-    const WORK_ORDER_AMENDMENTS_KEY = 'aprWorkOrderAmendmentsV1';
-    const GROUP_STORAGE_KEY = 'aprGroupStoreV1';
-    const FORECAST_PERIODS = Array.from({ length: 13 }, (_, i) => `P${i + 1}`);
-    let forecastEditorState = {
-      year: '',
-      stage: '',
-      planVersion: '',
-      workGroup: '',
-      rows: []
-    };
-    const REVIEW_STAGES = ['RF3', 'RF6', 'RF9', 'RF11'];
-    const DEFAULT_FINANCIAL_YEARS = ['FY27', 'FY28', 'FY29', 'FY30'];
-    const PLAN_VERSIONS = [
-      { id: 'v0', label: 'Plan v0' },
-      { id: 'v1', label: 'Plan v1' }
-    ];
     let commentStore = {};
-    let reviewStore = {};
-    let workOrderAmendments = {};
     let currentCommentJob = null;
-    let currentReviewStage = null;
-    let currentFinancialYear = null;
-    let currentPlanVersion = 'v1';
-    let requiresContextSelection = true;
+
+    // Review tracking (not in modules)
+    const REVIEW_STORAGE_KEY = 'aprReviewStatusV1';
+    let reviewStore = {};
+
+    // Work order amendments (not in modules)
+    const WORK_ORDER_AMENDMENTS_KEY = 'aprWorkOrderAmendmentsV1';
+    let workOrderAmendments = {};
+
+    // Group management (not in modules)
+    const GROUP_STORAGE_KEY = 'aprGroupStoreV1';
 
     function loadCommentStore() {
       try {
@@ -311,7 +302,7 @@
     }
 
     function getUnitForJob(jobNumber) {
-      return stdJobs.get(jobNumber)?.unit || currentJobsMap.get(jobNumber)?.unit || '';
+      return window.stdJobs.get(jobNumber)?.unit || window.currentJobsMap.get(jobNumber)?.unit || '';
     }
 
     function getGroupUnitLabel(group) {
@@ -400,7 +391,7 @@
       if (!table) return;
       const normalizedFilter = filterText.toLowerCase().trim();
       const selectedSet = new Set(selectedJobs || getSelectedGroupJobNumbers());
-      const jobs = Array.from(stdJobs.entries()).map(([jobNumber, meta]) => ({
+      const jobs = Array.from(window.stdJobs.entries()).map(([jobNumber, meta]) => ({
         jobNumber,
         disc: meta?.disc || '',
         desc: meta?.desc || '',
@@ -589,7 +580,7 @@
       if (!Number.isFinite(updatedUnits)) return false;
       const order = currentWorkOrders.find(item => item.id === orderId);
       if (!order) return false;
-      const job = wData?.get(order.jobNumber);
+      const job = window.wData?.get(order.jobNumber);
       if (!job) return false;
       const previousUnits = Number(order.units) || 0;
       if (Math.abs(previousUnits - updatedUnits) < 0.0001) return false;
@@ -608,7 +599,7 @@
       job.wgs[order.workGroup][order.period] = (job.wgs[order.workGroup][order.period] || 0) + delta;
       updateWorkOrderAmendment(orderId, updatedUnits, order.originalUnits);
       render();
-      const updatedJob = currentJobsMap.get(order.jobNumber);
+      const updatedJob = window.currentJobsMap.get(order.jobNumber);
       if (updatedJob) {
         showBreakdown(updatedJob, { scrollTop: false });
       }
@@ -655,10 +646,10 @@
         WORK_GROUP_SETS_RAW.split('\n').slice(1).forEach(line => {
           const p = line.split('\t');
           if (p.length >= 2) {
-            workGroupSets.set(p[0].trim(), p[1].trim());
+            window.workGroupSets.set(p[0].trim(), p[1].trim());
           }
         });
-        console.log('✓ Work group sets loaded:', workGroupSets.size);
+        console.log('✓ Work group sets loaded:', window.workGroupSets.size);
       } else {
         console.warn('⚠ work-group-sets-data.js not found - using raw values');
       }
@@ -667,12 +658,12 @@
         STANDARD_JOBS_RAW.split('\n').slice(1).forEach(line => {
           const p = line.split('\t');
           if (p.length >= 5) {
-            stdJobs.set(p[2].trim().padStart(6,'0'), {
+            window.stdJobs.set(p[2].trim().padStart(6,'0'), {
               disc: p[0].trim(), mnt: p[1].trim(), desc: p[3].trim(), unit: p[4].trim()
             });
           }
         });
-        console.log('✓ Standard jobs loaded:', stdJobs.size);
+        console.log('✓ Standard jobs loaded:', window.stdJobs.size);
       } else {
         console.warn('⚠ standard-jobs-data.js not found - all jobs will be processed');
         // Process all jobs when no filter available
@@ -743,8 +734,8 @@
       const text = String(raw).trim();
       if (!text) return 'Unspecified';
       const code = text.split(/\s+/)[0];
-      if (workGroupSets.has(code)) return workGroupSets.get(code);
-      if (workGroupSets.has(text)) return workGroupSets.get(text);
+      if (window.workGroupSets.has(code)) return window.workGroupSets.get(code);
+      if (window.workGroupSets.has(text)) return window.workGroupSets.get(text);
       return text;
     }
 
@@ -780,7 +771,7 @@
 
     function getWorkGroupOptions() {
       const names = new Set();
-      [fData, wData].forEach(source => {
+      [fData, window.wData].forEach(source => {
         if (!source) return;
         source.forEach(job => {
           Object.keys(job.wgs || {}).forEach(wg => {
@@ -886,7 +877,7 @@
     }
 
     function showBreakdownByJobNumber(jobNumber) {
-      const job = currentJobsMap.get(jobNumber);
+      const job = window.currentJobsMap.get(jobNumber);
       if (!job) return;
       showBreakdown(job, { scrollTop: true });
     }
@@ -905,9 +896,9 @@
     }
 
     function getMaxWorkDonePeriod() {
-      if (!wData) return 0;
+      if (!window.wData) return 0;
       let max = 0;
-      wData.forEach(job => {
+      window.wData.forEach(job => {
         Object.entries(job.periods || {}).forEach(([period, value]) => {
           const numeric = parseInt(String(period).replace(/[^0-9]/g, ''), 10);
           if (!Number.isNaN(numeric) && numeric > max && value !== 0) {
@@ -960,7 +951,7 @@
           if (!jn || jn==='000000') return;
           
           // If no standard jobs loaded, accept all jobs
-          if (stdJobs.size > 0 && !stdJobs.has(jn)) return;
+          if (window.stdJobs.size > 0 && !window.stdJobs.has(jn)) return;
           
           matched++;
           if (!fData.has(jn)) {
@@ -1006,7 +997,7 @@
         console.log('Work done:', rows.length, 'rows');
         console.log('Columns:', Object.keys(rows[0]||{}));
         
-        wData = new Map();
+        window.wData = new Map();
         let matched = 0;
         let sampleUnmatched = [];
         
@@ -1039,12 +1030,12 @@
           if (!jn) return;
           
           // If no standard jobs loaded, accept all jobs
-          if (stdJobs.size > 0 && !stdJobs.has(jn)) return;
+          if (window.stdJobs.size > 0 && !window.stdJobs.has(jn)) return;
           
           if (!per.match(/^P\d+$/i)) return;
           matched++;
-          if (!wData.has(jn)) wData.set(jn, {periods:{}, wgs:{}});
-          const job = wData.get(jn);
+          if (!window.wData.has(jn)) window.wData.set(jn, {periods:{}, wgs:{}});
+          const job = window.wData.get(jn);
           if (!job.workOrders) job.workOrders = [];
           const rawUnits = parseFloat(units || 0);
           const workOrderNumber = extractWorkOrderNumber(r);
@@ -1290,7 +1281,7 @@
       if (!groupId) return [];
       const group = groupStore.find(entry => entry.id === groupId);
       if (!group) return [];
-      return group.jobNumbers.flatMap(jobNumber => wData?.get(jobNumber)?.workOrders || []);
+      return group.jobNumbers.flatMap(jobNumber => window.wData?.get(jobNumber)?.workOrders || []);
     }
 
     function renderWorkOrders() {
@@ -1480,13 +1471,13 @@
         const numeric = parseInt(String(cutoffValue).replace(/[^0-9]/g, ''), 10);
         return Number.isNaN(numeric) ? 0 : numeric;
       })();
-      const all = new Set([...(fData?.keys()||[]), ...(wData?.keys()||[])]);
+      const all = new Set([...(fData?.keys()||[]), ...(window.wData?.keys()||[])]);
       const baseJobs = [];
       all.forEach(jn => {
         // Get metadata from standard jobs if available
-        const meta = stdJobs.get(jn);
+        const meta = window.stdJobs.get(jn);
         const f = fData?.get(jn);
-        const a = wData?.get(jn);
+        const a = window.wData?.get(jn);
         
         const job = {
           jn, 
@@ -1601,7 +1592,7 @@
 
       const cont = document.getElementById('jobs');
       cont.innerHTML = '';
-      currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
+      window.currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
       updateTopBarStats({ jobs: baseJobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter });
 
       Object.keys(byDisc).sort().forEach(disc => {
@@ -1808,7 +1799,7 @@
         const v0 = getForecastTotal(v0Snapshot.data.get(jobNumber));
         const v1 = getForecastTotal(v1Snapshot.data.get(jobNumber));
         const delta = v1 - v0;
-        const desc = stdJobs.get(jobNumber)?.desc || `Job ${jobNumber}`;
+        const desc = window.stdJobs.get(jobNumber)?.desc || `Job ${jobNumber}`;
         if (changedOnly && delta === 0) return;
         if (search && !`${jobNumber} ${desc}`.toLowerCase().includes(search)) return;
         rows.push({ jobNumber, desc, v0, v1, delta });
@@ -2050,7 +2041,7 @@
       // Work orders
       currentWorkOrders = job.isGroupRollup
         ? getWorkOrdersForGroup(job.groupId).slice()
-        : (wData?.get(job.jn)?.workOrders || []).slice();
+        : (window.wData?.get(job.jn)?.workOrders || []).slice();
       currentWorkOrderWorkGroup = wgFilter;
       const woSearch = document.getElementById('woSearch');
       const woFlagOnly = document.getElementById('woFlagOnly');

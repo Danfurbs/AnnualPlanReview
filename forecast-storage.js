@@ -4,7 +4,7 @@
  */
 
 const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
-const FORECAST_PERIODS = Array.from({ length: 13 }, (_, i) => `P${i + 1}`);
+const FORECAST_PERIODS = window.FORECAST_PERIODS;
 
 /**
  * Generate localStorage key for a forecast

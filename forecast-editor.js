@@ -3,8 +3,11 @@
  * Forecast editor UI and interaction logic
  */
 
-// Forecast editor state
-let forecastEditorState = {
+// Use shared globals from forecast-globals.js
+const window.forecastEditorState = window.window.forecastEditorState;
+const FORECAST_PERIODS = window.FORECAST_PERIODS;
+const PLAN_VERSIONS = window.PLAN_VERSIONS;
+let window.forecastEditorState = {
   year: '',
   planVersion: '',
   workGroup: '',
@@ -57,13 +60,13 @@ function closeForecastEditor() {
  */
 function initializeForecastEditor() {
   // Set initial context
-  forecastEditorState.year = currentFinancialYear || getFinancialYearOptions()[0] || 'FY27';
-  forecastEditorState.planVersion = currentPlanVersion || 'v1';
+  window.forecastEditorState.year = window.currentFinancialYear || getFinancialYearOptions()[0] || 'FY27';
+  window.forecastEditorState.planVersion = window.currentPlanVersion || 'v1';
 
   // Load forecast for this context
-  const snapshot = getForecastSnapshot(forecastEditorState.year, forecastEditorState.planVersion);
+  const snapshot = getForecastSnapshot(window.forecastEditorState.year, window.forecastEditorState.planVersion);
   if (snapshot) {
-    fData = snapshot.data;
+    window.fData = snapshot.data;
   }
 
   // Render selectors and table
@@ -87,29 +90,29 @@ function renderForecastEditorSelectors() {
   yearSelect.innerHTML = yearOptions
     .map(year => `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`)
     .join('');
-  forecastEditorState.year = yearOptions.includes(forecastEditorState.year)
-    ? forecastEditorState.year
-    : (currentFinancialYear || yearOptions[0] || '');
-  yearSelect.value = forecastEditorState.year;
+  window.forecastEditorState.year = yearOptions.includes(window.forecastEditorState.year)
+    ? window.forecastEditorState.year
+    : (window.currentFinancialYear || yearOptions[0] || '');
+  yearSelect.value = window.forecastEditorState.year;
 
   // Plan version selector
   planSelect.innerHTML = PLAN_VERSIONS
     .map(plan => `<option value="${escapeHtml(plan.id)}">${escapeHtml(plan.label)}</option>`)
     .join('');
-  forecastEditorState.planVersion = PLAN_VERSIONS.some(plan => plan.id === forecastEditorState.planVersion)
-    ? forecastEditorState.planVersion
-    : (currentPlanVersion || 'v1');
-  planSelect.value = forecastEditorState.planVersion;
+  window.forecastEditorState.planVersion = PLAN_VERSIONS.some(plan => plan.id === window.forecastEditorState.planVersion)
+    ? window.forecastEditorState.planVersion
+    : (window.currentPlanVersion || 'v1');
+  planSelect.value = window.forecastEditorState.planVersion;
 
   // Work group selector
   const workGroupOptions = getAllWorkGroupSetNames();
   workGroupSelect.innerHTML = workGroupOptions
     .map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
     .join('');
-  forecastEditorState.workGroup = workGroupOptions.includes(forecastEditorState.workGroup)
-    ? forecastEditorState.workGroup
+  window.forecastEditorState.workGroup = workGroupOptions.includes(window.forecastEditorState.workGroup)
+    ? window.forecastEditorState.workGroup
     : (workGroupOptions[0] || '');
-  workGroupSelect.value = forecastEditorState.workGroup;
+  workGroupSelect.value = window.forecastEditorState.workGroup;
 
   // Load rows for current context
   loadForecastEditorRows();
@@ -120,11 +123,11 @@ function renderForecastEditorSelectors() {
  * Load forecast editor rows from current forecast data
  */
 function loadForecastEditorRows() {
-  const workGroup = forecastEditorState.workGroup;
+  const workGroup = window.forecastEditorState.workGroup;
   const rows = [];
 
-  if (fData && workGroup) {
-    fData.forEach((job, jobNumber) => {
+  if (window.fData && workGroup) {
+    window.fData.forEach((job, jobNumber) => {
       const wgData = job?.wgs?.[workGroup];
       if (!wgData) return;
 
@@ -147,7 +150,7 @@ function loadForecastEditorRows() {
   rows.sort((a, b) => a.jobNumber.localeCompare(b.jobNumber));
 
   // Set rows or create empty rows
-  forecastEditorState.rows = rows.length ? rows : Array.from({ length: 5 }, () => createForecastEditorRow());
+  window.forecastEditorState.rows = rows.length ? rows : Array.from({ length: 5 }, () => createForecastEditorRow());
 }
 
 /**
@@ -173,7 +176,7 @@ function renderForecastEditorTable() {
   if (!table) return;
 
   const baselineMap = getForecastEditorBaselineMap();
-  const workGroup = forecastEditorState.workGroup;
+  const workGroup = window.forecastEditorState.workGroup;
 
   // Header
   const header = `
@@ -192,7 +195,7 @@ function renderForecastEditorTable() {
   // Body
   const body = `
     <tbody>
-      ${forecastEditorState.rows.map((row, index) => {
+      ${window.forecastEditorState.rows.map((row, index) => {
         const desc = row.desc || '';
         const unit = row.unit || '';
         const searchValue = `${row.jobNumber || ''} ${desc || ''}`.toLowerCase();
@@ -263,9 +266,9 @@ function renderForecastEditorTable() {
  * Get baseline map for v0 vs v1 comparison
  */
 function getForecastEditorBaselineMap() {
-  if (forecastEditorState.planVersion !== 'v1') return null;
+  if (window.forecastEditorState.planVersion !== 'v1') return null;
 
-  const v0Snapshot = getForecastSnapshot(forecastEditorState.year, 'v0');
+  const v0Snapshot = getForecastSnapshot(window.forecastEditorState.year, 'v0');
   if (!v0Snapshot) return null;
 
   return v0Snapshot.data;
@@ -305,7 +308,7 @@ function getForecastEditorTotals() {
     periodTotals[period] = 0;
   });
 
-  forecastEditorState.rows.forEach(row => {
+  window.forecastEditorState.rows.forEach(row => {
     FORECAST_PERIODS.forEach(period => {
       const value = Number(row.volumes?.[period] || 0);
       periodTotals[period] += value;
@@ -320,7 +323,7 @@ function getForecastEditorTotals() {
  * Update forecast editor summary stats
  */
 function updateForecastEditorSummary() {
-  const jobCount = forecastEditorState.rows.filter(row => row.jobNumber).length;
+  const jobCount = window.forecastEditorState.rows.filter(row => row.jobNumber).length;
   const totals = getForecastEditorTotals();
 
   const jobCountEl = document.getElementById('forecastEditorJobCount');
@@ -330,14 +333,14 @@ function updateForecastEditorSummary() {
   if (totalVolumeEl) totalVolumeEl.textContent = formatForecastNumber(totals.grandTotal);
 
   const rowCountEl = document.getElementById('forecastEditorRowCount');
-  if (rowCountEl) rowCountEl.textContent = forecastEditorState.rows.length;
+  if (rowCountEl) rowCountEl.textContent = window.forecastEditorState.rows.length;
 
   const loadedBadgeEl = document.getElementById('forecastEditorLoadedBadge');
   if (loadedBadgeEl) loadedBadgeEl.textContent = `${jobCount} jobs loaded`;
 
   const summaryEl = document.getElementById('forecastEditorSummary');
   if (summaryEl) {
-    summaryEl.textContent = `Editing ${forecastEditorState.year} ${forecastEditorState.planVersion.toUpperCase()} for work group: ${forecastEditorState.workGroup}`;
+    summaryEl.textContent = `Editing ${window.forecastEditorState.year} ${window.forecastEditorState.planVersion.toUpperCase()} for work group: ${window.forecastEditorState.workGroup}`;
   }
 }
 
@@ -356,7 +359,7 @@ function filterForecastEditorTable() {
  * Add a new row to the forecast editor
  */
 function addForecastEditorRow() {
-  forecastEditorState.rows.push(createForecastEditorRow());
+  window.forecastEditorState.rows.push(createForecastEditorRow());
   renderForecastEditorTable();
   updateForecastEditorSummary();
 }
@@ -365,7 +368,7 @@ function addForecastEditorRow() {
  * Clear forecast editor table
  */
 function clearForecastEditorTable() {
-  forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
+  window.forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
   renderForecastEditorTable();
   updateForecastEditorSummary();
 
@@ -381,24 +384,24 @@ function handleForecastEditorContextChange() {
   const planSelect = document.getElementById('forecastEditorPlan');
   const workGroupSelect = document.getElementById('forecastEditorWorkGroup');
 
-  const newYear = yearSelect?.value || forecastEditorState.year;
-  const newPlan = planSelect?.value || forecastEditorState.planVersion;
-  const newWorkGroup = workGroupSelect?.value || forecastEditorState.workGroup;
+  const newYear = yearSelect?.value || window.forecastEditorState.year;
+  const newPlan = planSelect?.value || window.forecastEditorState.planVersion;
+  const newWorkGroup = workGroupSelect?.value || window.forecastEditorState.workGroup;
 
   // Check if context changed
-  const contextChanged = newYear !== forecastEditorState.year || newPlan !== forecastEditorState.planVersion;
+  const contextChanged = newYear !== window.forecastEditorState.year || newPlan !== window.forecastEditorState.planVersion;
 
-  forecastEditorState.year = newYear;
-  forecastEditorState.planVersion = newPlan;
-  forecastEditorState.workGroup = newWorkGroup;
+  window.forecastEditorState.year = newYear;
+  window.forecastEditorState.planVersion = newPlan;
+  window.forecastEditorState.workGroup = newWorkGroup;
 
   // Reload forecast data if year/plan changed
   if (contextChanged) {
-    const snapshot = getForecastSnapshot(forecastEditorState.year, forecastEditorState.planVersion);
+    const snapshot = getForecastSnapshot(window.forecastEditorState.year, window.forecastEditorState.planVersion);
     if (snapshot) {
-      fData = snapshot.data;
+      window.fData = snapshot.data;
     } else {
-      fData = null;
+      window.fData = null;
     }
   }
 
@@ -418,7 +421,7 @@ function handleForecastEditorSubmit(event) {
   syncForecastEditorTableState();
 
   // Filter out empty rows
-  const rowsToSave = forecastEditorState.rows.filter(row => {
+  const rowsToSave = window.forecastEditorState.rows.filter(row => {
     if (!row.jobNumber) return false;
     const hasVolume = FORECAST_PERIODS.some(period => Number(row.volumes?.[period] || 0) !== 0);
     return hasVolume;
@@ -430,20 +433,20 @@ function handleForecastEditorSubmit(event) {
   }
 
   // Update forecast data
-  fData = updateForecastWorkGroup(fData, rowsToSave, forecastEditorState.workGroup);
+  window.fData = updateForecastWorkGroup(window.fData, rowsToSave, window.forecastEditorState.workGroup);
 
   // Clean up empty jobs
-  fData = cleanForecastData(fData);
+  window.fData = cleanForecastData(window.fData);
 
   // Save to localStorage
-  const saved = saveForecastToStorage(fData, fData.size, forecastEditorState.year, forecastEditorState.planVersion);
+  const saved = saveForecastToStorage(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
 
   if (saved) {
     const statusEl = document.getElementById('forecastEditorStatus');
     if (statusEl) {
-      statusEl.textContent = `✓ Saved ${rowsToSave.length} jobs for ${forecastEditorState.workGroup} at ${new Date().toLocaleTimeString()}`;
+      statusEl.textContent = `✓ Saved ${rowsToSave.length} jobs for ${window.forecastEditorState.workGroup} at ${new Date().toLocaleTimeString()}`;
     }
-    console.log(`✓ Forecast saved: ${forecastEditorState.year} ${forecastEditorState.planVersion} (${rowsToSave.length} jobs)`);
+    console.log(`✓ Forecast saved: ${window.forecastEditorState.year} ${window.forecastEditorState.planVersion} (${rowsToSave.length} jobs)`);
   } else {
     alert('Failed to save forecast. Check console for details.');
   }
@@ -474,7 +477,7 @@ function syncForecastEditorTableState() {
     };
   });
 
-  forecastEditorState.rows = rows;
+  window.forecastEditorState.rows = rows;
 }
 
 /**
@@ -494,32 +497,32 @@ function handleForecastEditorTableInput(event) {
 
     // Update row metadata
     const meta = getJobMetadata(jobNumber);
-    forecastEditorState.rows[rowIndex].jobNumber = jobNumber;
-    forecastEditorState.rows[rowIndex].desc = meta?.desc || '';
-    forecastEditorState.rows[rowIndex].unit = meta?.unit || '';
+    window.forecastEditorState.rows[rowIndex].jobNumber = jobNumber;
+    window.forecastEditorState.rows[rowIndex].desc = meta?.desc || '';
+    window.forecastEditorState.rows[rowIndex].unit = meta?.unit || '';
 
     // Load existing volumes for this job
-    const existingVolumes = getForecastWorkGroupData(fData, jobNumber, forecastEditorState.workGroup);
+    const existingVolumes = getForecastWorkGroupData(window.fData, jobNumber, window.forecastEditorState.workGroup);
     FORECAST_PERIODS.forEach(period => {
-      forecastEditorState.rows[rowIndex].volumes[period] = Number(existingVolumes[period] || 0);
+      window.forecastEditorState.rows[rowIndex].volumes[period] = Number(existingVolumes[period] || 0);
     });
 
     // Update DOM
     const descCell = rowEl.querySelector('[data-role="desc"]');
     const unitCell = rowEl.querySelector('[data-role="unit"]');
     if (descCell) {
-      descCell.textContent = forecastEditorState.rows[rowIndex].desc || 'Auto-fill';
-      descCell.classList.toggle('forecast-cell-muted', !forecastEditorState.rows[rowIndex].desc);
+      descCell.textContent = window.forecastEditorState.rows[rowIndex].desc || 'Auto-fill';
+      descCell.classList.toggle('forecast-cell-muted', !window.forecastEditorState.rows[rowIndex].desc);
     }
     if (unitCell) {
-      unitCell.textContent = forecastEditorState.rows[rowIndex].unit || 'Auto-fill';
-      unitCell.classList.toggle('forecast-cell-muted', !forecastEditorState.rows[rowIndex].unit);
+      unitCell.textContent = window.forecastEditorState.rows[rowIndex].unit || 'Auto-fill';
+      unitCell.classList.toggle('forecast-cell-muted', !window.forecastEditorState.rows[rowIndex].unit);
     }
 
     // Update period inputs
     rowEl.querySelectorAll('input[data-period]').forEach(input => {
       const period = input.dataset.period;
-      const value = Number(forecastEditorState.rows[rowIndex].volumes[period] || 0);
+      const value = Number(window.forecastEditorState.rows[rowIndex].volumes[period] || 0);
       input.value = value ? value : '';
       updateCellHighlight(rowIndex, period, input);
     });
@@ -533,7 +536,7 @@ function handleForecastEditorTableInput(event) {
   if (event.target.matches('input[data-period]')) {
     const period = event.target.dataset.period;
     const value = parseFloat(event.target.value);
-    forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
+    window.forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
     updateCellHighlight(rowIndex, period, event.target);
     updateForecastEditorSummary();
     updateForecastEditorTotalsDisplay();
@@ -544,7 +547,7 @@ function handleForecastEditorTableInput(event) {
  * Update cell highlighting for v0 vs v1 changes
  */
 function updateCellHighlight(rowIndex, period, inputElement) {
-  if (forecastEditorState.planVersion !== 'v1') {
+  if (window.forecastEditorState.planVersion !== 'v1') {
     inputElement.classList.remove('is-changed');
     return;
   }
@@ -555,14 +558,14 @@ function updateCellHighlight(rowIndex, period, inputElement) {
     return;
   }
 
-  const row = forecastEditorState.rows[rowIndex];
+  const row = window.forecastEditorState.rows[rowIndex];
   if (!row || !row.jobNumber) {
     inputElement.classList.remove('is-changed');
     return;
   }
 
   const currentValue = Number(row.volumes?.[period] || 0);
-  const baselineValue = getBaselineValue(baselineMap, row.jobNumber, forecastEditorState.workGroup, period);
+  const baselineValue = getBaselineValue(baselineMap, row.jobNumber, window.forecastEditorState.workGroup, period);
   const isChanged = currentValue !== Number(baselineValue || 0);
 
   inputElement.classList.toggle('is-changed', isChanged);
@@ -585,7 +588,7 @@ function updateForecastEditorTotalsDisplay() {
   if (grandTotalCell) grandTotalCell.textContent = formatForecastNumber(totals.grandTotal);
 
   // Update row totals
-  forecastEditorState.rows.forEach((row, index) => {
+  window.forecastEditorState.rows.forEach((row, index) => {
     const rowTotal = getForecastEditorRowTotal(row);
     const cell = document.querySelector(`[data-role="row-total"][data-row="${index}"]`);
     if (cell) cell.textContent = formatForecastNumber(rowTotal);
@@ -616,8 +619,8 @@ function handleForecastEditorTablePaste(event) {
 
   // Ensure enough rows exist
   const requiredRows = startRowIndex + parsed.length;
-  while (forecastEditorState.rows.length < requiredRows) {
-    forecastEditorState.rows.push(createForecastEditorRow());
+  while (window.forecastEditorState.rows.length < requiredRows) {
+    window.forecastEditorState.rows.push(createForecastEditorRow());
   }
 
   // Paste data
@@ -629,7 +632,7 @@ function handleForecastEditorTablePaste(event) {
 
       const period = FORECAST_PERIODS[periodIndex];
       const value = parseFloat(cellValue);
-      forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
+      window.forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
     });
   });
 
@@ -650,11 +653,11 @@ function handleForecastEditorDeleteRow(event) {
   const rowIndex = Number(button.dataset.row);
   if (!Number.isFinite(rowIndex)) return;
 
-  forecastEditorState.rows.splice(rowIndex, 1);
+  window.forecastEditorState.rows.splice(rowIndex, 1);
 
   // Ensure at least 1 empty row
-  if (!forecastEditorState.rows.length) {
-    forecastEditorState.rows.push(createForecastEditorRow());
+  if (!window.forecastEditorState.rows.length) {
+    window.forecastEditorState.rows.push(createForecastEditorRow());
   }
 
   renderForecastEditorTable();
@@ -679,12 +682,12 @@ function submitForecastEditorForm() {
  * Download forecast export (JSON)
  */
 function downloadForecastEditorExport() {
-  if (!fData || !fData.size) {
+  if (!window.fData || !window.fData.size) {
     alert('No forecast data to export. Save your changes first.');
     return;
   }
 
-  exportForecastFile(forecastEditorState.year, forecastEditorState.planVersion, fData, fData.size);
+  exportForecastFile(window.forecastEditorState.year, window.forecastEditorState.planVersion, window.fData, window.fData.size);
 }
 
 /**
