@@ -98,7 +98,7 @@
       if (!REVIEW_STAGES.includes(stage)) return;
       currentReviewStage = stage;
       currentFinancialYear = year || currentFinancialYear;
-      currentPlanVersion = getPreferredPlanVersion(currentFinancialYear, stage);
+      currentPlanVersion = getPreferredPlanVersion(currentFinancialYear);
       requiresContextSelection = false;
       if (persist) {
         localStorage.setItem(REVIEW_STAGE_KEY, stage);
@@ -112,14 +112,96 @@
       updateReviewContextDisplay();
       updateContextControls();
       fData = null;
-      const forecastCache = loadForecastStore(currentFinancialYear, stage, currentPlanVersion);
+      const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
+        fData = forecastCache.data;
         updateWorkGroupFilterOptions();
         console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
-      } else if (loadForecastFromLibrary(currentFinancialYear, stage, currentPlanVersion)) {
-        updateWorkGroupFilterOptions();
+      } else {
+        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+        if (libraryForecast) {
+          fData = libraryForecast.data;
+          updateWorkGroupFilterOptions();
+        }
       }
       closeStageModal();
+      render();
+    }
+
+    function updateContextControls() {
+      const reviewStageHelper = document.getElementById('reviewStageHelper');
+      if (reviewStageHelper) {
+        const stageLabel = currentReviewStage || 'RF';
+        const yearLabel = currentFinancialYear || 'FY';
+        reviewStageHelper.textContent = `Current selection: ${yearLabel} ${stageLabel}.`;
+      }
+      const planDisplay = document.getElementById('planVersionDisplay');
+      if (planDisplay) {
+        const label = PLAN_VERSIONS.find(plan => plan.id === currentPlanVersion)?.label || 'Plan';
+        planDisplay.textContent = label;
+      }
+      const statusMessage = document.getElementById('forecastStatusMessage');
+      if (statusMessage) {
+        if (!currentFinancialYear || !currentReviewStage) {
+          statusMessage.textContent = 'Select a financial year and RF stage to load forecasts.';
+        } else {
+          const availability = getForecastAvailability(currentFinancialYear);
+          if (!availability.v0 && !availability.v1) {
+            statusMessage.textContent = `No forecast updated for ${currentFinancialYear} yet.`;
+          } else {
+            const label = PLAN_VERSIONS.find(plan => plan.id === currentPlanVersion)?.label || 'Plan';
+            const suffix = availability.v1 && availability.v0 ? ' (v0 & v1 available)' : '';
+            statusMessage.textContent = `Using ${label} forecast${suffix} (FY-wide across RF stages).`;
+          }
+        }
+      }
+      const forecastPage = document.getElementById('forecastPage');
+      if (forecastPage && !forecastPage.classList.contains('is-hidden')) {
+        renderForecastEditorSelectors();
+      }
+    }
+
+    function normalizeJobNumberInput(value) {
+      return String(value || '').trim();
+    }
+
+    function setForecastContext(stage, year, planVersion, { persist = true } = {}) {
+      if (!REVIEW_STAGES.includes(stage)) return;
+      if (planVersion && !PLAN_VERSIONS.some(plan => plan.id === planVersion)) return;
+      currentReviewStage = stage;
+      currentFinancialYear = year || currentFinancialYear;
+      currentPlanVersion = planVersion || currentPlanVersion;
+      requiresContextSelection = false;
+      if (persist) {
+        localStorage.setItem(REVIEW_STAGE_KEY, stage);
+        if (currentFinancialYear) {
+          localStorage.setItem(FINANCIAL_YEAR_KEY, currentFinancialYear);
+        }
+        if (currentPlanVersion) {
+          localStorage.setItem(PLAN_VERSION_KEY, currentPlanVersion);
+        }
+      }
+      updateReviewContextDisplay();
+      updateContextControls();
+      fData = null;
+      const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+      if (forecastCache) {
+        fData = forecastCache.data;
+        updateWorkGroupFilterOptions();
+        console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+      } else {
+        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+        if (libraryForecast) {
+          fData = libraryForecast.data;
+          updateWorkGroupFilterOptions();
+        } else if (currentPlanVersion === 'v1') {
+          const initialized = initializeV1FromV0(currentFinancialYear);
+          if (initialized) {
+            fData = initialized.data;
+            updateWorkGroupFilterOptions();
+          }
+        }
+      }
       render();
     }
 
@@ -177,1054 +259,17 @@
       saveReviewStore();
     }
 
-    function serializeForecastData(map) {
-      const output = {};
-      map.forEach((value, key) => {
-        output[key] = value;
-      });
-      return output;
-    }
-
-    function hydrateForecastData(raw) {
-      const output = new Map();
-      Object.entries(raw || {}).forEach(([key, value]) => {
-        if (value && typeof value === 'object') {
-          output.set(key, value);
-        }
-      });
-      return output;
-    }
-
-    function cloneForecastData(map) {
-      const cloned = new Map();
-      if (!map) return cloned;
-      map.forEach((value, key) => {
-        const periods = value?.periods ? { ...value.periods } : {};
-        const wgs = {};
-        Object.entries(value?.wgs || {}).forEach(([wg, data]) => {
-          wgs[wg] = { ...data };
-        });
-        cloned.set(key, { periods, wgs });
-      });
-      return cloned;
-    }
-
-    function getForecastStorageKey(year, planVersion) {
-      if (!year || !planVersion) return FORECAST_STORAGE_KEY;
-      return `${FORECAST_STORAGE_KEY}:${year}:${planVersion}`;
-    }
-
-    function loadForecastStore(year = currentFinancialYear, stage = currentReviewStage, planVersion = currentPlanVersion) {
-      try {
-        const raw = localStorage.getItem(getForecastStorageKey(year, planVersion));
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object') return null;
-        const hydrated = hydrateForecastData(parsed.data);
-        if (!hydrated.size) return null;
-        fData = hydrated;
-        return {
-          rowCount: parsed.rowCount ?? hydrated.size,
-          savedAt: parsed.savedAt || null
-        };
-      } catch (err) {
-        console.warn('Failed to load forecast cache:', err);
-        return null;
-      }
-    }
-
-    function saveForecastStore(rowCount, year = currentFinancialYear, stage = currentReviewStage, planVersion = currentPlanVersion) {
-      try {
-        if (!year || !planVersion) {
-          console.warn('Missing forecast context; skipping forecast cache save.');
-          return;
-        }
-        const payload = {
-          data: serializeForecastData(fData || new Map()),
-          rowCount: rowCount ?? null,
-          savedAt: new Date().toISOString()
-        };
-        localStorage.setItem(getForecastStorageKey(year, planVersion), JSON.stringify(payload));
-      } catch (err) {
-        console.warn('Failed to persist forecast cache:', err);
-      }
-    }
-
-    function getFinancialYearOptions() {
-      const libraryYears = (() => {
-        if (typeof FORECAST_LIBRARY === 'undefined' || !FORECAST_LIBRARY) return [];
-        return Object.keys(FORECAST_LIBRARY);
-      })();
-      const current = currentFinancialYear ? [currentFinancialYear] : [];
-      const combined = Array.from(new Set([...libraryYears, ...DEFAULT_FINANCIAL_YEARS, ...current]));
-      return combined.length ? combined.sort() : DEFAULT_FINANCIAL_YEARS;
-    }
-
-    function getPlanVersionOptions() {
-      return PLAN_VERSIONS;
-    }
-
-    function getForecastAvailability(year, stage) {
-      return {
-        v1: Boolean(getForecastSnapshot(year, stage, 'v1')),
-        v0: Boolean(getForecastSnapshot(year, stage, 'v0'))
-      };
-    }
-
-    function getPreferredPlanVersion(year, stage) {
-      if (!year || !stage) return currentPlanVersion || 'v1';
-      const availability = getForecastAvailability(year, stage);
-      if (availability.v1) return 'v1';
-      if (availability.v0) return 'v0';
-      return currentPlanVersion || 'v1';
-    }
-
-    function getForecastLibraryEntry(year, stage, planVersion) {
-      if (!year || !stage || !planVersion) return null;
-      if (typeof FORECAST_LIBRARY === 'undefined' || !FORECAST_LIBRARY) return null;
-      return FORECAST_LIBRARY?.[year]?.[planVersion]?.[stage] || null;
-    }
-
-    function loadForecastFromLibrary(year, stage, planVersion) {
-      const entry = getForecastLibraryEntry(year, stage, planVersion);
-      if (!entry || !entry.data) return false;
-      const hydrated = hydrateForecastData(entry.data);
-      if (!hydrated.size) return false;
-      fData = hydrated;
-      lastForecastRowCount = entry.rowCount ?? hydrated.size;
-      updateWorkGroupFilterOptions();
-      console.log(`✓ Forecast library loaded for ${year} ${stage} ${planVersion}`, entry.rowCount ? `(${entry.rowCount} rows)` : '');
-      return true;
-    }
-
-    function initializeV1FromV0(year, stage) {
-      if (!year || !stage) return false;
-      const v1Snapshot = getForecastSnapshot(year, stage, 'v1');
-      if (v1Snapshot) return false;
-      const v0Snapshot = getForecastSnapshot(year, stage, 'v0');
-      if (!v0Snapshot || !v0Snapshot.data?.size) return false;
-      fData = cloneForecastData(v0Snapshot.data);
-      lastForecastRowCount = fData.size;
-      saveForecastStore(fData.size, year, stage, 'v1');
-      console.log(`✓ Plan v1 initialized from v0 for ${year} ${stage}`);
-      return true;
-    }
-
-    function downloadForecastLibraryEntry() {
-      if (!currentFinancialYear || !currentReviewStage) {
-        alert('Select a financial year and RF stage first.');
-        return;
-      }
-      if (!currentPlanVersion) {
-        alert('Select a plan version first.');
-        return;
-      }
-      if (!fData || !fData.size) {
-        alert('Load a forecast file before exporting.');
-        return;
-      }
-      const payload = {
-        [currentFinancialYear]: {
-          [currentPlanVersion]: {
-            [currentReviewStage]: {
-              rowCount: lastForecastRowCount ?? fData.size,
-              data: serializeForecastData(fData)
-            }
-          }
-        }
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `forecast-library-${currentFinancialYear}-${currentPlanVersion}-${currentReviewStage}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(link.href);
-    }
-
-    function updateContextControls() {
-      const reviewStageHelper = document.getElementById('reviewStageHelper');
-      if (reviewStageHelper) {
-        const stageLabel = currentReviewStage || 'RF';
-        const yearLabel = currentFinancialYear || 'FY';
-        reviewStageHelper.textContent = `Current selection: ${yearLabel} ${stageLabel}.`;
-      }
-      const planDisplay = document.getElementById('planVersionDisplay');
-      if (planDisplay) {
-        const label = PLAN_VERSIONS.find(plan => plan.id === currentPlanVersion)?.label || 'Plan';
-        planDisplay.textContent = label;
-      }
-      const statusMessage = document.getElementById('forecastStatusMessage');
-      if (statusMessage) {
-        if (!currentFinancialYear || !currentReviewStage) {
-          statusMessage.textContent = 'Select a financial year and RF stage to load forecasts.';
-        } else {
-          const availability = getForecastAvailability(currentFinancialYear, currentReviewStage);
-          if (!availability.v0 && !availability.v1) {
-            statusMessage.textContent = `No forecast updated for ${currentFinancialYear} ${currentReviewStage} yet.`;
-          } else {
-            const label = PLAN_VERSIONS.find(plan => plan.id === currentPlanVersion)?.label || 'Plan';
-            const suffix = availability.v1 && availability.v0 ? ' (v0 & v1 available)' : '';
-            statusMessage.textContent = `Using ${label} forecast${suffix} (FY-wide across RF stages).`;
-          }
-        }
-      }
-      const forecastPage = document.getElementById('forecastPage');
-      if (forecastPage && !forecastPage.classList.contains('is-hidden')) {
-        renderForecastEditorSelectors();
-      }
-    }
-
-    function setForecastContext(stage, year, planVersion, { persist = true } = {}) {
-      if (!REVIEW_STAGES.includes(stage)) return;
-      if (planVersion && !PLAN_VERSIONS.some(plan => plan.id === planVersion)) return;
-      currentReviewStage = stage;
-      currentFinancialYear = year || currentFinancialYear;
-      currentPlanVersion = planVersion || currentPlanVersion;
-      requiresContextSelection = false;
-      if (persist) {
-        localStorage.setItem(REVIEW_STAGE_KEY, stage);
-        if (currentFinancialYear) {
-          localStorage.setItem(FINANCIAL_YEAR_KEY, currentFinancialYear);
-        }
-        if (currentPlanVersion) {
-          localStorage.setItem(PLAN_VERSION_KEY, currentPlanVersion);
-        }
-      }
-      updateReviewContextDisplay();
-      updateContextControls();
-      fData = null;
-      const forecastCache = loadForecastStore(currentFinancialYear, stage, currentPlanVersion);
-      if (forecastCache) {
-        updateWorkGroupFilterOptions();
-        console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
-      } else if (loadForecastFromLibrary(currentFinancialYear, stage, currentPlanVersion)) {
-        updateWorkGroupFilterOptions();
-      } else if (currentPlanVersion === 'v1' && initializeV1FromV0(currentFinancialYear, stage)) {
-        updateWorkGroupFilterOptions();
-      }
-      render();
-    }
-
-    function normalizeJobNumberInput(value) {
-      return String(value || '').trim();
-    }
-
-    function getAllWorkGroupSetNames() {
-      const names = new Set();
-      workGroupSets.forEach(value => {
-        if (value) names.add(value);
-      });
-      [fData, wData].forEach(source => {
-        if (!source) return;
-        source.forEach(job => {
-          Object.keys(job.wgs || {}).forEach(wg => {
-            if (wg) names.add(wg);
-          });
-        });
-      });
-      if (!names.size) names.add('Unspecified');
-      return Array.from(names).sort((a, b) => a.localeCompare(b));
-    }
-
-    function getJobNumbersForWorkGroupSet(workGroup) {
-      const numbers = new Set();
-      if (!workGroup) return numbers;
-      [fData, wData].forEach(source => {
-        if (!source) return;
-        source.forEach((job, jobNumber) => {
-          if (job?.wgs?.[workGroup]) numbers.add(jobNumber);
-        });
-      });
-      return numbers;
-    }
-
-    function getStandardJobList() {
-      const list = [];
-      if (stdJobs.size) {
-        stdJobs.forEach((meta, jobNumber) => {
-          list.push({
-            jobNumber,
-            desc: meta.desc || `Job ${jobNumber}`,
-            unit: meta.unit || ''
-          });
-        });
-      } else {
-        const numbers = new Set();
-        [fData, wData].forEach(source => {
-          if (!source) return;
-          source.forEach((_, jobNumber) => numbers.add(jobNumber));
-        });
-        numbers.forEach(jobNumber => {
-          list.push({ jobNumber, desc: `Job ${jobNumber}`, unit: '' });
-        });
-      }
-      return list.sort((a, b) => a.jobNumber.localeCompare(b.jobNumber));
-    }
-
-    function getStandardJobListForWorkGroup(workGroup) {
-      return getStandardJobList();
-    }
-
-    function renderForecastEditorSelectors() {
-      const yearSelect = document.getElementById('forecastEditorYear');
-      const planSelect = document.getElementById('forecastEditorPlan');
-      const workGroupSelect = document.getElementById('forecastEditorWorkGroup');
-      if (!yearSelect || !planSelect || !workGroupSelect) return;
-
-      const yearOptions = getFinancialYearOptions();
-      yearSelect.innerHTML = yearOptions.map(year => `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`).join('');
-      forecastEditorState.year = yearOptions.includes(forecastEditorState.year)
-        ? forecastEditorState.year
-        : (currentFinancialYear || yearOptions[0] || '');
-      yearSelect.value = forecastEditorState.year;
-
-      forecastEditorState.stage = REVIEW_STAGES.includes(forecastEditorState.stage)
-        ? forecastEditorState.stage
-        : (currentReviewStage || REVIEW_STAGES[0]);
-
-      planSelect.innerHTML = getPlanVersionOptions()
-        .map(plan => `<option value="${escapeHtml(plan.id)}">${escapeHtml(plan.label)}</option>`)
-        .join('');
-      const fallbackPlan = currentPlanVersion || PLAN_VERSIONS[0]?.id;
-      forecastEditorState.planVersion = PLAN_VERSIONS.some(plan => plan.id === forecastEditorState.planVersion)
-        ? forecastEditorState.planVersion
-        : fallbackPlan;
-      planSelect.value = forecastEditorState.planVersion;
-
-      const workGroupOptions = getAllWorkGroupSetNames();
-      workGroupSelect.innerHTML = workGroupOptions
-        .map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
-        .join('');
-      forecastEditorState.workGroup = workGroupOptions.includes(forecastEditorState.workGroup)
-        ? forecastEditorState.workGroup
-        : (workGroupOptions[0] || '');
-      workGroupSelect.value = forecastEditorState.workGroup;
-
-      setForecastEditorRowsFromForecast();
-      renderForecastEditorJobOptions();
-      renderForecastEditorTable();
-      updateForecastEditorSummary();
-    }
-
-    function ensureForecastEditorRows(targetCount) {
-      if (!Array.isArray(forecastEditorState.rows)) {
-        forecastEditorState.rows = [];
-      }
-      if (!forecastEditorState.rows.length && !targetCount) {
-        forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
-      }
-      if (targetCount && forecastEditorState.rows.length < targetCount) {
-        const missing = targetCount - forecastEditorState.rows.length;
-        forecastEditorState.rows = forecastEditorState.rows.concat(
-          Array.from({ length: missing }, () => createForecastEditorRow())
-        );
-      }
-    }
-
-    function setForecastEditorRowsFromForecast() {
-      const workGroup = forecastEditorState.workGroup;
-      const rowsFromData = buildForecastEditorRowsFromForecast(workGroup);
-      if (rowsFromData.length) {
-        forecastEditorState.rows = rowsFromData;
-        return;
-      }
-      ensureForecastEditorRows();
-    }
-
-    function createForecastEditorRow() {
-      return {
-        jobNumber: '',
-        desc: '',
-        unit: '',
-        volumes: {}
-      };
-    }
-
-    function getForecastEditorJobMeta(jobNumber) {
-      if (!jobNumber) return {};
-      const stdMeta = stdJobs.get(jobNumber);
-      if (stdMeta) return stdMeta;
-      const currentMeta = currentJobsMap.get(jobNumber);
-      return currentMeta || {};
-    }
-
-    function renderForecastEditorJobOptions() {
-      const datalist = document.getElementById('forecastEditorJobOptions');
-      if (!datalist) return;
-      const jobs = getStandardJobListForWorkGroup(forecastEditorState.workGroup);
-      datalist.innerHTML = jobs
-        .map(job => (
-          `<option value="${escapeHtml(job.jobNumber)}">${escapeHtml(job.jobNumber)} • ${escapeHtml(job.desc)}${job.unit ? ` (${escapeHtml(job.unit)})` : ''}</option>`
-        ))
-        .join('');
-    }
-
-    function renderForecastEditorTable() {
-      const table = document.getElementById('forecastEditorTable');
-      if (!table) return;
-      ensureForecastEditorRows();
-      const baselineMap = getForecastEditorBaselineMap();
-      const workGroup = forecastEditorState.workGroup;
-      const header = `
-        <thead>
-          <tr>
-            <th>Standard job</th>
-            <th>Description</th>
-            <th>Unit</th>
-            ${FORECAST_PERIODS.map(period => `<th>${period}</th>`).join('')}
-            <th>Total</th>
-            <th></th>
-          </tr>
-        </thead>
-      `;
-      const body = `
-        <tbody>
-          ${forecastEditorState.rows.map((row, index) => {
-            const desc = row.desc || '';
-            const unit = row.unit || '';
-            const searchValue = `${row.jobNumber || ''} ${desc || ''}`.toLowerCase();
-            const rowTotal = getForecastEditorRowTotal(row);
-            return `
-              <tr data-row="${index}" data-search="${escapeHtml(searchValue)}">
-                <td>
-                  <input
-                    type="text"
-                    class="forecast-job-input"
-                    data-row="${index}"
-                    list="forecastEditorJobOptions"
-                    placeholder="Std job #"
-                    value="${escapeHtml(row.jobNumber || '')}"
-                  >
-                </td>
-                <td data-role="desc" class="${desc ? '' : 'forecast-cell-muted'}">${escapeHtml(desc || 'Auto-fill')}</td>
-                <td data-role="unit" class="${unit ? '' : 'forecast-cell-muted'}">${escapeHtml(unit || 'Auto-fill')}</td>
-                ${FORECAST_PERIODS.map(period => {
-                  const value = Number(row.volumes?.[period] || 0);
-                  const baselineValue = getForecastBaselineValue(baselineMap, row.jobNumber, workGroup, period);
-                  const isChanged = baselineMap && row.jobNumber && value !== Number(baselineValue || 0);
-                  return `
-                    <td>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        class="forecast-period-input${isChanged ? ' is-changed' : ''}"
-                        data-row="${index}"
-                        data-period="${period}"
-                        value="${value ? value : ''}"
-                      >
-                    </td>
-                  `;
-                }).join('')}
-                <td class="forecast-total-cell" data-role="row-total" data-row="${index}">${formatForecastNumber(rowTotal)}</td>
-                <td class="forecast-action-cell">
-                  <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}">Delete</button>
-                </td>
-              </tr>
-            `;
-          }).join('')}
-        </tbody>
-      `;
-      const footerTotals = getForecastEditorTotals(forecastEditorState.rows);
-      const footer = `
-        <tfoot>
-          <tr>
-            <td class="forecast-total-label" colspan="3">Total</td>
-            ${FORECAST_PERIODS.map(period => (
-              `<td class="forecast-total-cell" data-role="period-total" data-period="${period}">${formatForecastNumber(footerTotals.periodTotals[period])}</td>`
-            )).join('')}
-            <td class="forecast-total-cell" data-role="grand-total">${formatForecastNumber(footerTotals.grandTotal)}</td>
-            <td></td>
-          </tr>
-        </tfoot>
-      `;
-      table.innerHTML = `${header}${body}${footer}`;
-      filterForecastEditorTable();
-      updateForecastEditorSummary();
-    }
-
-    function updateForecastEditorRowFromJob(rowIndex, jobNumber) {
-      if (!forecastEditorState.rows[rowIndex]) {
-        forecastEditorState.rows[rowIndex] = createForecastEditorRow();
-      }
-      const meta = getForecastEditorJobMeta(jobNumber);
-      const desc = meta?.desc || '';
-      const unit = meta?.unit || '';
-      forecastEditorState.rows[rowIndex] = {
-        ...forecastEditorState.rows[rowIndex],
-        jobNumber,
-        desc,
-        unit,
-        volumes: loadForecastEditorRowVolumes(jobNumber, forecastEditorState.workGroup)
-      };
-    }
-
-    function loadForecastEditorRowVolumes(jobNumber, workGroup) {
-      if (!jobNumber || !workGroup) return {};
-      const job = fData?.get(jobNumber);
-      return job?.wgs?.[workGroup] ? { ...job.wgs[workGroup] } : {};
-    }
-
-    function buildForecastEditorRowsFromForecast(workGroup) {
-      if (!fData || !workGroup) return [];
-      const rows = [];
-      fData.forEach((job, jobNumber) => {
-        const wgData = job?.wgs?.[workGroup];
-        if (!wgData) return;
-        const meta = getForecastEditorJobMeta(jobNumber);
-        rows.push({
-          jobNumber,
-          desc: meta?.desc || '',
-          unit: meta?.unit || '',
-          volumes: { ...wgData }
-        });
-      });
-      return rows.sort((a, b) => a.jobNumber.localeCompare(b.jobNumber));
-    }
-
-    function addForecastEditorRow() {
-      ensureForecastEditorRows();
-      forecastEditorState.rows.push(createForecastEditorRow());
-      renderForecastEditorTable();
-    }
-
-    function clearForecastEditorTable() {
-      forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
-      renderForecastEditorTable();
-      const statusEl = document.getElementById('forecastEditorStatus');
-      if (statusEl) statusEl.textContent = 'Table cleared (not saved).';
-    }
-
-    function submitForecastEditorForm() {
-      const form = document.getElementById('forecastEditorForm');
-      if (!form) return;
-      if (typeof form.requestSubmit === 'function') {
-        form.requestSubmit();
-      } else {
-        form.dispatchEvent(new Event('submit', { cancelable: true }));
-      }
-    }
-
-    function filterForecastEditorTable() {
-      const query = (document.getElementById('forecastEditorSearch')?.value || '').trim().toLowerCase();
-      document.querySelectorAll('#forecastEditorTable tbody tr').forEach(row => {
-        const haystack = row.dataset.search || '';
-        row.style.display = !query || haystack.includes(query) ? '' : 'none';
-      });
-    }
-
-    function syncForecastEditorTableState() {
-      const rows = [];
-      document.querySelectorAll('#forecastEditorTable tbody tr').forEach((rowEl, index) => {
-        const jobInput = rowEl.querySelector('.forecast-job-input');
-        const jobNumber = normalizeJobNumberInput(jobInput?.value || '');
-        const meta = getForecastEditorJobMeta(jobNumber);
-        const volumes = {};
-        rowEl.querySelectorAll('input[data-period]').forEach(input => {
-          const period = input.dataset.period;
-          const value = parseFloat(input.value);
-          volumes[period] = Number.isFinite(value) ? value : 0;
-        });
-        rows[index] = {
-          jobNumber,
-          desc: meta?.desc || '',
-          unit: meta?.unit || '',
-          volumes
-        };
-      });
-      forecastEditorState.rows = rows;
-    }
-
-    function handleForecastEditorTableInput(event) {
-      const rowEl = event.target.closest('tr');
-      if (!rowEl) return;
-      const rowIndex = Number(rowEl.dataset.row);
-      if (!Number.isFinite(rowIndex)) return;
-      ensureForecastEditorRows();
-      if (!forecastEditorState.rows[rowIndex]) {
-        forecastEditorState.rows[rowIndex] = createForecastEditorRow();
-      }
-      if (event.target.classList.contains('forecast-job-input')) {
-        const jobNumber = normalizeJobNumberInput(event.target.value || '');
-        event.target.value = jobNumber;
-        updateForecastEditorRowFromJob(rowIndex, jobNumber);
-        const descCell = rowEl.querySelector('[data-role="desc"]');
-        const unitCell = rowEl.querySelector('[data-role="unit"]');
-        const rowData = forecastEditorState.rows[rowIndex];
-        if (descCell) {
-          descCell.textContent = rowData.desc || 'Auto-fill';
-          descCell.classList.toggle('forecast-cell-muted', !rowData.desc);
-        }
-        if (unitCell) {
-          unitCell.textContent = rowData.unit || 'Auto-fill';
-          unitCell.classList.toggle('forecast-cell-muted', !rowData.unit);
-        }
-        rowEl.querySelectorAll('input[data-period]').forEach(input => {
-          const period = input.dataset.period;
-          const value = Number(rowData.volumes?.[period] || 0);
-          input.value = value ? value : '';
-          updateForecastEditorCellHighlight(rowIndex, period, input);
-        });
-        const searchValue = `${rowData.jobNumber || ''} ${rowData.desc || ''}`.toLowerCase();
-        rowEl.dataset.search = searchValue;
-        updateForecastEditorSummary();
-        updateForecastEditorTotalsDisplay();
-        return;
-      }
-      if (event.target.matches('input[data-period]')) {
-        const period = event.target.dataset.period;
-        const value = parseFloat(event.target.value);
-        forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
-        updateForecastEditorCellHighlight(rowIndex, period, event.target);
-        updateForecastEditorSummary();
-        updateForecastEditorTotalsDisplay();
-      }
-    }
-
-    function handleForecastEditorTablePaste(event) {
-      const target = event.target;
-      if (!target || !target.matches('input[data-period]')) return;
-      const clipboard = event.clipboardData?.getData('text');
-      if (!clipboard) return;
-      const rows = clipboard.replace(/\r/g, '').split('\n').filter(line => line.length);
-      if (!rows.length) return;
-      const parsed = rows.map(row => row.split('\t'));
-      if (parsed.length === 1 && parsed[0].length === 1) return;
-      event.preventDefault();
-      const startRowIndex = Number(target.dataset.row);
-      const startPeriodIndex = FORECAST_PERIODS.indexOf(target.dataset.period);
-      if (!Number.isFinite(startRowIndex) || startPeriodIndex < 0) return;
-      const requiredRows = startRowIndex + parsed.length;
-      const hasNewRows = forecastEditorState.rows.length < requiredRows;
-      ensureForecastEditorRows(requiredRows);
-
-      parsed.forEach((cells, rowOffset) => {
-        const rowIndex = startRowIndex + rowOffset;
-        if (!forecastEditorState.rows[rowIndex]) {
-          forecastEditorState.rows[rowIndex] = createForecastEditorRow();
-        }
-        cells.forEach((cell, colOffset) => {
-          const periodIndex = startPeriodIndex + colOffset;
-          if (periodIndex >= FORECAST_PERIODS.length) return;
-          const period = FORECAST_PERIODS[periodIndex];
-          const value = parseFloat(String(cell).trim());
-          forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
-        });
-      });
-
-      if (hasNewRows) {
-        renderForecastEditorTable();
-      } else {
-        parsed.forEach((cells, rowOffset) => {
-          const rowIndex = startRowIndex + rowOffset;
-          cells.forEach((cell, colOffset) => {
-            const periodIndex = startPeriodIndex + colOffset;
-            if (periodIndex >= FORECAST_PERIODS.length) return;
-            const period = FORECAST_PERIODS[periodIndex];
-            const input = document.querySelector(
-              `#forecastEditorTable input[data-row="${rowIndex}"][data-period="${period}"]`
-            );
-            if (input) {
-              const value = forecastEditorState.rows[rowIndex].volumes[period] || 0;
-              input.value = value ? value : '';
-              updateForecastEditorCellHighlight(rowIndex, period, input);
-            }
-          });
-        });
-        updateForecastEditorSummary();
-        updateForecastEditorTotalsDisplay();
-      }
-    }
-
-    function handleForecastEditorSubmit(event) {
-      event.preventDefault();
-      const year = document.getElementById('forecastEditorYear')?.value || '';
-      const stage = forecastEditorState.stage || currentReviewStage || REVIEW_STAGES[0];
-      const planVersion = document.getElementById('forecastEditorPlan')?.value || '';
-      const workGroup = document.getElementById('forecastEditorWorkGroup')?.value || '';
-
-      if (!year || !stage || !planVersion || !workGroup) {
-        alert('Please select a financial year, plan version, and work group set.');
-        return;
-      }
-
-      syncForecastEditorTableState();
-      const rowsToSave = forecastEditorState.rows.filter(row => row.jobNumber);
-      if (!rowsToSave.length) {
-        alert('Enter at least one standard job to save forecast entries.');
-        return;
-      }
-
-      setForecastContext(stage, year, planVersion);
-      forecastEditorState = {
-        ...forecastEditorState,
-        year,
-        stage,
-        planVersion,
-        workGroup
-      };
-
-      if (!fData) fData = new Map();
-      rowsToSave.forEach(row => {
-        if (!fData.has(row.jobNumber)) {
-          fData.set(row.jobNumber, { periods: {}, wgs: {} });
-        }
-        const job = fData.get(row.jobNumber);
-        if (!job.wgs) job.wgs = {};
-        job.wgs[workGroup] = {};
-        const totals = {};
-        FORECAST_PERIODS.forEach(period => {
-          job.wgs[workGroup][period] = Number(row.volumes?.[period]) || 0;
-        });
-        Object.values(job.wgs).forEach(wgData => {
-          FORECAST_PERIODS.forEach(period => {
-            totals[period] = (totals[period] || 0) + (Number(wgData?.[period]) || 0);
-          });
-        });
-        job.periods = totals;
-        fData.set(row.jobNumber, job);
-      });
-      lastForecastRowCount = fData.size;
-      saveForecastStore(fData.size, year, stage, planVersion);
-      updateWorkGroupFilterOptions();
-      render();
-      updateForecastEditorSummary();
-      renderForecastEditorSelectors();
-      const statusEl = document.getElementById('forecastEditorStatus');
-      if (statusEl) {
-        statusEl.textContent = `Saved ${rowsToSave.length} forecast entr${rowsToSave.length === 1 ? 'y' : 'ies'} for ${workGroup} in ${year} ${stage} ${planVersion.toUpperCase()}.`;
-      }
-    }
-
-    function downloadForecastEditorExport() {
-      const year = document.getElementById('forecastEditorYear')?.value || '';
-      const stage = forecastEditorState.stage || currentReviewStage || REVIEW_STAGES[0];
-      const planVersion = document.getElementById('forecastEditorPlan')?.value || '';
-      if (!year || !stage || !planVersion) {
-        alert('Select a financial year and plan version before exporting.');
-        return;
-      }
-      if (!fData || !fData.size) {
-        alert('No forecast data available to export.');
-        return;
-      }
-      const payload = {
-        [year]: {
-          [planVersion]: {
-            [stage]: {
-              rowCount: lastForecastRowCount ?? fData.size,
-              data: serializeForecastData(fData)
-            }
-          }
-        }
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `forecast-library-${year}-${planVersion}-${stage}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(link.href);
-    }
-
-    function buildForecastFilePayload() {
-      const payload = {
-        exportedAt: new Date().toISOString(),
-        forecasts: {}
-      };
-
-      const persistCurrent = currentFinancialYear && currentPlanVersion && fData?.size;
-      if (persistCurrent) {
-        payload.forecasts[currentFinancialYear] = payload.forecasts[currentFinancialYear] || {};
-        payload.forecasts[currentFinancialYear][currentPlanVersion] = {
-          data: serializeForecastData(fData),
-          rowCount: lastForecastRowCount ?? fData.size,
-          savedAt: new Date().toISOString()
-        };
-      }
-
-      for (let i = 0; i < localStorage.length; i += 1) {
-        const key = localStorage.key(i);
-        if (!key || (!key.startsWith(`${FORECAST_STORAGE_KEY}:`) && key !== FORECAST_STORAGE_KEY)) continue;
-        const parts = key.split(':');
-        const year = parts.length >= 3 ? parts[1] : currentFinancialYear;
-        const planVersion = parts.length >= 3 ? parts[2] : currentPlanVersion;
-        if (!year || !planVersion) continue;
-        try {
-          const raw = localStorage.getItem(key);
-          if (!raw) continue;
-          const parsed = JSON.parse(raw);
-          if (!parsed?.data) continue;
-          payload.forecasts[year] = payload.forecasts[year] || {};
-          payload.forecasts[year][planVersion] = parsed;
-        } catch (err) {
-          console.warn('Skipping invalid forecast cache entry:', err);
-        }
-      }
-
-      return payload;
-    }
-
-    function downloadForecastFile() {
-      const payload = buildForecastFilePayload();
-      if (!Object.keys(payload.forecasts).length) {
-        alert('No forecast data available to save.');
-        return;
-      }
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `forecast-cache-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(link.href);
-    }
-
-    function triggerForecastFileUpload() {
-      const input = document.getElementById('forecastFileInput');
-      if (input) input.click();
-    }
-
-    async function loadForecastFile(event) {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      try {
-        const content = await file.text();
-        const parsed = JSON.parse(content);
-        let imported = 0;
-
-        if (parsed?.forecasts && typeof parsed.forecasts === 'object') {
-          Object.entries(parsed.forecasts).forEach(([year, plans]) => {
-            if (!plans || typeof plans !== 'object') return;
-            Object.entries(plans).forEach(([planVersion, snapshot]) => {
-              if (!snapshot?.data) return;
-              localStorage.setItem(
-                getForecastStorageKey(year, planVersion),
-                JSON.stringify({
-                  data: snapshot.data,
-                  rowCount: snapshot.rowCount ?? null,
-                  savedAt: snapshot.savedAt || new Date().toISOString()
-                })
-              );
-              imported += 1;
-            });
-          });
-        } else {
-          Object.entries(parsed || {}).forEach(([year, plans]) => {
-            if (!plans || typeof plans !== 'object') return;
-            Object.entries(plans).forEach(([planVersion, stages]) => {
-              if (!stages || typeof stages !== 'object') return;
-              const stageEntry = Object.values(stages)[0];
-              if (!stageEntry?.data) return;
-              localStorage.setItem(
-                getForecastStorageKey(year, planVersion),
-                JSON.stringify({
-                  data: stageEntry.data,
-                  rowCount: stageEntry.rowCount ?? null,
-                  savedAt: new Date().toISOString()
-                })
-              );
-              imported += 1;
-            });
-          });
-        }
-
-        if (!imported) {
-          alert('No forecast data found in that file.');
-          return;
-        }
-
-        const shouldReload = currentFinancialYear && currentPlanVersion;
-        if (shouldReload) {
-          loadForecastStore(currentFinancialYear, currentReviewStage, currentPlanVersion);
-          render();
-          renderForecastEditorSelectors();
-          renderForecastEditorTable();
-        }
-        alert(`Loaded ${imported} forecast set${imported === 1 ? '' : 's'} from file.`);
-      } catch (err) {
-        console.error(err);
-        alert('Unable to read that forecast file.');
-      } finally {
-        event.target.value = '';
-      }
-    }
-
-    function updateForecastEditorSummary() {
-      const summaryEl = document.getElementById('forecastEditorSummary');
-      if (!summaryEl) return;
-      const totalJobs = fData?.size || 0;
-      const workGroups = getAllWorkGroupSetNames();
-      summaryEl.textContent = `Current context: ${forecastEditorState.year || 'FY'} ${forecastEditorState.stage || 'RF'} ${forecastEditorState.planVersion || ''}. FY-wide forecasts persist across RF3, RF6, RF9, and RF11 (v0 initial or v1 updated). Forecast jobs loaded: ${totalJobs}. Work group sets available: ${workGroups.length}.`;
-
-      const rowsWithJobs = forecastEditorState.rows?.filter(row => row.jobNumber).length || 0;
-      const rowCount = forecastEditorState.rows?.length || 0;
-      const totalVolume = (forecastEditorState.rows || []).reduce((sum, row) => {
-        return sum + FORECAST_PERIODS.reduce((periodSum, period) => {
-          return periodSum + (Number(row.volumes?.[period]) || 0);
-        }, 0);
-      }, 0);
-      const jobCountEl = document.getElementById('forecastEditorJobCount');
-      if (jobCountEl) jobCountEl.textContent = rowsWithJobs.toLocaleString();
-      const volumeEl = document.getElementById('forecastEditorTotalVolume');
-      if (volumeEl) volumeEl.textContent = totalVolume.toLocaleString();
-      const rowCountEl = document.getElementById('forecastEditorRowCount');
-      if (rowCountEl) rowCountEl.textContent = rowCount.toLocaleString();
-      const badgeEl = document.getElementById('forecastEditorLoadedBadge');
-      if (badgeEl) badgeEl.textContent = `${totalJobs} jobs loaded`;
-    }
-
-    function openForecastEditor() {
-      const forecastPage = document.getElementById('forecastPage');
-      const dashboardPage = document.getElementById('dashboardPage');
-      if (!forecastPage || !dashboardPage) return;
-      forecastEditorState = {
-        year: currentFinancialYear || getFinancialYearOptions()[0] || '',
-        stage: currentReviewStage || REVIEW_STAGES[0],
-        planVersion: currentPlanVersion || PLAN_VERSIONS[0]?.id || '',
-        workGroup: forecastEditorState.workGroup || '',
-        rows: []
-      };
-      renderForecastEditorSelectors();
-      const statusEl = document.getElementById('forecastEditorStatus');
-      if (statusEl) statusEl.textContent = '';
-      const searchInput = document.getElementById('forecastEditorSearch');
-      if (searchInput) searchInput.value = '';
-      dashboardPage.classList.add('is-hidden');
-      forecastPage.classList.remove('is-hidden');
-    }
-
-    function closeForecastEditor() {
-      const forecastPage = document.getElementById('forecastPage');
-      const dashboardPage = document.getElementById('dashboardPage');
-      if (!forecastPage || !dashboardPage) return;
-      forecastPage.classList.add('is-hidden');
-      dashboardPage.classList.remove('is-hidden');
-    }
-
-    function handleForecastEditorContextChange() {
-      const year = document.getElementById('forecastEditorYear')?.value || '';
-      const stage = forecastEditorState.stage || currentReviewStage || REVIEW_STAGES[0];
-      const planVersion = document.getElementById('forecastEditorPlan')?.value || '';
-      forecastEditorState = {
-        ...forecastEditorState,
-        year,
-        stage,
-        planVersion,
-        rows: []
-      };
-      if (year && stage && planVersion) {
-        setForecastContext(stage, year, planVersion);
-      }
-      renderForecastEditorSelectors();
-    }
-
-    function handleForecastEditorWorkGroupChange() {
-      const workGroup = document.getElementById('forecastEditorWorkGroup')?.value || '';
-      forecastEditorState = {
-        ...forecastEditorState,
-        workGroup,
-        rows: []
-      };
-      setForecastEditorRowsFromForecast();
-      renderForecastEditorJobOptions();
-      renderForecastEditorTable();
-    }
-
-    function handleForecastEditorTableClick(event) {
-      const button = event.target.closest('[data-action="delete-row"]');
-      if (!button) return;
-      const rowIndex = Number(button.dataset.row);
-      if (!Number.isFinite(rowIndex)) return;
-      forecastEditorState.rows.splice(rowIndex, 1);
-      if (!forecastEditorState.rows.length) {
-        forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
-      }
-      renderForecastEditorTable();
-    }
-
-    function getForecastEditorBaselineMap() {
-      if (forecastEditorState.planVersion !== 'v1') return null;
-      if (!forecastEditorState.year || !forecastEditorState.stage) return null;
-      return getForecastSnapshot(forecastEditorState.year, forecastEditorState.stage, 'v0')?.data || null;
-    }
-
-    function getForecastBaselineValue(baselineMap, jobNumber, workGroup, period) {
-      if (!baselineMap || !jobNumber || !workGroup || !period) return null;
-      const job = baselineMap.get(jobNumber);
-      if (!job) return 0;
-      const wgData = job.wgs?.[workGroup];
-      if (!wgData) return 0;
-      return Number(wgData?.[period]) || 0;
-    }
-
-    function updateForecastEditorCellHighlight(rowIndex, period, input) {
-      if (!input) return;
-      const baselineMap = getForecastEditorBaselineMap();
-      if (!baselineMap) {
-        input.classList.remove('is-changed');
-        return;
-      }
-      const rowData = forecastEditorState.rows[rowIndex];
-      if (!rowData?.jobNumber) {
-        input.classList.remove('is-changed');
-        return;
-      }
-      const baselineValue = getForecastBaselineValue(
-        baselineMap,
-        rowData.jobNumber,
-        forecastEditorState.workGroup,
-        period
-      );
-      const currentValue = Number(rowData.volumes?.[period]) || 0;
-      input.classList.toggle('is-changed', currentValue !== Number(baselineValue || 0));
-    }
-
-    function getForecastEditorRowTotal(row) {
-      if (!row) return 0;
-      return FORECAST_PERIODS.reduce((sum, period) => sum + (Number(row.volumes?.[period]) || 0), 0);
-    }
-
-    function getForecastEditorTotals(rows) {
-      const periodTotals = {};
-      FORECAST_PERIODS.forEach(period => {
-        periodTotals[period] = 0;
-      });
-      (rows || []).forEach(row => {
-        FORECAST_PERIODS.forEach(period => {
-          periodTotals[period] += Number(row?.volumes?.[period]) || 0;
-        });
-      });
-      const grandTotal = Object.values(periodTotals).reduce((sum, value) => sum + value, 0);
-      return { periodTotals, grandTotal };
-    }
-
-    function updateForecastEditorTotalsDisplay() {
-      const table = document.getElementById('forecastEditorTable');
-      if (!table) return;
-      const rows = forecastEditorState.rows || [];
-      rows.forEach((row, index) => {
-        const cell = table.querySelector(`td[data-role="row-total"][data-row="${index}"]`);
-        if (cell) cell.textContent = formatForecastNumber(getForecastEditorRowTotal(row));
-      });
-      const totals = getForecastEditorTotals(rows);
-      FORECAST_PERIODS.forEach(period => {
-        const cell = table.querySelector(`td[data-role="period-total"][data-period="${period}"]`);
-        if (cell) cell.textContent = formatForecastNumber(totals.periodTotals[period]);
-      });
-      const grandCell = table.querySelector('td[data-role="grand-total"]');
-      if (grandCell) grandCell.textContent = formatForecastNumber(totals.grandTotal);
-    }
-
-    function formatForecastNumber(value) {
-      const numeric = Number(value) || 0;
-      return numeric.toLocaleString(undefined, { maximumFractionDigits: 2 });
-    }
-
+    // Forecast functions are now in separate modules:
+    // - forecast-storage.js: serializeForecastData, hydrateForecastData, cloneForecastData,
+    //   getForecastStorageKey, loadForecastFromStorage, saveForecastToStorage,
+    //   loadForecastFromLibrary, getForecastSnapshot, initializeV1FromV0,
+    //   exportForecastFile, importForecastFile, getForecastPeriodsForJob,
+    //   getForecastWorkGroupData, updateForecastWorkGroup, cleanForecastData
+    // - forecast-state.js: initializeForecastContext, setReviewContext, setForecastContext,
+    //   getCurrentContext, getFinancialYearOptions, getForecastAvailability,
+    //   getPreferredPlanVersion, loadForecastForCurrentContext, saveCurrentForecast,
+    //   getAllWorkGroupSetNames, getJobNumbersForWorkGroupSet, getStandardJobList, getJobMetadata
+    // - forecast-editor.js: All forecast editor UI and interaction functions
     function saveCommentStore() {
       localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
     }
@@ -1633,13 +678,18 @@
         // Process all jobs when no filter available
       }
       if (currentFinancialYear && currentReviewStage) {
-        currentPlanVersion = getPreferredPlanVersion(currentFinancialYear, currentReviewStage);
-        const forecastCache = loadForecastStore(currentFinancialYear, currentReviewStage, currentPlanVersion);
+        currentPlanVersion = getPreferredPlanVersion(currentFinancialYear);
+        const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
         if (forecastCache) {
+          fData = forecastCache.data;
           updateWorkGroupFilterOptions();
           console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
-        } else if (loadForecastFromLibrary(currentFinancialYear, currentReviewStage, currentPlanVersion)) {
-          updateWorkGroupFilterOptions();
+        } else {
+          const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+          if (libraryForecast) {
+            fData = libraryForecast.data;
+            updateWorkGroupFilterOptions();
+          }
         }
       }
       updateGroupFilterOptions();
@@ -1932,7 +982,7 @@
           }
         });
         console.log('✓ Matched:', matched, 'of', rows.length);
-        saveForecastStore(rows.length, selectedYear, currentReviewStage, selectedPlan);
+        saveForecastToStorage(fData, rows.length, selectedYear, selectedPlan);
         setReviewContext(currentReviewStage, selectedYear);
         closeModal();
       } catch(err) {
@@ -2407,12 +1457,17 @@
         openStageModal();
         return;
       }
-      const preferredPlanVersion = getPreferredPlanVersion(currentFinancialYear, currentReviewStage);
+      const preferredPlanVersion = getPreferredPlanVersion(currentFinancialYear);
       if (preferredPlanVersion !== currentPlanVersion) {
         currentPlanVersion = preferredPlanVersion;
-        const loaded = loadForecastFromLibrary(currentFinancialYear, currentReviewStage, currentPlanVersion);
-        if (!loaded) {
-          loadForecastStore(currentFinancialYear, currentReviewStage, currentPlanVersion);
+        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+        if (libraryForecast) {
+          fData = libraryForecast.data;
+        } else {
+          const storedForecast = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+          if (storedForecast) {
+            fData = storedForecast.data;
+          }
         }
         updateContextControls();
       }
@@ -2708,40 +1763,8 @@
       return Object.values(jobData.periods).reduce((sum, value) => sum + (Number(value) || 0), 0);
     }
 
-    function readForecastCache(year, stage, planVersion) {
-      try {
-        const raw = localStorage.getItem(getForecastStorageKey(year, planVersion));
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object') return null;
-        const hydrated = hydrateForecastData(parsed.data);
-        if (!hydrated.size) return null;
-        return {
-          data: hydrated,
-          source: 'cache',
-          rowCount: parsed.rowCount ?? hydrated.size
-        };
-      } catch (err) {
-        console.warn('Failed to read forecast cache snapshot:', err);
-        return null;
-      }
-    }
-
-    function getForecastSnapshot(year, stage, planVersion) {
-      const libraryEntry = getForecastLibraryEntry(year, stage, planVersion);
-      if (libraryEntry?.data) {
-        return {
-          data: hydrateForecastData(libraryEntry.data),
-          source: 'library'
-        };
-      }
-      const cached = readForecastCache(year, stage, planVersion);
-      if (cached) return cached;
-      return null;
-    }
-
     function getForecastPeriodsForJob(jobNumber, wgFilter, planVersion) {
-      const snapshot = getForecastSnapshot(currentFinancialYear, currentReviewStage, planVersion);
+      const snapshot = getForecastSnapshot(currentFinancialYear, planVersion);
       if (!snapshot) return null;
       const jobData = snapshot.data.get(jobNumber);
       if (!jobData) return null;
@@ -2770,8 +1793,8 @@
       const changedOnly = document.getElementById('compareChangedOnly')?.checked || false;
       const search = (document.getElementById('compareSearch')?.value || '').toLowerCase();
       if (!table) return;
-      const v0Snapshot = getForecastSnapshot(currentFinancialYear, currentReviewStage, 'v0');
-      const v1Snapshot = getForecastSnapshot(currentFinancialYear, currentReviewStage, 'v1');
+      const v0Snapshot = getForecastSnapshot(currentFinancialYear, 'v0');
+      const v1Snapshot = getForecastSnapshot(currentFinancialYear, 'v1');
       if (!v0Snapshot || !v1Snapshot) {
         table.innerHTML = '<thead><tr><th>Forecast comparison</th></tr></thead><tbody><tr><td class="wo-empty">Both Plan v0 and Plan v1 forecasts must be available in the library or local cache to compare.</td></tr></tbody>';
         if (meta) {
@@ -2861,7 +1884,7 @@
       }
       const compareButton = document.getElementById('compareForecastButton');
       if (compareButton) {
-        const hasV1 = Boolean(getForecastSnapshot(currentFinancialYear, currentReviewStage, 'v1'));
+        const hasV1 = Boolean(getForecastSnapshot(currentFinancialYear, 'v1'));
         compareButton.style.display = hasV1 ? 'inline-flex' : 'none';
       }
       
