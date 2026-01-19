@@ -62,8 +62,9 @@
 
     <div class="controls">
       <div class="control-group">
-        <label for="financialYearControl">Financial year</label>
-        <select id="financialYearControl" onchange="handleFinancialYearChange()"></select>
+        <label>Review stage</label>
+        <button type="button" class="group-action-button" id="reviewStageButton" onclick="openStageModal()">Select review stage</button>
+        <span class="helper-text" id="reviewStageHelper"></span>
       </div>
       <div class="control-group">
         <label>Forecast status</label>
@@ -131,24 +132,6 @@
         <button class="close" onclick="closeModal()">&times;</button>
       </div>
       <p class="helper-text" id="uploadModeNote"></p>
-      <div class="file-input-group">
-        <label>Forecast (must have "Results" sheet)</label>
-        <div class="row-input">
-          <label for="forecastYearSelect">Financial year:</label>
-          <select id="forecastYearSelect"></select>
-        </div>
-        <div class="row-input">
-          <label>Plan version:</label>
-          <select id="forecastPlanVersion"></select>
-        </div>
-        <input type="file" id="fFile" accept=".xlsx,.xls" onchange="loadForecast(event)">
-        <div class="row-input">
-          <label>Header row:</label>
-          <input type="number" id="fRow" value="1" min="1">
-        </div>
-        <p class="helper-text">Try 1, 2, or 3 if not loading</p>
-        <button type="button" onclick="downloadForecastLibraryEntry()">Download Forecast Library JSON</button>
-      </div>
       <div class="file-input-group">
         <label>Work Done (must have "Detail" sheet)</label>
         <input type="file" id="wFile" accept=".xlsx,.xls" onchange="loadWorkDone(event)">
@@ -218,7 +201,7 @@
         <div class="forecast-page-icon">FB</div>
         <div>
           <h1>Forecast Builder</h1>
-          <p class="subtitle">Build the FY-wide forecast for RF3, RF6, RF9, and RF11.</p>
+          <p class="subtitle">Build the FY-wide forecast (v0 initial or v1 updated) used across all RF stages.</p>
         </div>
       </div>
       <div class="forecast-page-actions">
@@ -242,7 +225,7 @@
             <label for="forecastEditorWorkGroup">Work group set</label>
             <select id="forecastEditorWorkGroup"></select>
           </div>
-          <small>Forecasts are FY-wide and must exist for RF3, RF6, RF9, and RF11.</small>
+          <small>Forecasts are FY-wide and persist across RF stages (RF3, RF6, RF9, RF11).</small>
         </div>
         <div class="forecast-card">
           <h4>Current status</h4>
@@ -289,6 +272,7 @@
         <form id="forecastEditorForm" class="forecast-editor-form">
           <div class="forecast-editor-table">
             <label>Standard job forecast table</label>
+            <p class="helper-text">Paste a block of P1–P13 values from Excel directly into the table.</p>
             <div class="forecast-editor-table-wrapper">
               <table class="forecast-table" id="forecastEditorTable"></table>
             </div>

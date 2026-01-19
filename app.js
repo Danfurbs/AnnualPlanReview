@@ -112,13 +112,12 @@
       updateReviewContextDisplay();
       updateContextControls();
       fData = null;
-      const loaded = loadForecastFromLibrary(currentFinancialYear, stage, currentPlanVersion);
-      if (!loaded) {
-        const forecastCache = loadForecastStore(currentFinancialYear, stage, currentPlanVersion);
-        if (forecastCache) {
-          updateWorkGroupFilterOptions();
-          console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
-        }
+      const forecastCache = loadForecastStore(currentFinancialYear, stage, currentPlanVersion);
+      if (forecastCache) {
+        updateWorkGroupFilterOptions();
+        console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+      } else if (loadForecastFromLibrary(currentFinancialYear, stage, currentPlanVersion)) {
+        updateWorkGroupFilterOptions();
       }
       closeStageModal();
       render();
@@ -196,14 +195,14 @@
       return output;
     }
 
-    function getForecastStorageKey(year, stage, planVersion) {
+    function getForecastStorageKey(year, planVersion) {
       if (!year || !planVersion) return FORECAST_STORAGE_KEY;
       return `${FORECAST_STORAGE_KEY}:${year}:${planVersion}`;
     }
 
     function loadForecastStore(year = currentFinancialYear, stage = currentReviewStage, planVersion = currentPlanVersion) {
       try {
-        const raw = localStorage.getItem(getForecastStorageKey(year, stage, planVersion));
+        const raw = localStorage.getItem(getForecastStorageKey(year, planVersion));
         if (!raw) return null;
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== 'object') return null;
@@ -231,7 +230,7 @@
           rowCount: rowCount ?? null,
           savedAt: new Date().toISOString()
         };
-        localStorage.setItem(getForecastStorageKey(year, stage, planVersion), JSON.stringify(payload));
+        localStorage.setItem(getForecastStorageKey(year, planVersion), JSON.stringify(payload));
       } catch (err) {
         console.warn('Failed to persist forecast cache:', err);
       }
@@ -318,24 +317,11 @@
     }
 
     function updateContextControls() {
-      const yearControl = document.getElementById('financialYearControl');
-      if (yearControl) {
-        const options = getFinancialYearOptions();
-        yearControl.innerHTML = options.map(year => `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`).join('');
-        yearControl.value = options.includes(currentFinancialYear) ? currentFinancialYear : options[0] || '';
-      }
-      const forecastYearSelect = document.getElementById('forecastYearSelect');
-      if (forecastYearSelect) {
-        const options = getFinancialYearOptions();
-        forecastYearSelect.innerHTML = options.map(year => `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`).join('');
-        forecastYearSelect.value = options.includes(currentFinancialYear) ? currentFinancialYear : options[0] || '';
-      }
-      const uploadPlan = document.getElementById('forecastPlanVersion');
-      if (uploadPlan) {
-        uploadPlan.innerHTML = getPlanVersionOptions().map(plan => (
-          `<option value="${escapeHtml(plan.id)}">${escapeHtml(plan.label)}</option>`
-        )).join('');
-        uploadPlan.value = currentPlanVersion;
+      const reviewStageHelper = document.getElementById('reviewStageHelper');
+      if (reviewStageHelper) {
+        const stageLabel = currentReviewStage || 'RF';
+        const yearLabel = currentFinancialYear || 'FY';
+        reviewStageHelper.textContent = `Current selection: ${yearLabel} ${stageLabel}.`;
       }
       const planDisplay = document.getElementById('planVersionDisplay');
       if (planDisplay) {
@@ -353,7 +339,7 @@
           } else {
             const label = PLAN_VERSIONS.find(plan => plan.id === currentPlanVersion)?.label || 'Plan';
             const suffix = availability.v1 && availability.v0 ? ' (v0 & v1 available)' : '';
-            statusMessage.textContent = `Using ${label} forecast${suffix}.`;
+            statusMessage.textContent = `Using ${label} forecast${suffix} (FY-wide across RF stages).`;
           }
         }
       }
@@ -382,13 +368,12 @@
       updateReviewContextDisplay();
       updateContextControls();
       fData = null;
-      const loaded = loadForecastFromLibrary(currentFinancialYear, stage, currentPlanVersion);
-      if (!loaded) {
-        const forecastCache = loadForecastStore(currentFinancialYear, stage, currentPlanVersion);
-        if (forecastCache) {
-          updateWorkGroupFilterOptions();
-          console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
-        }
+      const forecastCache = loadForecastStore(currentFinancialYear, stage, currentPlanVersion);
+      if (forecastCache) {
+        updateWorkGroupFilterOptions();
+        console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+      } else if (loadForecastFromLibrary(currentFinancialYear, stage, currentPlanVersion)) {
+        updateWorkGroupFilterOptions();
       }
       render();
     }
@@ -450,10 +435,7 @@
     }
 
     function getStandardJobListForWorkGroup(workGroup) {
-      const list = getStandardJobList();
-      const allowed = getJobNumbersForWorkGroupSet(workGroup);
-      if (!allowed.size) return list;
-      return list.filter(job => allowed.has(job.jobNumber));
+      return getStandardJobList();
     }
 
     function renderForecastEditorSelectors() {
@@ -491,19 +473,35 @@
         : (workGroupOptions[0] || '');
       workGroupSelect.value = forecastEditorState.workGroup;
 
-      ensureForecastEditorRows();
+      setForecastEditorRowsFromForecast();
       renderForecastEditorJobOptions();
       renderForecastEditorTable();
       updateForecastEditorSummary();
     }
 
-    function ensureForecastEditorRows() {
+    function ensureForecastEditorRows(targetCount) {
       if (!Array.isArray(forecastEditorState.rows)) {
         forecastEditorState.rows = [];
       }
-      if (!forecastEditorState.rows.length) {
+      if (!forecastEditorState.rows.length && !targetCount) {
         forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
       }
+      if (targetCount && forecastEditorState.rows.length < targetCount) {
+        const missing = targetCount - forecastEditorState.rows.length;
+        forecastEditorState.rows = forecastEditorState.rows.concat(
+          Array.from({ length: missing }, () => createForecastEditorRow())
+        );
+      }
+    }
+
+    function setForecastEditorRowsFromForecast() {
+      const workGroup = forecastEditorState.workGroup;
+      const rowsFromData = buildForecastEditorRowsFromForecast(workGroup);
+      if (rowsFromData.length) {
+        forecastEditorState.rows = rowsFromData;
+        return;
+      }
+      ensureForecastEditorRows();
     }
 
     function createForecastEditorRow() {
@@ -616,6 +614,23 @@
       return job?.wgs?.[workGroup] ? { ...job.wgs[workGroup] } : {};
     }
 
+    function buildForecastEditorRowsFromForecast(workGroup) {
+      if (!fData || !workGroup) return [];
+      const rows = [];
+      fData.forEach((job, jobNumber) => {
+        const wgData = job?.wgs?.[workGroup];
+        if (!wgData) return;
+        const meta = getForecastEditorJobMeta(jobNumber);
+        rows.push({
+          jobNumber,
+          desc: meta?.desc || '',
+          unit: meta?.unit || '',
+          volumes: { ...wgData }
+        });
+      });
+      return rows.sort((a, b) => a.jobNumber.localeCompare(b.jobNumber));
+    }
+
     function addForecastEditorRow() {
       ensureForecastEditorRows();
       forecastEditorState.rows.push(createForecastEditorRow());
@@ -707,6 +722,59 @@
         const period = event.target.dataset.period;
         const value = parseFloat(event.target.value);
         forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
+        updateForecastEditorSummary();
+      }
+    }
+
+    function handleForecastEditorTablePaste(event) {
+      const target = event.target;
+      if (!target || !target.matches('input[data-period]')) return;
+      const clipboard = event.clipboardData?.getData('text');
+      if (!clipboard) return;
+      const rows = clipboard.replace(/\r/g, '').split('\n').filter(line => line.length);
+      if (!rows.length) return;
+      const parsed = rows.map(row => row.split('\t'));
+      if (parsed.length === 1 && parsed[0].length === 1) return;
+      event.preventDefault();
+      const startRowIndex = Number(target.dataset.row);
+      const startPeriodIndex = FORECAST_PERIODS.indexOf(target.dataset.period);
+      if (!Number.isFinite(startRowIndex) || startPeriodIndex < 0) return;
+      const requiredRows = startRowIndex + parsed.length;
+      const hasNewRows = forecastEditorState.rows.length < requiredRows;
+      ensureForecastEditorRows(requiredRows);
+
+      parsed.forEach((cells, rowOffset) => {
+        const rowIndex = startRowIndex + rowOffset;
+        if (!forecastEditorState.rows[rowIndex]) {
+          forecastEditorState.rows[rowIndex] = createForecastEditorRow();
+        }
+        cells.forEach((cell, colOffset) => {
+          const periodIndex = startPeriodIndex + colOffset;
+          if (periodIndex >= FORECAST_PERIODS.length) return;
+          const period = FORECAST_PERIODS[periodIndex];
+          const value = parseFloat(String(cell).trim());
+          forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
+        });
+      });
+
+      if (hasNewRows) {
+        renderForecastEditorTable();
+      } else {
+        parsed.forEach((cells, rowOffset) => {
+          const rowIndex = startRowIndex + rowOffset;
+          cells.forEach((cell, colOffset) => {
+            const periodIndex = startPeriodIndex + colOffset;
+            if (periodIndex >= FORECAST_PERIODS.length) return;
+            const period = FORECAST_PERIODS[periodIndex];
+            const input = document.querySelector(
+              `#forecastEditorTable input[data-row="${rowIndex}"][data-period="${period}"]`
+            );
+            if (input) {
+              const value = forecastEditorState.rows[rowIndex].volumes[period] || 0;
+              input.value = value ? value : '';
+            }
+          });
+        });
         updateForecastEditorSummary();
       }
     }
@@ -808,7 +876,7 @@
       if (!summaryEl) return;
       const totalJobs = fData?.size || 0;
       const workGroups = getAllWorkGroupSetNames();
-      summaryEl.textContent = `Current context: ${forecastEditorState.year || 'FY'} ${forecastEditorState.stage || 'RF'} ${forecastEditorState.planVersion || ''}. FY-wide forecasts should be kept in sync for RF3, RF6, RF9, and RF11. Forecast jobs loaded: ${totalJobs}. Work group sets available: ${workGroups.length}.`;
+      summaryEl.textContent = `Current context: ${forecastEditorState.year || 'FY'} ${forecastEditorState.stage || 'RF'} ${forecastEditorState.planVersion || ''}. FY-wide forecasts persist across RF3, RF6, RF9, and RF11 (v0 initial or v1 updated). Forecast jobs loaded: ${totalJobs}. Work group sets available: ${workGroups.length}.`;
 
       const rowsWithJobs = forecastEditorState.rows?.filter(row => row.jobNumber).length || 0;
       const rowCount = forecastEditorState.rows?.length || 0;
@@ -836,7 +904,7 @@
         stage: currentReviewStage || REVIEW_STAGES[0],
         planVersion: currentPlanVersion || PLAN_VERSIONS[0]?.id || '',
         workGroup: forecastEditorState.workGroup || '',
-        rows: forecastEditorState.rows?.length ? forecastEditorState.rows : []
+        rows: []
       };
       renderForecastEditorSelectors();
       const statusEl = document.getElementById('forecastEditorStatus');
@@ -863,7 +931,8 @@
         ...forecastEditorState,
         year,
         stage,
-        planVersion
+        planVersion,
+        rows: []
       };
       if (year && stage && planVersion) {
         setForecastContext(stage, year, planVersion);
@@ -876,19 +945,11 @@
       forecastEditorState = {
         ...forecastEditorState,
         workGroup,
-        rows: Array.from({ length: 5 }, () => createForecastEditorRow())
+        rows: []
       };
+      setForecastEditorRowsFromForecast();
       renderForecastEditorJobOptions();
       renderForecastEditorTable();
-    }
-
-    function handleFinancialYearChange() {
-      const year = document.getElementById('financialYearControl')?.value || '';
-      if (!year || !currentReviewStage) {
-        openStageModal();
-        return;
-      }
-      setReviewContext(currentReviewStage, year);
     }
 
     function saveCommentStore() {
@@ -1300,13 +1361,12 @@
       }
       if (currentFinancialYear && currentReviewStage) {
         currentPlanVersion = getPreferredPlanVersion(currentFinancialYear, currentReviewStage);
-        const loaded = loadForecastFromLibrary(currentFinancialYear, currentReviewStage, currentPlanVersion);
-        if (!loaded) {
-          const forecastCache = loadForecastStore(currentFinancialYear, currentReviewStage, currentPlanVersion);
-          if (forecastCache) {
-            updateWorkGroupFilterOptions();
-            console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
-          }
+        const forecastCache = loadForecastStore(currentFinancialYear, currentReviewStage, currentPlanVersion);
+        if (forecastCache) {
+          updateWorkGroupFilterOptions();
+          console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+        } else if (loadForecastFromLibrary(currentFinancialYear, currentReviewStage, currentPlanVersion)) {
+          updateWorkGroupFilterOptions();
         }
       }
       updateGroupFilterOptions();
@@ -1344,6 +1404,7 @@
       if (forecastEditorPlan) forecastEditorPlan.addEventListener('change', handleForecastEditorContextChange);
       if (forecastEditorWorkGroup) forecastEditorWorkGroup.addEventListener('change', handleForecastEditorWorkGroupChange);
       if (forecastEditorTable) forecastEditorTable.addEventListener('input', handleForecastEditorTableInput);
+      if (forecastEditorTable) forecastEditorTable.addEventListener('paste', handleForecastEditorTablePaste);
     }
 
     function extractJob(txt) {
@@ -2360,7 +2421,7 @@
       const cutoffLabel = cutoffValue === 'auto' ? 'Auto' : 'Selected';
       const periodLabel = maxWorkDonePeriod > 0 ? `Period ${maxWorkDonePeriod}` : 'Period N/A';
       const message = isForecast
-        ? `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining.`
+        ? `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining. Forecasts are managed in the Forecast Builder.`
         : 'Units derived from Work Done only.';
       const uploadNote = document.getElementById('uploadModeNote');
       const breakdownNote = document.getElementById('breakdownModeNote');
@@ -2375,7 +2436,7 @@
 
     function readForecastCache(year, stage, planVersion) {
       try {
-        const raw = localStorage.getItem(getForecastStorageKey(year, stage, planVersion));
+        const raw = localStorage.getItem(getForecastStorageKey(year, planVersion));
         if (!raw) return null;
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== 'object') return null;
