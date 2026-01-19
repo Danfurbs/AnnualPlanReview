@@ -134,12 +134,12 @@ function getForecastAvailability(year) {
  * Preference order: v1 > v0 > current
  */
 function getPreferredPlanVersion(year) {
-  if (!year) return window.currentPlanVersion || 'v1';
+  if (!year) return window.currentPlanVersion || 'v0';
 
   const availability = getForecastAvailability(year);
   if (availability.v1) return 'v1';
   if (availability.v0) return 'v0';
-  return window.currentPlanVersion || 'v1';
+  return window.currentPlanVersion || 'v0';
 }
 
 /**

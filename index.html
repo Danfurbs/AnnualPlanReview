@@ -301,7 +301,16 @@
         <button class="close" onclick="closeBreakdown()">&times;</button>
       </div>
       <p class="helper-text" id="breakdownModeNote"></p>
-      
+
+      <div class="breakdown-controls" style="display: flex; gap: 16px; align-items: center; margin-bottom: 16px; padding: 12px; background: #f5f5f5; border-radius: 4px;">
+        <label style="font-weight: 500;">Compare against:</label>
+        <select id="breakdownPlanVersion" onchange="handleBreakdownPlanVersionChange()" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; background: white;">
+          <option value="v0">Plan v0 (Baseline)</option>
+          <option value="v1">Plan v1 (Updated)</option>
+          <option value="both">Both (v0 & v1)</option>
+        </select>
+      </div>
+
       <div class="breakdown-section">
         <div class="discipline-header">
           <h3>Cumulative Progress</h3>

@@ -16,7 +16,7 @@ window.FORECAST_PERIODS = Array.from({ length: 13 }, (_, i) => `P${i + 1}`);
 // Forecast context state
 window.currentReviewStage = null;
 window.currentFinancialYear = null;
-window.currentPlanVersion = 'v1';
+window.currentPlanVersion = 'v0';
 
 // Forecast data
 window.fData = null;

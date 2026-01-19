@@ -1,8 +1,8 @@
     // Core data (exposed on window for forecast modules)
-    window.window.wData = null;
-    window.window.stdJobs = new Map();
-    window.window.workGroupSets = new Map();
-    window.window.currentJobsMap = new Map();
+    window.wData = null;
+    window.stdJobs = new Map();
+    window.workGroupSets = new Map();
+    window.currentJobsMap = new Map();
 
     // UI state (not in modules)
     let groupStore = [];
@@ -31,6 +31,33 @@
     // Group management (not in modules)
     const GROUP_STORAGE_KEY = 'aprGroupStoreV1';
 
+    // Breakdown plan version preference
+    const BREAKDOWN_PLAN_VERSION_KEY = 'aprBreakdownPlanVersionV1';
+    let breakdownPlanVersion = 'v0'; // Default to v0
+
+    function loadBreakdownPlanVersion() {
+      const saved = localStorage.getItem(BREAKDOWN_PLAN_VERSION_KEY);
+      if (saved && ['v0', 'v1', 'both'].includes(saved)) {
+        breakdownPlanVersion = saved;
+      }
+    }
+
+    function saveBreakdownPlanVersion(version) {
+      breakdownPlanVersion = version;
+      localStorage.setItem(BREAKDOWN_PLAN_VERSION_KEY, version);
+    }
+
+    function handleBreakdownPlanVersionChange() {
+      const select = document.getElementById('breakdownPlanVersion');
+      if (!select) return;
+      saveBreakdownPlanVersion(select.value);
+      // Re-render the current breakdown if it's open
+      if (currentCommentJob) {
+        const job = window.currentJobsMap.get(currentCommentJob);
+        if (job) showBreakdown(job);
+      }
+    }
+
     function loadCommentStore() {
       try {
         localStorage.removeItem(LEGACY_COMMENT_STORAGE_KEY);
@@ -54,23 +81,6 @@
 
     function saveReviewStore() {
       localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(reviewStore));
-    }
-
-    function loadReviewStage() {
-      const saved = localStorage.getItem(REVIEW_STAGE_KEY);
-      if (REVIEW_STAGES.includes(saved)) currentReviewStage = saved;
-    }
-
-    function loadFinancialYear() {
-      const saved = localStorage.getItem(FINANCIAL_YEAR_KEY);
-      if (saved) currentFinancialYear = saved;
-    }
-
-    function loadPlanVersion() {
-      const saved = localStorage.getItem(PLAN_VERSION_KEY);
-      if (saved && PLAN_VERSIONS.some(plan => plan.id === saved)) {
-        currentPlanVersion = saved;
-      }
     }
 
     function updateReviewContextDisplay() {
@@ -632,15 +642,14 @@
     function init() {
       loadCommentStore();
       loadReviewStore();
-      loadReviewStage();
-      loadFinancialYear();
-      loadPlanVersion();
+      initializeForecastContext();  // Load forecast context from localStorage
       loadWorkOrderAmendments();
       loadGroupStore();
+      loadBreakdownPlanVersion();
       const stageDisplay = document.getElementById('reviewStageDisplay');
-      if (stageDisplay && currentReviewStage) stageDisplay.textContent = currentReviewStage;
+      if (stageDisplay && window.currentReviewStage) stageDisplay.textContent = window.currentReviewStage;
       const fyDisplay = document.getElementById('financialYearDisplay');
-      if (fyDisplay) fyDisplay.textContent = currentFinancialYear || 'FY';
+      if (fyDisplay) fyDisplay.textContent = window.currentFinancialYear || 'FY';
       updateContextControls();
       if (typeof WORK_GROUP_SETS_RAW !== 'undefined') {
         WORK_GROUP_SETS_RAW.split('\n').slice(1).forEach(line => {
@@ -1875,10 +1884,16 @@
       }
       const compareButton = document.getElementById('compareForecastButton');
       if (compareButton) {
-        const hasV1 = Boolean(getForecastSnapshot(currentFinancialYear, 'v1'));
+        const hasV1 = Boolean(getForecastSnapshot(window.currentFinancialYear, 'v1'));
         compareButton.style.display = hasV1 ? 'inline-flex' : 'none';
       }
-      
+
+      // Set breakdown plan version selector
+      const breakdownPlanSelect = document.getElementById('breakdownPlanVersion');
+      if (breakdownPlanSelect) {
+        breakdownPlanSelect.value = breakdownPlanVersion;
+      }
+
       // Build cumulative data
       const periods = [];
       let cumA = 0;
@@ -1906,9 +1921,14 @@
       // Draw chart
       const ctx = document.getElementById('chart');
       if (currentChart) currentChart.destroy();
-      
+
       const datasets = [];
-      if (v0Periods) {
+
+      // Add plan datasets based on user preference
+      const showV0 = breakdownPlanVersion === 'v0' || breakdownPlanVersion === 'both';
+      const showV1 = breakdownPlanVersion === 'v1' || breakdownPlanVersion === 'both';
+
+      if (showV0 && v0Periods) {
         datasets.push({
           label: 'Planned v0 (Cumulative)',
           data: cumPlanV0,
@@ -1918,7 +1938,7 @@
           fill: true
         });
       }
-      if (v1Periods) {
+      if (showV1 && v1Periods) {
         datasets.push({
           label: 'Planned v1 (Cumulative)',
           data: cumPlanV1,

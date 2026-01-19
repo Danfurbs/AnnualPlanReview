@@ -4,15 +4,8 @@
  */
 
 // Use shared globals from forecast-globals.js
-const window.forecastEditorState = window.window.forecastEditorState;
 const FORECAST_PERIODS = window.FORECAST_PERIODS;
 const PLAN_VERSIONS = window.PLAN_VERSIONS;
-let window.forecastEditorState = {
-  year: '',
-  planVersion: '',
-  workGroup: '',
-  rows: []
-};
 
 /**
  * Create an empty forecast row
@@ -61,7 +54,7 @@ function closeForecastEditor() {
 function initializeForecastEditor() {
   // Set initial context
   window.forecastEditorState.year = window.currentFinancialYear || getFinancialYearOptions()[0] || 'FY27';
-  window.forecastEditorState.planVersion = window.currentPlanVersion || 'v1';
+  window.forecastEditorState.planVersion = window.currentPlanVersion || 'v0';
 
   // Load forecast for this context
   const snapshot = getForecastSnapshot(window.forecastEditorState.year, window.forecastEditorState.planVersion);
@@ -101,7 +94,7 @@ function renderForecastEditorSelectors() {
     .join('');
   window.forecastEditorState.planVersion = PLAN_VERSIONS.some(plan => plan.id === window.forecastEditorState.planVersion)
     ? window.forecastEditorState.planVersion
-    : (window.currentPlanVersion || 'v1');
+    : (window.currentPlanVersion || 'v0');
   planSelect.value = window.forecastEditorState.planVersion;
 
   // Work group selector
