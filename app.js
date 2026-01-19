@@ -57,6 +57,8 @@
         if (job) showBreakdown(job);
       }
     }
+    // Expose globally for HTML onclick handler
+    window.handleBreakdownPlanVersionChange = handleBreakdownPlanVersionChange;
 
     function loadCommentStore() {
       try {

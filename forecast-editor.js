@@ -741,6 +741,18 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// Expose functions globally for HTML onclick handlers
+window.openForecastEditor = openForecastEditor;
+window.closeForecastEditor = closeForecastEditor;
+window.submitForecastEditorForm = submitForecastEditorForm;
+window.addForecastEditorRow = addForecastEditorRow;
+window.clearForecastEditorTable = clearForecastEditorTable;
+window.downloadForecastEditorExport = downloadForecastEditorExport;
+window.downloadForecastFile = downloadForecastFile;
+window.triggerForecastFileUpload = triggerForecastFileUpload;
+window.loadForecastFile = loadForecastFile;
+window.handleForecastEditorContextChange = handleForecastEditorContextChange;
+
 // Event listener setup
 document.addEventListener('DOMContentLoaded', () => {
   // Forecast editor form submit
