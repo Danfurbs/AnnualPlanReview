@@ -184,6 +184,7 @@
     .group-table input[type="checkbox"] { transform: scale(1.05); }
     .top-bar-actions { display: flex; gap: 10px; flex-wrap: wrap; }
     .page.is-hidden { display: none; }
+    .is-hidden { display: none; }
     .forecast-page-header { background: white; padding: 16px 20px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
     .forecast-page-title { display: flex; align-items: center; gap: 12px; }
     .forecast-page-icon { width: 36px; height: 36px; border-radius: 10px; background: #6366f1; color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }

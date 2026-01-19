@@ -930,6 +930,130 @@
       URL.revokeObjectURL(link.href);
     }
 
+    function buildForecastFilePayload() {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        forecasts: {}
+      };
+
+      const persistCurrent = currentFinancialYear && currentPlanVersion && fData?.size;
+      if (persistCurrent) {
+        payload.forecasts[currentFinancialYear] = payload.forecasts[currentFinancialYear] || {};
+        payload.forecasts[currentFinancialYear][currentPlanVersion] = {
+          data: serializeForecastData(fData),
+          rowCount: lastForecastRowCount ?? fData.size,
+          savedAt: new Date().toISOString()
+        };
+      }
+
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (!key || (!key.startsWith(`${FORECAST_STORAGE_KEY}:`) && key !== FORECAST_STORAGE_KEY)) continue;
+        const parts = key.split(':');
+        const year = parts.length >= 3 ? parts[1] : currentFinancialYear;
+        const planVersion = parts.length >= 3 ? parts[2] : currentPlanVersion;
+        if (!year || !planVersion) continue;
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          if (!parsed?.data) continue;
+          payload.forecasts[year] = payload.forecasts[year] || {};
+          payload.forecasts[year][planVersion] = parsed;
+        } catch (err) {
+          console.warn('Skipping invalid forecast cache entry:', err);
+        }
+      }
+
+      return payload;
+    }
+
+    function downloadForecastFile() {
+      const payload = buildForecastFilePayload();
+      if (!Object.keys(payload.forecasts).length) {
+        alert('No forecast data available to save.');
+        return;
+      }
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `forecast-cache-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    }
+
+    function triggerForecastFileUpload() {
+      const input = document.getElementById('forecastFileInput');
+      if (input) input.click();
+    }
+
+    async function loadForecastFile(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        const content = await file.text();
+        const parsed = JSON.parse(content);
+        let imported = 0;
+
+        if (parsed?.forecasts && typeof parsed.forecasts === 'object') {
+          Object.entries(parsed.forecasts).forEach(([year, plans]) => {
+            if (!plans || typeof plans !== 'object') return;
+            Object.entries(plans).forEach(([planVersion, snapshot]) => {
+              if (!snapshot?.data) return;
+              localStorage.setItem(
+                getForecastStorageKey(year, planVersion),
+                JSON.stringify({
+                  data: snapshot.data,
+                  rowCount: snapshot.rowCount ?? null,
+                  savedAt: snapshot.savedAt || new Date().toISOString()
+                })
+              );
+              imported += 1;
+            });
+          });
+        } else {
+          Object.entries(parsed || {}).forEach(([year, plans]) => {
+            if (!plans || typeof plans !== 'object') return;
+            Object.entries(plans).forEach(([planVersion, stages]) => {
+              if (!stages || typeof stages !== 'object') return;
+              const stageEntry = Object.values(stages)[0];
+              if (!stageEntry?.data) return;
+              localStorage.setItem(
+                getForecastStorageKey(year, planVersion),
+                JSON.stringify({
+                  data: stageEntry.data,
+                  rowCount: stageEntry.rowCount ?? null,
+                  savedAt: new Date().toISOString()
+                })
+              );
+              imported += 1;
+            });
+          });
+        }
+
+        if (!imported) {
+          alert('No forecast data found in that file.');
+          return;
+        }
+
+        const shouldReload = currentFinancialYear && currentPlanVersion;
+        if (shouldReload) {
+          loadForecastStore(currentFinancialYear, currentReviewStage, currentPlanVersion);
+          render();
+          renderForecastEditorSelectors();
+          renderForecastEditorTable();
+        }
+        alert(`Loaded ${imported} forecast set${imported === 1 ? '' : 's'} from file.`);
+      } catch (err) {
+        console.error(err);
+        alert('Unable to read that forecast file.');
+      } finally {
+        event.target.value = '';
+      }
+    }
+
     function updateForecastEditorSummary() {
       const summaryEl = document.getElementById('forecastEditorSummary');
       if (!summaryEl) return;

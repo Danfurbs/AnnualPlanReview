@@ -248,6 +248,9 @@
             <button type="button" onclick="addForecastEditorRow()">+ Add Row</button>
             <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear Table</button>
             <button type="button" class="group-action-button" onclick="downloadForecastEditorExport()">Export Forecast JSON</button>
+            <button type="button" class="group-action-button" onclick="downloadForecastFile()">Save Forecast File</button>
+            <button type="button" class="group-action-button" onclick="triggerForecastFileUpload()">Load Forecast File</button>
+            <input type="file" id="forecastFileInput" accept="application/json" class="is-hidden" onchange="loadForecastFile(event)">
           </div>
         </div>
         <div class="forecast-card">
@@ -255,6 +258,7 @@
           <ul class="forecast-tips">
             <li>Use the job number list to auto-fill description and unit.</li>
             <li>Forecast values are stored per FY and RF stage.</li>
+            <li>Use “Save Forecast File” to share forecasts with another PC.</li>
             <li>Remember to export after updating the FY-wide library.</li>
           </ul>
         </div>
