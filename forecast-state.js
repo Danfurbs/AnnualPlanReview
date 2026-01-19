@@ -302,3 +302,19 @@ function getJobMetadata(jobNumber) {
 
   return {};
 }
+
+// Expose functions globally for cross-module access
+window.initializeForecastContext = initializeForecastContext;
+window.setReviewContext = setReviewContext;
+window.setForecastContext = setForecastContext;
+window.getCurrentContext = getCurrentContext;
+window.getFinancialYearOptions = getFinancialYearOptions;
+window.getForecastAvailability = getForecastAvailability;
+window.getPreferredPlanVersion = getPreferredPlanVersion;
+window.loadForecastForCurrentContext = loadForecastForCurrentContext;
+window.saveCurrentForecast = saveCurrentForecast;
+window.getAllWorkGroupSetNames = getAllWorkGroupSetNames;
+window.getJobNumbersForWorkGroupSet = getJobNumbersForWorkGroupSet;
+window.getStandardJobList = getStandardJobList;
+window.getJobMetadata = getJobMetadata;
+

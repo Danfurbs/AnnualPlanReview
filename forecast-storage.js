@@ -334,3 +334,21 @@ function cleanForecastData(forecastData) {
   toDelete.forEach(jobNumber => forecastData.delete(jobNumber));
   return forecastData;
 }
+
+// Expose functions globally for cross-module access
+window.getForecastStorageKey = getForecastStorageKey;
+window.serializeForecastData = serializeForecastData;
+window.hydrateForecastData = hydrateForecastData;
+window.cloneForecastData = cloneForecastData;
+window.loadForecastFromStorage = loadForecastFromStorage;
+window.saveForecastToStorage = saveForecastToStorage;
+window.loadForecastFromLibrary = loadForecastFromLibrary;
+window.getForecastSnapshot = getForecastSnapshot;
+window.initializeV1FromV0 = initializeV1FromV0;
+window.exportForecastFile = exportForecastFile;
+window.importForecastFile = importForecastFile;
+window.getForecastPeriodsForJob = getForecastPeriodsForJob;
+window.getForecastWorkGroupData = getForecastWorkGroupData;
+window.updateForecastWorkGroup = updateForecastWorkGroup;
+window.cleanForecastData = cleanForecastData;
+
