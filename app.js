@@ -195,6 +195,20 @@
       return output;
     }
 
+    function cloneForecastData(map) {
+      const cloned = new Map();
+      if (!map) return cloned;
+      map.forEach((value, key) => {
+        const periods = value?.periods ? { ...value.periods } : {};
+        const wgs = {};
+        Object.entries(value?.wgs || {}).forEach(([wg, data]) => {
+          wgs[wg] = { ...data };
+        });
+        cloned.set(key, { periods, wgs });
+      });
+      return cloned;
+    }
+
     function getForecastStorageKey(year, planVersion) {
       if (!year || !planVersion) return FORECAST_STORAGE_KEY;
       return `${FORECAST_STORAGE_KEY}:${year}:${planVersion}`;
@@ -280,6 +294,19 @@
       lastForecastRowCount = entry.rowCount ?? hydrated.size;
       updateWorkGroupFilterOptions();
       console.log(`✓ Forecast library loaded for ${year} ${stage} ${planVersion}`, entry.rowCount ? `(${entry.rowCount} rows)` : '');
+      return true;
+    }
+
+    function initializeV1FromV0(year, stage) {
+      if (!year || !stage) return false;
+      const v1Snapshot = getForecastSnapshot(year, stage, 'v1');
+      if (v1Snapshot) return false;
+      const v0Snapshot = getForecastSnapshot(year, stage, 'v0');
+      if (!v0Snapshot || !v0Snapshot.data?.size) return false;
+      fData = cloneForecastData(v0Snapshot.data);
+      lastForecastRowCount = fData.size;
+      saveForecastStore(fData.size, year, stage, 'v1');
+      console.log(`✓ Plan v1 initialized from v0 for ${year} ${stage}`);
       return true;
     }
 
@@ -373,6 +400,8 @@
         updateWorkGroupFilterOptions();
         console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
       } else if (loadForecastFromLibrary(currentFinancialYear, stage, currentPlanVersion)) {
+        updateWorkGroupFilterOptions();
+      } else if (currentPlanVersion === 'v1' && initializeV1FromV0(currentFinancialYear, stage)) {
         updateWorkGroupFilterOptions();
       }
       render();
@@ -536,6 +565,8 @@
       const table = document.getElementById('forecastEditorTable');
       if (!table) return;
       ensureForecastEditorRows();
+      const baselineMap = getForecastEditorBaselineMap();
+      const workGroup = forecastEditorState.workGroup;
       const header = `
         <thead>
           <tr>
@@ -543,6 +574,8 @@
             <th>Description</th>
             <th>Unit</th>
             ${FORECAST_PERIODS.map(period => `<th>${period}</th>`).join('')}
+            <th>Total</th>
+            <th></th>
           </tr>
         </thead>
       `;
@@ -552,6 +585,7 @@
             const desc = row.desc || '';
             const unit = row.unit || '';
             const searchValue = `${row.jobNumber || ''} ${desc || ''}`.toLowerCase();
+            const rowTotal = getForecastEditorRowTotal(row);
             return `
               <tr data-row="${index}" data-search="${escapeHtml(searchValue)}">
                 <td>
@@ -568,13 +602,15 @@
                 <td data-role="unit" class="${unit ? '' : 'forecast-cell-muted'}">${escapeHtml(unit || 'Auto-fill')}</td>
                 ${FORECAST_PERIODS.map(period => {
                   const value = Number(row.volumes?.[period] || 0);
+                  const baselineValue = getForecastBaselineValue(baselineMap, row.jobNumber, workGroup, period);
+                  const isChanged = baselineMap && row.jobNumber && value !== Number(baselineValue || 0);
                   return `
                     <td>
                       <input
                         type="number"
                         step="0.01"
                         min="0"
-                        class="forecast-period-input"
+                        class="forecast-period-input${isChanged ? ' is-changed' : ''}"
                         data-row="${index}"
                         data-period="${period}"
                         value="${value ? value : ''}"
@@ -582,12 +618,29 @@
                     </td>
                   `;
                 }).join('')}
+                <td class="forecast-total-cell" data-role="row-total" data-row="${index}">${formatForecastNumber(rowTotal)}</td>
+                <td class="forecast-action-cell">
+                  <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}">Delete</button>
+                </td>
               </tr>
             `;
           }).join('')}
         </tbody>
       `;
-      table.innerHTML = `${header}${body}`;
+      const footerTotals = getForecastEditorTotals(forecastEditorState.rows);
+      const footer = `
+        <tfoot>
+          <tr>
+            <td class="forecast-total-label" colspan="3">Total</td>
+            ${FORECAST_PERIODS.map(period => (
+              `<td class="forecast-total-cell" data-role="period-total" data-period="${period}">${formatForecastNumber(footerTotals.periodTotals[period])}</td>`
+            )).join('')}
+            <td class="forecast-total-cell" data-role="grand-total">${formatForecastNumber(footerTotals.grandTotal)}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      `;
+      table.innerHTML = `${header}${body}${footer}`;
       filterForecastEditorTable();
       updateForecastEditorSummary();
     }
@@ -712,17 +765,21 @@
           const period = input.dataset.period;
           const value = Number(rowData.volumes?.[period] || 0);
           input.value = value ? value : '';
+          updateForecastEditorCellHighlight(rowIndex, period, input);
         });
         const searchValue = `${rowData.jobNumber || ''} ${rowData.desc || ''}`.toLowerCase();
         rowEl.dataset.search = searchValue;
         updateForecastEditorSummary();
+        updateForecastEditorTotalsDisplay();
         return;
       }
       if (event.target.matches('input[data-period]')) {
         const period = event.target.dataset.period;
         const value = parseFloat(event.target.value);
         forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
+        updateForecastEditorCellHighlight(rowIndex, period, event.target);
         updateForecastEditorSummary();
+        updateForecastEditorTotalsDisplay();
       }
     }
 
@@ -772,10 +829,12 @@
             if (input) {
               const value = forecastEditorState.rows[rowIndex].volumes[period] || 0;
               input.value = value ? value : '';
+              updateForecastEditorCellHighlight(rowIndex, period, input);
             }
           });
         });
         updateForecastEditorSummary();
+        updateForecastEditorTotalsDisplay();
       }
     }
 
@@ -950,6 +1009,96 @@
       setForecastEditorRowsFromForecast();
       renderForecastEditorJobOptions();
       renderForecastEditorTable();
+    }
+
+    function handleForecastEditorTableClick(event) {
+      const button = event.target.closest('[data-action="delete-row"]');
+      if (!button) return;
+      const rowIndex = Number(button.dataset.row);
+      if (!Number.isFinite(rowIndex)) return;
+      forecastEditorState.rows.splice(rowIndex, 1);
+      if (!forecastEditorState.rows.length) {
+        forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
+      }
+      renderForecastEditorTable();
+    }
+
+    function getForecastEditorBaselineMap() {
+      if (forecastEditorState.planVersion !== 'v1') return null;
+      if (!forecastEditorState.year || !forecastEditorState.stage) return null;
+      return getForecastSnapshot(forecastEditorState.year, forecastEditorState.stage, 'v0')?.data || null;
+    }
+
+    function getForecastBaselineValue(baselineMap, jobNumber, workGroup, period) {
+      if (!baselineMap || !jobNumber || !workGroup || !period) return null;
+      const job = baselineMap.get(jobNumber);
+      if (!job) return 0;
+      const wgData = job.wgs?.[workGroup];
+      if (!wgData) return 0;
+      return Number(wgData?.[period]) || 0;
+    }
+
+    function updateForecastEditorCellHighlight(rowIndex, period, input) {
+      if (!input) return;
+      const baselineMap = getForecastEditorBaselineMap();
+      if (!baselineMap) {
+        input.classList.remove('is-changed');
+        return;
+      }
+      const rowData = forecastEditorState.rows[rowIndex];
+      if (!rowData?.jobNumber) {
+        input.classList.remove('is-changed');
+        return;
+      }
+      const baselineValue = getForecastBaselineValue(
+        baselineMap,
+        rowData.jobNumber,
+        forecastEditorState.workGroup,
+        period
+      );
+      const currentValue = Number(rowData.volumes?.[period]) || 0;
+      input.classList.toggle('is-changed', currentValue !== Number(baselineValue || 0));
+    }
+
+    function getForecastEditorRowTotal(row) {
+      if (!row) return 0;
+      return FORECAST_PERIODS.reduce((sum, period) => sum + (Number(row.volumes?.[period]) || 0), 0);
+    }
+
+    function getForecastEditorTotals(rows) {
+      const periodTotals = {};
+      FORECAST_PERIODS.forEach(period => {
+        periodTotals[period] = 0;
+      });
+      (rows || []).forEach(row => {
+        FORECAST_PERIODS.forEach(period => {
+          periodTotals[period] += Number(row?.volumes?.[period]) || 0;
+        });
+      });
+      const grandTotal = Object.values(periodTotals).reduce((sum, value) => sum + value, 0);
+      return { periodTotals, grandTotal };
+    }
+
+    function updateForecastEditorTotalsDisplay() {
+      const table = document.getElementById('forecastEditorTable');
+      if (!table) return;
+      const rows = forecastEditorState.rows || [];
+      rows.forEach((row, index) => {
+        const cell = table.querySelector(`td[data-role="row-total"][data-row="${index}"]`);
+        if (cell) cell.textContent = formatForecastNumber(getForecastEditorRowTotal(row));
+      });
+      const totals = getForecastEditorTotals(rows);
+      FORECAST_PERIODS.forEach(period => {
+        const cell = table.querySelector(`td[data-role="period-total"][data-period="${period}"]`);
+        if (cell) cell.textContent = formatForecastNumber(totals.periodTotals[period]);
+      });
+      const grandCell = table.querySelector('td[data-role="grand-total"]');
+      if (grandCell) grandCell.textContent = formatForecastNumber(totals.grandTotal);
+    }
+
+    function formatForecastNumber(value) {
+      const numeric = Number(value) || 0;
+      return numeric.toLocaleString(undefined, { maximumFractionDigits: 2 });
     }
 
     function saveCommentStore() {
@@ -1405,6 +1554,7 @@
       if (forecastEditorWorkGroup) forecastEditorWorkGroup.addEventListener('change', handleForecastEditorWorkGroupChange);
       if (forecastEditorTable) forecastEditorTable.addEventListener('input', handleForecastEditorTableInput);
       if (forecastEditorTable) forecastEditorTable.addEventListener('paste', handleForecastEditorTablePaste);
+      if (forecastEditorTable) forecastEditorTable.addEventListener('click', handleForecastEditorTableClick);
     }
 
     function extractJob(txt) {
