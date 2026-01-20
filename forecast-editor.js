@@ -962,7 +962,7 @@ function downloadExcelUploadFormat() {
 
   // Build CSV content
   const headers = ['Strategic Route', 'WGST', 'Financial Year', 'Standard Job', 'Account Code',
-                   'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13'];
+                   'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13', 'Comment'];
 
   const rows = [];
 
@@ -992,6 +992,10 @@ function downloadExcelUploadFormat() {
       // Export numeric values, including 0
       row.push(value !== undefined && value !== null && value !== '' ? value : '');
     });
+
+    // Add comment for this work group
+    const comment = job?.comments?.[workGroup] || '';
+    row.push(comment);
 
     rows.push(row);
   });

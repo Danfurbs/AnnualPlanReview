@@ -51,7 +51,8 @@ function cloneForecastData(forecastMap) {
     Object.entries(value?.wgs || {}).forEach(([wg, data]) => {
       wgs[wg] = { ...data };
     });
-    cloned.set(key, { periods, wgs });
+    const comments = value?.comments ? { ...value.comments } : {};
+    cloned.set(key, { periods, wgs, comments });
   });
   return cloned;
 }

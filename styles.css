@@ -49,37 +49,44 @@
     /* Enhanced Job Cards */
     .job-card { position: relative; }
     .job-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
-    .job-status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+    .job-status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
     .job-status-badge.status-critical { background: #fee2e2; color: #991b1b; }
     .job-status-badge.status-warning { background: #fef3c7; color: #92400e; }
     .job-status-badge.status-good { background: #dcfce7; color: #166534; }
-    .job-rag-indicator { width: 10px; height: 10px; border-radius: 50%; }
+    .job-rag-indicator { width: 11px; height: 11px; border-radius: 50%; }
     .job-rag-indicator.rag-red { background: #ef4444; }
     .job-rag-indicator.rag-amber { background: #f59e0b; }
     .job-rag-indicator.rag-green { background: #22c55e; }
-    .job-card-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
-    .job-card-subtitle { font-size: 11px; color: #64748b; margin-top: 2px; }
-    .job-card-meta { font-size: 11px; color: #64748b; margin-bottom: 6px; }
+    .job-card-title { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+    .job-card-subtitle { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .job-card-meta { font-size: 12px; color: #64748b; margin-bottom: 6px; }
     .job-variance-overview { background: #f8fafc; padding: 8px; border-radius: 6px; margin-bottom: 6px; margin-top: 4px; }
     .job-variance-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .job-variance-item { text-align: center; }
-    .job-variance-label { font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin-bottom: 2px; }
-    .job-variance-value { font-size: 14px; font-weight: 700; color: #1e293b; }
+    .job-variance-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin-bottom: 2px; }
+    .job-variance-value { font-size: 15px; font-weight: 700; color: #1e293b; }
     .job-variance-value.variance-negative { color: #ef4444; }
     .job-variance-value.variance-positive { color: #22c55e; }
     .job-progress-bar { width: 100%; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 4px; position: relative; }
     .job-progress-actual { height: 100%; background: #3b82f6; float: left; }
     .job-progress-forecast { height: 100%; background: #cbd5e0; float: left; }
-    .job-progress-labels { display: flex; justify-content: space-between; font-size: 9px; color: #64748b; margin-top: 2px; }
+    .job-progress-labels { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 2px; }
     .job-alerts { background: #fef3c7; border-left: 3px solid #f59e0b; padding: 6px 8px; border-radius: 3px; margin-bottom: 6px; }
     .job-alerts.alerts-critical { background: #fee2e2; border-left-color: #ef4444; }
-    .job-alerts .alert-title { font-size: 10px; font-weight: 600; color: #78350f; }
-    .job-alerts .alert-detail { font-size: 10px; color: #78350f; margin-top: 2px; }
+    .job-alerts .alert-title { font-size: 11px; font-weight: 600; color: #78350f; }
+    .job-alerts .alert-detail { font-size: 11px; color: #78350f; margin-top: 2px; }
     .job-alerts-critical .alert-title, .job-alerts-critical .alert-detail { color: #991b1b; }
-    .job-info-row { display: flex; align-items: center; gap: 8px; font-size: 10px; color: #64748b; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; }
+    .job-info-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #64748b; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; }
     .job-info-item { display: flex; align-items: center; gap: 4px; }
     .job-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-    .job-actions button { font-size: 11px; padding: 5px 10px; }
+    .job-actions button { font-size: 12px; padding: 6px 11px; }
+
+    /* Group Rollup Planned vs Actual Box */
+    .group-planned-actual-box { background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%); padding: 16px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 16px; border: 2px solid #bae6fd; }
+    .group-pa-item { text-align: center; }
+    .group-pa-label { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .group-pa-value { font-size: 28px; font-weight: 800; color: #0c4a6e; }
+    .group-pa-divider { font-size: 18px; color: #64748b; font-weight: 600; }
 
     .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
     .control-group { display: flex; flex-direction: column; gap: 6px; }
@@ -267,7 +274,7 @@
     .forecast-page-icon { width: 36px; height: 36px; border-radius: 10px; background: #6366f1; color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
     .forecast-page-actions { display: flex; gap: 10px; flex-wrap: wrap; }
     .forecast-page-layout { display: grid; grid-template-columns: minmax(260px, 0.9fr) minmax(0, 3fr); gap: 20px; align-items: start; }
-    .forecast-sidebar { display: flex; flex-direction: column; gap: 16px; }
+    .forecast-sidebar { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto; }
     .forecast-card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 10px; }
     .forecast-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
     .forecast-stat { font-size: 20px; font-weight: 700; color: #0f172a; }
@@ -294,16 +301,16 @@
     .forecast-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .forecast-editor-meta { font-size: 12px; color: #64748b; }
     .forecast-editor-table { width: 100%; display: flex; flex-direction: column; gap: 10px; }
-    .forecast-editor-table-wrapper { width: 100%; overflow-x: auto; }
+    .forecast-editor-table-wrapper { width: 100%; overflow-x: auto; max-height: calc(100vh - 250px); overflow-y: auto; }
     .forecast-table { width: 100%; border-collapse: collapse; }
-    .forecast-table thead th { background: #f1f5f9; color: #4a5568; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .forecast-table thead th { background: #f1f5f9; color: #4a5568; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; position: sticky; top: 0; z-index: 10; }
     .forecast-table tbody td { padding: 8px 10px; border-bottom: 1px solid #edf2f7; font-size: 12px; vertical-align: middle; }
     .forecast-table tbody tr:nth-child(even) { background: #f8fafc; }
     .forecast-table tbody tr:hover { background: #edf2f7; }
     .forecast-table .forecast-job-input { width: 120px; }
     .forecast-table .forecast-period-input { width: 90px; text-align: right; }
     .forecast-table .forecast-period-input.is-changed { background: #dbeafe; border-color: #60a5fa; color: #1d4ed8; font-weight: 700; }
-    .forecast-table .forecast-comment-cell { max-width: 250px; }
+    .forecast-table .forecast-comment-cell { min-width: 400px; max-width: 600px; }
     .forecast-table .forecast-comment-input { width: 100%; min-height: 30px; padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 12px; font-family: inherit; resize: vertical; }
     .forecast-table .forecast-comment-input:focus { outline: none; border-color: #3b82f6; }
     .forecast-table .forecast-total-cell { text-align: right; font-weight: 700; color: #1f2937; }

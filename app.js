@@ -1880,7 +1880,19 @@
                 <div class="job-card-title">${escapeHtml(titleText)}</div>
                 <div class="job-card-subtitle">${escapeHtml(subtitleText)}</div>
 
-                ${!isGroupRollup && healthStatus ? `
+                ${isGroupRollup ? `
+                  <div class="group-planned-actual-box">
+                    <div class="group-pa-item">
+                      <div class="group-pa-label">PLANNED</div>
+                      <div class="group-pa-value">${pd.f.toFixed(1)}</div>
+                    </div>
+                    <div class="group-pa-divider">vs</div>
+                    <div class="group-pa-item">
+                      <div class="group-pa-label">ACTUAL</div>
+                      <div class="group-pa-value">${pd.a.toFixed(1)}</div>
+                    </div>
+                  </div>
+                ` : `
                   <div class="job-variance-overview">
                     <div class="job-variance-row">
                       <div class="job-variance-item">
@@ -1893,52 +1905,11 @@
                       </div>
                       <div class="job-variance-item">
                         <div class="job-variance-label">Variance</div>
-                        <div class="job-variance-value ${vc === 'negative' ? 'variance-negative' : vc === 'positive' ? 'variance-positive' : ''}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)} (${healthStatus.percent.toFixed(0)}%)</div>
+                        <div class="job-variance-value ${vc === 'negative' ? 'variance-negative' : vc === 'positive' ? 'variance-positive' : ''}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)} ${healthStatus ? `(${healthStatus.percent.toFixed(0)}%)` : ''}</div>
                       </div>
-                    </div>
-                  </div>
-
-                  ${period === 'all' ? `
-                    <div style="margin-top: 12px;">
-                      <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-bottom: 4px;">PERIOD COVERAGE</div>
-                      <div class="job-progress-bar">
-                        <div class="job-progress-actual" style="width: ${(periodsActual / 13 * 100).toFixed(0)}%"></div>
-                        <div class="job-progress-forecast" style="width: ${((periodsPlanned - periodsActual) / 13 * 100).toFixed(0)}%"></div>
-                      </div>
-                      <div class="job-progress-labels">
-                        <span>Actual: ${periodsActual} periods</span>
-                        <span>Planned: ${periodsPlanned} periods</span>
-                      </div>
-                    </div>
-                  ` : ''}
-                ` : `
-                  <div class="job-metrics">
-                    <div class="metric-card">
-                      <div class="metric-label">Planned</div>
-                      <div class="metric-value">${pd.f.toFixed(1)}</div>
-                    </div>
-                    <div class="metric-card">
-                      <div class="metric-label">Actual</div>
-                      <div class="metric-value">${pd.a.toFixed(1)}</div>
-                    </div>
-                    <div class="metric-card">
-                      <div class="metric-label">Variance</div>
-                      <div class="metric-value ${vc}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)}</div>
                     </div>
                   </div>
                 `}
-
-                ${!isGroupRollup && healthStatus && (healthStatus.status === 'critical' || healthStatus.status === 'warning') ? `
-                  <div class="job-alerts ${healthStatus.status === 'critical' ? 'alerts-critical' : ''}">
-                    <div class="alert-title">${alertTitle}</div>
-                    <div class="alert-detail">${alertDetail}</div>
-                  </div>
-                ` : isGroupRollup || isReviewed ? `
-                  <div class="job-alert ${stat}">
-                    <span>${alertTitle}</span>
-                    <span>${alertDetail}</span>
-                  </div>
-                ` : ''}
 
                 ${!isGroupRollup ? `
                   <div class="job-info-row">
