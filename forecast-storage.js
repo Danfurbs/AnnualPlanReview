@@ -4,7 +4,6 @@
  */
 
 const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
-const FORECAST_PERIODS = window.FORECAST_PERIODS;
 
 /**
  * Generate localStorage key for a forecast
@@ -295,7 +294,7 @@ function updateForecastWorkGroup(forecastData, rows, workGroup) {
 
     // Update work group data
     job.wgs[workGroup] = {};
-    FORECAST_PERIODS.forEach(period => {
+    window.FORECAST_PERIODS.forEach(period => {
       const value = Number(row.volumes?.[period] || 0);
       if (value) {
         job.wgs[workGroup][period] = value;
@@ -305,7 +304,7 @@ function updateForecastWorkGroup(forecastData, rows, workGroup) {
     // Recalculate period totals from all work groups
     const totals = {};
     Object.values(job.wgs).forEach(wgData => {
-      FORECAST_PERIODS.forEach(period => {
+      window.FORECAST_PERIODS.forEach(period => {
         totals[period] = (totals[period] || 0) + (Number(wgData?.[period]) || 0);
       });
     });
@@ -324,7 +323,7 @@ function cleanForecastData(forecastData) {
   const toDelete = [];
   forecastData.forEach((job, jobNumber) => {
     const hasData = Object.values(job.wgs || {}).some(wgData => {
-      return FORECAST_PERIODS.some(period => Number(wgData?.[period] || 0) !== 0);
+      return window.FORECAST_PERIODS.some(period => Number(wgData?.[period] || 0) !== 0);
     });
     if (!hasData) {
       toDelete.push(jobNumber);

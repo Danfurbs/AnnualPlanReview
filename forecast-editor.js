@@ -3,16 +3,12 @@
  * Forecast editor UI and interaction logic
  */
 
-// Use shared globals from forecast-globals.js
-const FORECAST_PERIODS = window.FORECAST_PERIODS;
-const PLAN_VERSIONS = window.PLAN_VERSIONS;
-
 /**
  * Create an empty forecast row
  */
 function createForecastEditorRow() {
   const volumes = {};
-  FORECAST_PERIODS.forEach(period => {
+  window.FORECAST_PERIODS.forEach(period => {
     volumes[period] = 0;
   });
 
@@ -121,10 +117,10 @@ function renderForecastEditorSelectors() {
   yearSelect.value = window.forecastEditorState.year;
 
   // Plan version selector
-  planSelect.innerHTML = PLAN_VERSIONS
+  planSelect.innerHTML = window.PLAN_VERSIONS
     .map(plan => `<option value="${escapeHtml(plan.id)}">${escapeHtml(plan.label)}</option>`)
     .join('');
-  window.forecastEditorState.planVersion = PLAN_VERSIONS.some(plan => plan.id === window.forecastEditorState.planVersion)
+  window.forecastEditorState.planVersion = window.PLAN_VERSIONS.some(plan => plan.id === window.forecastEditorState.planVersion)
     ? window.forecastEditorState.planVersion
     : (window.currentPlanVersion || 'v0');
   planSelect.value = window.forecastEditorState.planVersion;
@@ -158,7 +154,7 @@ function loadForecastEditorRows() {
 
       const meta = getJobMetadata(jobNumber);
       const volumes = {};
-      FORECAST_PERIODS.forEach(period => {
+      window.FORECAST_PERIODS.forEach(period => {
         volumes[period] = Number(wgData[period] || 0);
       });
 
@@ -210,7 +206,7 @@ function renderForecastEditorTable() {
         <th>Standard job</th>
         <th>Description</th>
         <th>Unit</th>
-        ${FORECAST_PERIODS.map(period => `<th>${period}</th>`).join('')}
+        ${window.FORECAST_PERIODS.map(period => `<th>${period}</th>`).join('')}
         <th>Total</th>
         <th></th>
       </tr>
@@ -240,7 +236,7 @@ function renderForecastEditorTable() {
             </td>
             <td data-role="desc" class="${desc ? '' : 'forecast-cell-muted'}">${escapeHtml(desc || 'Auto-fill')}</td>
             <td data-role="unit" class="${unit ? '' : 'forecast-cell-muted'}">${escapeHtml(unit || 'Auto-fill')}</td>
-            ${FORECAST_PERIODS.map(period => {
+            ${window.FORECAST_PERIODS.map(period => {
               const value = Number(row.volumes?.[period] || 0);
               const baselineValue = getBaselineValue(baselineMap, row.jobNumber, workGroup, period);
               const isChanged = baselineMap && row.jobNumber && value !== Number(baselineValue || 0);
@@ -274,7 +270,7 @@ function renderForecastEditorTable() {
     <tfoot>
       <tr>
         <td class="forecast-total-label" colspan="3">Total</td>
-        ${FORECAST_PERIODS.map(period => (
+        ${window.FORECAST_PERIODS.map(period => (
           `<td class="forecast-total-cell" data-role="period-total" data-period="${period}">${formatForecastNumber(totals.periodTotals[period])}</td>`
         )).join('')}
         <td class="forecast-total-cell" data-role="grand-total">${formatForecastNumber(totals.grandTotal)}</td>
@@ -316,7 +312,7 @@ function getBaselineValue(baselineMap, jobNumber, workGroup, period) {
  */
 function getForecastEditorRowTotal(row) {
   let total = 0;
-  FORECAST_PERIODS.forEach(period => {
+  window.FORECAST_PERIODS.forEach(period => {
     total += Number(row.volumes?.[period] || 0);
   });
   return total;
@@ -329,12 +325,12 @@ function getForecastEditorTotals() {
   const periodTotals = {};
   let grandTotal = 0;
 
-  FORECAST_PERIODS.forEach(period => {
+  window.FORECAST_PERIODS.forEach(period => {
     periodTotals[period] = 0;
   });
 
   window.forecastEditorState.rows.forEach(row => {
-    FORECAST_PERIODS.forEach(period => {
+    window.FORECAST_PERIODS.forEach(period => {
       const value = Number(row.volumes?.[period] || 0);
       periodTotals[period] += value;
       grandTotal += value;
@@ -448,7 +444,7 @@ function handleForecastEditorSubmit(event) {
   // Filter out empty rows
   const rowsToSave = window.forecastEditorState.rows.filter(row => {
     if (!row.jobNumber) return false;
-    const hasVolume = FORECAST_PERIODS.some(period => Number(row.volumes?.[period] || 0) !== 0);
+    const hasVolume = window.FORECAST_PERIODS.some(period => Number(row.volumes?.[period] || 0) !== 0);
     return hasVolume;
   });
 
@@ -528,7 +524,7 @@ function handleForecastEditorTableInput(event) {
 
     // Load existing volumes for this job
     const existingVolumes = getForecastWorkGroupData(window.fData, jobNumber, window.forecastEditorState.workGroup);
-    FORECAST_PERIODS.forEach(period => {
+    window.FORECAST_PERIODS.forEach(period => {
       window.forecastEditorState.rows[rowIndex].volumes[period] = Number(existingVolumes[period] || 0);
     });
 
@@ -603,7 +599,7 @@ function updateForecastEditorTotalsDisplay() {
   const totals = getForecastEditorTotals();
 
   // Update period totals
-  FORECAST_PERIODS.forEach(period => {
+  window.FORECAST_PERIODS.forEach(period => {
     const cell = document.querySelector(`[data-role="period-total"][data-period="${period}"]`);
     if (cell) cell.textContent = formatForecastNumber(totals.periodTotals[period]);
   });
@@ -639,7 +635,7 @@ function handleForecastEditorTablePaste(event) {
   event.preventDefault();
 
   const startRowIndex = Number(target.dataset.row);
-  const startPeriodIndex = FORECAST_PERIODS.indexOf(target.dataset.period);
+  const startPeriodIndex = window.FORECAST_PERIODS.indexOf(target.dataset.period);
   if (!Number.isFinite(startRowIndex) || startPeriodIndex < 0) return;
 
   // Ensure enough rows exist
@@ -653,9 +649,9 @@ function handleForecastEditorTablePaste(event) {
     const rowIndex = startRowIndex + rowOffset;
     rowData.forEach((cellValue, colOffset) => {
       const periodIndex = startPeriodIndex + colOffset;
-      if (periodIndex >= FORECAST_PERIODS.length) return;
+      if (periodIndex >= window.FORECAST_PERIODS.length) return;
 
-      const period = FORECAST_PERIODS[periodIndex];
+      const period = window.FORECAST_PERIODS[periodIndex];
       const value = parseFloat(cellValue);
       window.forecastEditorState.rows[rowIndex].volumes[period] = Number.isFinite(value) ? value : 0;
     });
