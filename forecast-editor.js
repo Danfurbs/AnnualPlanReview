@@ -946,6 +946,92 @@ function downloadForecastEditorExport() {
 }
 
 /**
+ * Download Excel export for upload (CSV format)
+ */
+function downloadExcelUploadFormat() {
+  const workGroup = window.forecastEditorState.workGroup;
+  const year = window.forecastEditorState.year;
+
+  if (!window.fData || !window.fData.size) {
+    alert('No forecast data to export. Save your changes first.');
+    return;
+  }
+
+  // Convert FY27 -> 2027, FY26 -> 2026, etc.
+  const financialYear = year.startsWith('FY') ? '20' + year.substring(2) : year;
+
+  // Build CSV content
+  const headers = ['Strategic Route', 'WGST', 'Financial Year', 'Standard Job', 'Account Code',
+                   'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13'];
+
+  const rows = [];
+
+  window.fData.forEach((job, jobNumber) => {
+    const wgData = job?.wgs?.[workGroup];
+    if (!wgData) return;
+
+    // Check if this job has any data for the current work group
+    const hasData = window.FORECAST_PERIODS.some(period => {
+      const val = wgData[period];
+      return val !== undefined && val !== null && val !== '';
+    });
+
+    if (!hasData) return;
+
+    const row = [
+      '', // Strategic Route (blank)
+      workGroup, // WGST
+      financialYear, // Financial Year (e.g., 2027)
+      jobNumber, // Standard Job
+      'XXXX', // Account Code (always XXXX)
+    ];
+
+    // Add P01-P13 values
+    window.FORECAST_PERIODS.forEach(period => {
+      const value = wgData[period];
+      // Export numeric values, including 0
+      row.push(value !== undefined && value !== null && value !== '' ? value : '');
+    });
+
+    rows.push(row);
+  });
+
+  if (rows.length === 0) {
+    alert('No data to export for the current work group.');
+    return;
+  }
+
+  // Sort by job number
+  rows.sort((a, b) => a[3].localeCompare(b[3]));
+
+  // Create CSV content
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(cell => {
+      // Escape cells that contain commas or quotes
+      const cellStr = String(cell);
+      if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+        return `"${cellStr.replace(/"/g, '""')}"`;
+      }
+      return cellStr;
+    }).join(','))
+  ].join('\n');
+
+  // Create and download file
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Forecast_${year}_${workGroup}_Upload.csv`);
+  link.style.visibility = 'hidden';
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
  * Trigger forecast file upload
  */
 function triggerForecastFileUpload() {
@@ -1225,6 +1311,7 @@ window.submitForecastEditorForm = submitForecastEditorForm;
 window.addForecastEditorRow = addForecastEditorRow;
 window.clearForecastEditorTable = clearForecastEditorTable;
 window.downloadForecastEditorExport = downloadForecastEditorExport;
+window.downloadExcelUploadFormat = downloadExcelUploadFormat;
 window.triggerForecastFileUpload = triggerForecastFileUpload;
 window.loadForecastFile = loadForecastFile;
 window.handleForecastEditorContextChange = handleForecastEditorContextChange;
