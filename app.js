@@ -2053,19 +2053,39 @@
       const search = (document.getElementById('compareSearch')?.value || '').toLowerCase();
       if (!table) return;
       const v0Snapshot = getForecastSnapshot(currentFinancialYear, 'v0');
-      const v1Snapshot = getForecastSnapshot(currentFinancialYear, 'v1');
-      if (!v0Snapshot || !v1Snapshot) {
-        table.innerHTML = '<thead><tr><th>Forecast comparison</th></tr></thead><tbody><tr><td class="wo-empty">Both Plan v0 and Plan v1 forecasts must be available in the library or local cache to compare.</td></tr></tbody>';
+      const v1SnapshotRaw = getForecastSnapshot(currentFinancialYear, 'v1');
+      if (!v0Snapshot) {
+        table.innerHTML = '<thead><tr><th>Forecast comparison</th></tr></thead><tbody><tr><td class="wo-empty">Plan v0 forecast must be available to compare.</td></tr></tbody>';
         if (meta) {
-          meta.textContent = `Missing data for ${currentFinancialYear} ${currentReviewStage}.`;
+          meta.textContent = `Missing v0 data for ${currentFinancialYear} ${currentReviewStage}.`;
         }
         return;
       }
-      const allJobs = new Set([...(v0Snapshot.data.keys()), ...(v1Snapshot.data.keys())]);
+
+      // Merge v0 with v1 overrides for proper inheritance
+      const v1Overrides = loadV1Overrides(currentFinancialYear);
+      const v1Data = new Map();
+
+      // Start with all v0 jobs
+      v0Snapshot.data.forEach((job, jobNumber) => {
+        if (!v1Overrides.has(jobNumber)) {
+          // Job not overridden in v1 - inherit from v0
+          v1Data.set(jobNumber, job);
+        }
+      });
+
+      // Add all v1 overrides
+      if (v1SnapshotRaw && v1SnapshotRaw.data) {
+        v1SnapshotRaw.data.forEach((job, jobNumber) => {
+          v1Data.set(jobNumber, job);
+        });
+      }
+
+      const allJobs = new Set([...(v0Snapshot.data.keys()), ...(v1Data.keys())]);
       const rows = [];
       allJobs.forEach(jobNumber => {
         const v0 = getForecastTotal(v0Snapshot.data.get(jobNumber));
-        const v1 = getForecastTotal(v1Snapshot.data.get(jobNumber));
+        const v1 = getForecastTotal(v1Data.get(jobNumber));
         const delta = v1 - v0;
         const desc = window.stdJobs.get(jobNumber)?.desc || `Job ${jobNumber}`;
         if (changedOnly && delta === 0) return;
