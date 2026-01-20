@@ -1107,14 +1107,26 @@ function loadForecastFile(event) {
   reader.onload = function (e) {
     const content = e.target.result;
 
-    // Ask user: Overwrite or Merge?
-    const choice = confirm(
-      'How do you want to import this forecast?\n\n' +
-      'OK = Merge (keep existing data, add/update from file)\n' +
-      'Cancel = Overwrite (replace all with file data)'
+    // First, confirm they want to import
+    const shouldImport = confirm(
+      `Import forecast from file: ${file.name}?\n\n` +
+      'Click OK to continue, or Cancel to abort the import.'
     );
 
-    if (choice) {
+    if (!shouldImport) {
+      // User cancelled - do nothing
+      return;
+    }
+
+    // Ask user: Merge or Overwrite?
+    const useMerge = confirm(
+      'How do you want to import this forecast?\n\n' +
+      'Merge (OK): Keep existing data and add/update from file\n' +
+      'Overwrite (Cancel): Replace all existing data with file data\n\n' +
+      'Choose your import method:'
+    );
+
+    if (useMerge) {
       // Merge mode - detect conflicts
       handleMergeForecastImport(content);
     } else {
