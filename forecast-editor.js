@@ -54,6 +54,17 @@ function closeForecastEditor() {
 
   if (forecastPage) forecastPage.classList.add('is-hidden');
   if (dashboardPage) dashboardPage.classList.remove('is-hidden');
+
+  // Reload forecast data and refresh dashboard
+  const forecastCache = loadForecastFromStorage(window.currentFinancialYear, window.currentPlanVersion);
+  if (forecastCache) {
+    window.fData = forecastCache.data;
+  }
+
+  // Trigger dashboard re-render to show updated forecast
+  if (typeof window.render === 'function') {
+    window.render();
+  }
 }
 
 /**
