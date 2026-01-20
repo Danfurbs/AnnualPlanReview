@@ -477,12 +477,7 @@ function handleForecastEditorSubmit(event) {
     return hasVolume;
   });
 
-  if (!rowsToSave.length) {
-    alert('No forecast data to save. Add job numbers and volumes first.');
-    return;
-  }
-
-  // Update forecast data
+  // Update forecast data (empty rowsToSave will clear the work group)
   window.fData = updateForecastWorkGroup(window.fData, rowsToSave, window.forecastEditorState.workGroup);
 
   // Clean up empty jobs
@@ -494,7 +489,10 @@ function handleForecastEditorSubmit(event) {
   if (saved) {
     const statusEl = document.getElementById('forecastEditorStatus');
     if (statusEl) {
-      statusEl.textContent = `✓ Saved ${rowsToSave.length} jobs for ${window.forecastEditorState.workGroup} at ${new Date().toLocaleTimeString()}`;
+      const message = rowsToSave.length
+        ? `✓ Saved ${rowsToSave.length} jobs for ${window.forecastEditorState.workGroup} at ${new Date().toLocaleTimeString()}`
+        : `✓ Saved blank forecast for ${window.forecastEditorState.workGroup} at ${new Date().toLocaleTimeString()}`;
+      statusEl.textContent = message;
     }
     console.log(`✓ Forecast saved: ${window.forecastEditorState.year} ${window.forecastEditorState.planVersion} (${rowsToSave.length} jobs)`);
   } else {
