@@ -1664,12 +1664,41 @@
         const numeric = parseInt(String(cutoffValue).replace(/[^0-9]/g, ''), 10);
         return Number.isNaN(numeric) ? 0 : numeric;
       })();
-      const all = new Set([...(fData?.keys()||[]), ...(window.wData?.keys()||[])]);
+
+      // For v1, merge with v0 for proper inheritance
+      let forecastDataToUse = fData;
+      if (currentPlanVersion === 'v1') {
+        const v0Snapshot = getForecastSnapshot(currentFinancialYear, 'v0');
+        const v1Overrides = loadV1Overrides(currentFinancialYear);
+
+        if (v0Snapshot && v0Snapshot.data) {
+          // Create merged data: v0 as base, v1 overrides take precedence
+          const mergedData = new Map();
+
+          // First, add all v0 jobs that haven't been overridden
+          v0Snapshot.data.forEach((job, jobNumber) => {
+            if (!v1Overrides.has(jobNumber)) {
+              mergedData.set(jobNumber, job);
+            }
+          });
+
+          // Then add all v1 jobs (overrides)
+          if (fData) {
+            fData.forEach((job, jobNumber) => {
+              mergedData.set(jobNumber, job);
+            });
+          }
+
+          forecastDataToUse = mergedData;
+        }
+      }
+
+      const all = new Set([...(forecastDataToUse?.keys()||[]), ...(window.wData?.keys()||[])]);
       const baseJobs = [];
       all.forEach(jn => {
         // Get metadata from standard jobs if available
         const meta = window.stdJobs.get(jn);
-        const f = fData?.get(jn);
+        const f = forecastDataToUse?.get(jn);
         const a = window.wData?.get(jn);
         
         const job = {
