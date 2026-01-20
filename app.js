@@ -2126,7 +2126,8 @@
         `;
       }
       if (meta) {
-        meta.textContent = `${currentFinancialYear} ${currentReviewStage} • Plan v0 (${v0Snapshot.source}) vs Plan v1 (${v1Snapshot.source}) • ${rows.length} jobs`;
+        const v1Source = v1SnapshotRaw ? v1SnapshotRaw.source : 'inherited from v0';
+        meta.textContent = `${currentFinancialYear} ${currentReviewStage} • Plan v0 (${v0Snapshot.source}) vs Plan v1 (${v1Source}) • ${rows.length} jobs`;
       }
     }
 
