@@ -666,7 +666,13 @@
     }
 
     function getJobComments(jobNumber) {
-      return commentStore[jobNumber] || [];
+      const allComments = commentStore[jobNumber] || [];
+      // Filter comments for current FY and RF stage
+      return allComments.filter(comment => {
+        const commentFY = comment.fy || comment.financialYear;
+        const commentRF = comment.rf || comment.reviewStage;
+        return commentFY === currentFinancialYear && commentRF === currentReviewStage;
+      });
     }
 
     function addJobComment(jobNumber, category, value) {
@@ -677,7 +683,9 @@
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         category,
         text: trimmed,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        fy: currentFinancialYear,
+        rf: currentReviewStage
       });
       saveCommentStore();
     }
@@ -829,6 +837,10 @@
       let total = 0;
       Object.values(commentStore || {}).forEach(comments => {
         comments.forEach(entry => {
+          // Filter by current FY across all RF stages
+          const commentFY = entry.fy || entry.financialYear;
+          if (commentFY !== currentFinancialYear) return;
+
           total += 1;
           const category = entry.category || 'General';
           counts[category] = (counts[category] || 0) + 1;
@@ -1168,13 +1180,17 @@
           const jn = rawJob.replace(/\D/g, '').padStart(6, '0');
           const category = String(r['Comment Type'] || '').trim() || 'General';
           const text = String(r['Comment'] || '').trim();
+          const fy = String(r['Financial Year'] || '').trim() || currentFinancialYear;
+          const rf = String(r['Review Stage'] || '').trim() || currentReviewStage;
           if (!jn || jn === '000000' || !text) return;
           if (!commentStore[jn]) commentStore[jn] = [];
           commentStore[jn].unshift({
             id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
             category,
             text,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            fy,
+            rf
           });
           added += 1;
         });
@@ -1195,23 +1211,29 @@
       const rows = [];
       Object.entries(commentStore).forEach(([jobNumber, comments]) => {
         comments.forEach(entry => {
+          // Only export comments for current FY
+          const commentFY = entry.fy || entry.financialYear;
+          if (commentFY !== currentFinancialYear) return;
+
           rows.push({
             'Standard Job Number': jobNumber,
             'Comment Type': entry.category,
-            'Comment': entry.text
+            'Comment': entry.text,
+            'Financial Year': entry.fy || '',
+            'Review Stage': entry.rf || ''
           });
         });
       });
       if (!rows.length) {
-        alert('No comments to export.');
+        alert(`No comments to export for ${currentFinancialYear}.`);
         return;
       }
       const ws = XLSX.utils.json_to_sheet(rows, {
-        header: ['Standard Job Number', 'Comment Type', 'Comment']
+        header: ['Standard Job Number', 'Comment Type', 'Comment', 'Financial Year', 'Review Stage']
       });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Comments');
-      XLSX.writeFile(wb, 'apr-comments.xlsx');
+      XLSX.writeFile(wb, `apr-comments-${currentFinancialYear}.xlsx`);
     }
 
     function computeQuantile(sorted, q) {
