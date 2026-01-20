@@ -28,13 +28,25 @@ function createForecastEditorRow() {
  * Open the forecast editor page
  */
 function openForecastEditor() {
-  const dashboardPage = document.getElementById('dashboardPage');
-  const forecastPage = document.getElementById('forecastPage');
+  console.log('openForecastEditor called');
 
-  if (dashboardPage) dashboardPage.classList.add('is-hidden');
-  if (forecastPage) forecastPage.classList.remove('is-hidden');
+  try {
+    const dashboardPage = document.getElementById('dashboardPage');
+    const forecastPage = document.getElementById('forecastPage');
 
-  initializeForecastEditor();
+    console.log('  - dashboardPage:', dashboardPage);
+    console.log('  - forecastPage:', forecastPage);
+
+    if (dashboardPage) dashboardPage.classList.add('is-hidden');
+    if (forecastPage) forecastPage.classList.remove('is-hidden');
+
+    console.log('  - Calling initializeForecastEditor...');
+    initializeForecastEditor();
+    console.log('  - initializeForecastEditor completed');
+  } catch (error) {
+    console.error('Error in openForecastEditor:', error);
+    alert('Error opening forecast editor: ' + error.message);
+  }
 }
 
 /**
@@ -52,20 +64,40 @@ function closeForecastEditor() {
  * Initialize forecast editor (load data and render)
  */
 function initializeForecastEditor() {
-  // Set initial context
-  window.forecastEditorState.year = window.currentFinancialYear || getFinancialYearOptions()[0] || 'FY27';
-  window.forecastEditorState.planVersion = window.currentPlanVersion || 'v0';
+  console.log('initializeForecastEditor called');
 
-  // Load forecast for this context
-  const snapshot = getForecastSnapshot(window.forecastEditorState.year, window.forecastEditorState.planVersion);
-  if (snapshot) {
-    window.fData = snapshot.data;
+  try {
+    // Set initial context
+    console.log('  - Getting financial year options...');
+    const yearOptions = getFinancialYearOptions();
+    console.log('  - Year options:', yearOptions);
+
+    window.forecastEditorState.year = window.currentFinancialYear || yearOptions[0] || 'FY27';
+    window.forecastEditorState.planVersion = window.currentPlanVersion || 'v0';
+
+    console.log('  - Editor state:', window.forecastEditorState);
+
+    // Load forecast for this context
+    console.log('  - Loading forecast snapshot...');
+    const snapshot = getForecastSnapshot(window.forecastEditorState.year, window.forecastEditorState.planVersion);
+    console.log('  - Snapshot:', snapshot);
+
+    if (snapshot) {
+      window.fData = snapshot.data;
+    }
+
+    // Render selectors and table
+    console.log('  - Rendering selectors...');
+    renderForecastEditorSelectors();
+    console.log('  - Rendering table...');
+    renderForecastEditorTable();
+    console.log('  - Updating summary...');
+    updateForecastEditorSummary();
+    console.log('  - Initialization complete');
+  } catch (error) {
+    console.error('Error in initializeForecastEditor:', error);
+    throw error;
   }
-
-  // Render selectors and table
-  renderForecastEditorSelectors();
-  renderForecastEditorTable();
-  updateForecastEditorSummary();
 }
 
 /**
@@ -752,6 +784,11 @@ window.downloadForecastFile = downloadForecastFile;
 window.triggerForecastFileUpload = triggerForecastFileUpload;
 window.loadForecastFile = loadForecastFile;
 window.handleForecastEditorContextChange = handleForecastEditorContextChange;
+
+// Debug: Log that functions are loaded
+console.log('✓ Forecast editor functions loaded and exposed globally');
+console.log('  - openForecastEditor:', typeof window.openForecastEditor);
+console.log('  - closeForecastEditor:', typeof window.closeForecastEditor);
 
 // Event listener setup
 document.addEventListener('DOMContentLoaded', () => {
