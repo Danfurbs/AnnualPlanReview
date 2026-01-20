@@ -1203,7 +1203,18 @@ function handleMergeForecastImport(fileContent) {
         Object.entries(dataToImport).forEach(([jobNumber, uploadedJob]) => {
           const currentJob = currentData[jobNumber];
 
-          if (!uploadedJob || !uploadedJob.wgs) return;
+          if (!uploadedJob || !uploadedJob.wgs) {
+            console.log(`  ⚠️ Job ${jobNumber}: No wgs in uploaded data`);
+            return;
+          }
+
+          const uploadedWgNames = Object.keys(uploadedJob.wgs);
+          console.log(`  📋 Job ${jobNumber}: Checking ${uploadedWgNames.length} workgroup(s): ${uploadedWgNames.join(', ')}`);
+
+          if (!currentJob) {
+            console.log(`  ℹ️ Job ${jobNumber}: Not in current data (will add)`);
+            return;
+          }
 
           Object.entries(uploadedJob.wgs).forEach(([workGroup, uploadedWgData]) => {
             if (!uploadedWgData) return;
@@ -1211,17 +1222,23 @@ function handleMergeForecastImport(fileContent) {
             const currentWgData = currentJob?.wgs?.[workGroup];
 
             if (!currentWgData) {
-              console.log(`  ℹ️ Job ${jobNumber} ${workGroup}: No current data (will add)`);
+              const currentWgNames = Object.keys(currentJob.wgs || {});
+              console.log(`  ℹ️ Job ${jobNumber} WG "${workGroup}": Not in current data`);
+              console.log(`     Current has: ${currentWgNames.join(', ') || 'none'}`);
               return;
             }
 
+            console.log(`  ✓ Job ${jobNumber} WG "${workGroup}": Found in both, comparing periods...`);
+
+            let foundConflictInThisWg = false;
             window.FORECAST_PERIODS.forEach(period => {
               const uploadedValue = Number(uploadedWgData[period] || 0);
               const currentValue = Number(currentWgData?.[period] || 0);
 
               // Conflict exists if both are non-zero and different
               if (uploadedValue !== 0 && currentValue !== 0 && uploadedValue !== currentValue) {
-                console.log(`  ⚠️ CONFLICT: Job ${jobNumber} ${workGroup} ${period}: current=${currentValue}, upload=${uploadedValue}`);
+                console.log(`    ⚠️ CONFLICT ${period}: current=${currentValue}, upload=${uploadedValue}`);
+                foundConflictInThisWg = true;
                 conflicts.push({
                   year,
                   planVersion,
@@ -1234,6 +1251,10 @@ function handleMergeForecastImport(fileContent) {
                 });
               }
             });
+
+            if (!foundConflictInThisWg) {
+              console.log(`    ✓ No conflicts in ${workGroup}`);
+            }
           });
         });
       });
