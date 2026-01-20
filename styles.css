@@ -162,6 +162,8 @@
     .wo-flagged { border-left: 4px solid #f6ad55; }
     .wo-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: #fef3c7; color: #92400e; margin-right: 6px; margin-bottom: 4px; }
     .wo-empty { font-style: italic; color: #718096; }
+    .wo-table a { color: #2563eb; text-decoration: none; transition: color 0.2s; }
+    .wo-table a:hover { color: #1d4ed8; text-decoration: underline; }
     .section-toggle { background: #edf2f7; color: #2d3748; border: 1px solid #cbd5e0; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; cursor: pointer; }
     .section-toggle:hover { background: #e2e8f0; }
     .collapsible-content.collapsed { display: none; }

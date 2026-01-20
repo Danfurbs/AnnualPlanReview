@@ -1415,9 +1415,17 @@
           `
           : '';
         const unitClass = canRevert ? 'wo-unit-value amended' : 'wo-unit-value';
+
+        // Create Ellipse hyperlink for work order number
+        const workOrderNumber = order.number || 'Unknown';
+        const ellipseUrl = `http://ellipse-ell9p.unix.ukrail.net/html/ui?application=MSEWOT&type=read&workOrder=${encodeURIComponent(workOrderNumber)}#!home`;
+        const workOrderLink = workOrderNumber !== 'Unknown'
+          ? `<a href="${ellipseUrl}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(workOrderNumber)}</strong></a>`
+          : `<strong>${escapeHtml(workOrderNumber)}</strong>`;
+
         return `
           <tr class="${rowClass}">
-            <td><strong>${escapeHtml(order.number || 'Unknown')}</strong></td>
+            <td>${workOrderLink}</td>
             <td>${escapeHtml(order.description || '-')}</td>
             <td>${escapeHtml(order.workOrderType || '-')}</td>
             <td>${escapeHtml(order.period || '-')}</td>
