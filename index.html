@@ -406,6 +406,23 @@
     </div>
   </div>
 
+  <div id="importConflictsModal" class="modal">
+    <div class="modal-content modal-content--wide">
+      <div class="modal-header">
+        <h2>Import Forecast - Resolve Conflicts</h2>
+        <button class="close" onclick="closeImportConflictsModal()">&times;</button>
+      </div>
+      <p class="helper-text">The uploaded forecast has conflicts with your current data. Choose which values to keep.</p>
+
+      <div id="importConflictsList" class="import-conflicts-list"></div>
+
+      <div class="comment-actions" style="margin-top: 20px;">
+        <button type="button" class="primary-button" onclick="applyImportConflictResolution()">Apply Selected Values</button>
+        <button type="button" class="group-action-button" onclick="closeImportConflictsModal()">Cancel Import</button>
+      </div>
+    </div>
+  </div>
+
   <div id="breakdown" class="modal">
     <div class="modal-content modal-content--wide">
       <div class="modal-header">

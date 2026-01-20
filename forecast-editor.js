@@ -1106,20 +1106,345 @@ function loadForecastFile(event) {
   const reader = new FileReader();
   reader.onload = function (e) {
     const content = e.target.result;
-    const result = importForecastFile(content);
 
-    if (result.success) {
-      alert(`✓ Imported ${result.count} forecast(s). Refresh the editor to see changes.`);
-      // Reload editor
-      handleForecastEditorContextChange();
+    // Ask user: Overwrite or Merge?
+    const choice = confirm(
+      'How do you want to import this forecast?\n\n' +
+      'OK = Merge (keep existing data, add/update from file)\n' +
+      'Cancel = Overwrite (replace all with file data)'
+    );
+
+    if (choice) {
+      // Merge mode - detect conflicts
+      handleMergeForecastImport(content);
     } else {
-      alert(`Failed to import forecast: ${result.error}`);
+      // Overwrite mode - original behavior
+      const result = importForecastFile(content);
+      if (result.success) {
+        alert(`✓ Imported ${result.count} forecast(s). Refresh the editor to see changes.`);
+        handleForecastEditorContextChange();
+      } else {
+        alert(`Failed to import forecast: ${result.error}`);
+      }
     }
   };
   reader.readAsText(file);
 
   // Clear input so the same file can be loaded again
   event.target.value = '';
+}
+
+/**
+ * Handle merge import with conflict detection
+ */
+function handleMergeForecastImport(fileContent) {
+  try {
+    const parsed = JSON.parse(fileContent);
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Invalid JSON format');
+    }
+
+    const forecasts = parsed.forecasts || parsed;
+    const conflicts = [];
+
+    // Store the uploaded data for later use
+    window.importConflictData = {
+      uploadedForecasts: forecasts,
+      conflicts: []
+    };
+
+    // Detect conflicts by comparing uploaded data with current storage
+    Object.entries(forecasts).forEach(([year, yearData]) => {
+      if (!yearData || typeof yearData !== 'object') return;
+
+      Object.entries(yearData).forEach(([planVersion, planData]) => {
+        if (!planData || typeof planData !== 'object') return;
+
+        // Handle old format (stage-nested)
+        let dataToImport = null;
+        if (planData.RF3 || planData.RF6 || planData.RF9 || planData.RF11) {
+          const firstStage = ['RF3', 'RF6', 'RF9', 'RF11'].find(stage => planData[stage]);
+          if (firstStage && planData[firstStage].data) {
+            dataToImport = planData[firstStage].data;
+          }
+        } else if (planData.data) {
+          // New format (FY-wide)
+          dataToImport = planData.data;
+        }
+
+        if (!dataToImport) return;
+
+        // Get current storage for this year/plan
+        const currentSnapshot = getForecastSnapshot(year, planVersion);
+        const currentData = currentSnapshot ? serializeForecastData(currentSnapshot.data) : {};
+
+        // Compare each job/workgroup/period
+        Object.entries(dataToImport).forEach(([jobNumber, uploadedJob]) => {
+          const currentJob = currentData[jobNumber];
+
+          if (!uploadedJob || !uploadedJob.wgs) return;
+
+          Object.entries(uploadedJob.wgs).forEach(([workGroup, uploadedWgData]) => {
+            if (!uploadedWgData) return;
+
+            const currentWgData = currentJob?.wgs?.[workGroup];
+
+            window.FORECAST_PERIODS.forEach(period => {
+              const uploadedValue = Number(uploadedWgData[period] || 0);
+              const currentValue = Number(currentWgData?.[period] || 0);
+
+              // Conflict exists if both are non-zero and different
+              if (uploadedValue !== 0 && currentValue !== 0 && uploadedValue !== currentValue) {
+                conflicts.push({
+                  year,
+                  planVersion,
+                  jobNumber,
+                  workGroup,
+                  period,
+                  currentValue,
+                  uploadedValue,
+                  selectedValue: null // User will choose
+                });
+              }
+            });
+          });
+        });
+      });
+    });
+
+    window.importConflictData.conflicts = conflicts;
+
+    if (conflicts.length === 0) {
+      // No conflicts - proceed with merge
+      applyMergeImport(forecasts, []);
+      alert('✓ Import completed successfully. No conflicts detected.');
+      handleForecastEditorContextChange();
+    } else {
+      // Show conflicts modal
+      displayImportConflicts(conflicts);
+    }
+  } catch (err) {
+    console.error('Failed to process merge import:', err);
+    alert(`Failed to import forecast: ${err.message}`);
+  }
+}
+
+/**
+ * Display import conflicts in modal
+ */
+function displayImportConflicts(conflicts) {
+  const modal = document.getElementById('importConflictsModal');
+  const conflictsList = document.getElementById('importConflictsList');
+
+  if (!modal || !conflictsList) return;
+
+  // Group conflicts by job for better display
+  const conflictsByJob = {};
+  conflicts.forEach((conflict, index) => {
+    const key = `${conflict.year}-${conflict.planVersion}-${conflict.jobNumber}`;
+    if (!conflictsByJob[key]) {
+      conflictsByJob[key] = {
+        year: conflict.year,
+        planVersion: conflict.planVersion,
+        jobNumber: conflict.jobNumber,
+        conflicts: []
+      };
+    }
+    conflictsByJob[key].conflicts.push({ ...conflict, index });
+  });
+
+  // Render conflicts
+  conflictsList.innerHTML = Object.values(conflictsByJob).map(group => {
+    const meta = getJobMetadata(group.jobNumber);
+    const jobDesc = meta?.desc || 'Unknown job';
+
+    return `
+      <div class="import-conflict-card">
+        <div class="import-conflict-header">
+          <strong>Job ${escapeHtml(group.jobNumber)}</strong> ${escapeHtml(jobDesc)}
+          <span class="import-conflict-badge">${group.year} ${group.planVersion.toUpperCase()}</span>
+        </div>
+        ${group.conflicts.map(c => `
+          <div class="import-conflict-item" data-conflict-index="${c.index}">
+            <div class="import-conflict-details">
+              <strong>${escapeHtml(c.workGroup)}</strong> • ${escapeHtml(c.period)}
+            </div>
+            <div class="import-conflict-options">
+              <label class="import-conflict-option">
+                <input type="radio" name="conflict-${c.index}" value="current" checked>
+                <div class="import-conflict-value">
+                  <div class="import-conflict-label">Keep Current</div>
+                  <div class="import-conflict-number">${formatForecastNumber(c.currentValue)}</div>
+                </div>
+              </label>
+              <label class="import-conflict-option">
+                <input type="radio" name="conflict-${c.index}" value="uploaded">
+                <div class="import-conflict-value">
+                  <div class="import-conflict-label">Use Upload</div>
+                  <div class="import-conflict-number">${formatForecastNumber(c.uploadedValue)}</div>
+                </div>
+              </label>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }).join('');
+
+  // Show modal
+  modal.classList.add('open');
+}
+
+/**
+ * Close import conflicts modal
+ */
+function closeImportConflictsModal() {
+  const modal = document.getElementById('importConflictsModal');
+  if (modal) modal.classList.remove('open');
+
+  // Clear stored data
+  window.importConflictData = null;
+}
+
+/**
+ * Apply import conflict resolution
+ */
+function applyImportConflictResolution() {
+  if (!window.importConflictData) return;
+
+  const { uploadedForecasts, conflicts } = window.importConflictData;
+
+  // Collect user's choices for each conflict
+  const resolutions = conflicts.map((conflict, index) => {
+    const selectedRadio = document.querySelector(`input[name="conflict-${index}"]:checked`);
+    return {
+      ...conflict,
+      selectedValue: selectedRadio?.value || 'current'
+    };
+  });
+
+  // Apply the merge with conflict resolutions
+  applyMergeImport(uploadedForecasts, resolutions);
+
+  // Close modal
+  closeImportConflictsModal();
+
+  // Refresh editor
+  handleForecastEditorContextChange();
+
+  // Show success message
+  alert(`✓ Import completed. Resolved ${conflicts.length} conflict(s).`);
+}
+
+/**
+ * Apply merge import with conflict resolutions
+ */
+function applyMergeImport(uploadedForecasts, resolutions) {
+  // Build resolution map for quick lookup
+  const resolutionMap = {};
+  resolutions.forEach(r => {
+    const key = `${r.year}:${r.planVersion}:${r.jobNumber}:${r.workGroup}:${r.period}`;
+    resolutionMap[key] = r.selectedValue;
+  });
+
+  let importedCount = 0;
+
+  Object.entries(uploadedForecasts).forEach(([year, yearData]) => {
+    if (!yearData || typeof yearData !== 'object') return;
+
+    Object.entries(yearData).forEach(([planVersion, planData]) => {
+      if (!planData || typeof planData !== 'object') return;
+
+      // Handle old format (stage-nested)
+      let dataToImport = null;
+      if (planData.RF3 || planData.RF6 || planData.RF9 || planData.RF11) {
+        const firstStage = ['RF3', 'RF6', 'RF9', 'RF11'].find(stage => planData[stage]);
+        if (firstStage && planData[firstStage].data) {
+          dataToImport = planData[firstStage].data;
+        }
+      } else if (planData.data) {
+        // New format (FY-wide)
+        dataToImport = planData.data;
+      }
+
+      if (!dataToImport) return;
+
+      // Get current storage
+      const currentSnapshot = getForecastSnapshot(year, planVersion);
+      const currentData = currentSnapshot ? cloneForecastData(currentSnapshot.data) : new Map();
+
+      // Merge uploaded data
+      Object.entries(dataToImport).forEach(([jobNumber, uploadedJob]) => {
+        if (!uploadedJob) return;
+
+        // Get or create job entry
+        if (!currentData.has(jobNumber)) {
+          currentData.set(jobNumber, { periods: {}, wgs: {}, comments: {} });
+        }
+        const job = currentData.get(jobNumber);
+
+        // Merge work groups
+        if (uploadedJob.wgs) {
+          Object.entries(uploadedJob.wgs).forEach(([workGroup, uploadedWgData]) => {
+            if (!job.wgs[workGroup]) {
+              job.wgs[workGroup] = {};
+            }
+
+            window.FORECAST_PERIODS.forEach(period => {
+              const uploadedValue = Number(uploadedWgData[period] || 0);
+              const currentValue = Number(job.wgs[workGroup][period] || 0);
+
+              // Check if there's a resolution for this conflict
+              const resolutionKey = `${year}:${planVersion}:${jobNumber}:${workGroup}:${period}`;
+              const resolution = resolutionMap[resolutionKey];
+
+              if (resolution === 'current') {
+                // Keep current value (do nothing)
+              } else if (resolution === 'uploaded') {
+                // Use uploaded value
+                job.wgs[workGroup][period] = uploadedValue;
+              } else {
+                // No conflict - merge normally
+                // If current is 0, use uploaded value
+                // If uploaded is 0, keep current value
+                // If both are non-zero and same, keep either
+                if (currentValue === 0 || (uploadedValue !== 0 && uploadedValue === currentValue)) {
+                  job.wgs[workGroup][period] = uploadedValue;
+                }
+                // Otherwise keep current value
+              }
+            });
+          });
+        }
+
+        // Merge comments
+        if (uploadedJob.comments) {
+          if (!job.comments) job.comments = {};
+          Object.entries(uploadedJob.comments).forEach(([workGroup, comment]) => {
+            // Only overwrite if current comment is empty or same
+            if (!job.comments[workGroup] || job.comments[workGroup] === comment) {
+              job.comments[workGroup] = comment;
+            }
+          });
+        }
+
+        // Recalculate period totals from all work groups
+        const totals = {};
+        Object.values(job.wgs || {}).forEach(wgData => {
+          window.FORECAST_PERIODS.forEach(period => {
+            totals[period] = (totals[period] || 0) + (Number(wgData?.[period]) || 0);
+          });
+        });
+        job.periods = totals;
+      });
+
+      // Save the merged data
+      saveForecastToStorage(currentData, currentData.size, year, planVersion);
+      importedCount++;
+    });
+  });
+
+  console.log(`✓ Merged ${importedCount} forecast(s)`);
 }
 
 /**
@@ -1376,6 +1701,8 @@ window.openCopyActualsModal = openCopyActualsModal;
 window.closeCopyActualsModal = closeCopyActualsModal;
 window.updateCopyActualsJobList = updateCopyActualsJobList;
 window.handleCopyActuals = handleCopyActuals;
+window.closeImportConflictsModal = closeImportConflictsModal;
+window.applyImportConflictResolution = applyImportConflictResolution;
 
 // Debug: Log that functions are loaded
 console.log('✓ Forecast editor functions loaded and exposed globally');

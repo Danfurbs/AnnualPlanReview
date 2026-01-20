@@ -339,3 +339,23 @@
     .forecast-comment-text:last-child { margin-bottom: 0; }
     .plan-label { font-weight: 700; color: #64748b; font-size: 11px; text-transform: uppercase; margin-right: 4px; }
 
+    /* Import Conflicts Modal */
+    .import-conflicts-list { display: flex; flex-direction: column; gap: 16px; max-height: 500px; overflow-y: auto; }
+    .import-conflict-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .import-conflict-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .import-conflict-header { font-weight: 700; font-size: 14px; color: #1e293b; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+    .import-conflict-badge { background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .import-conflict-details { font-size: 12px; color: #64748b; margin-bottom: 8px; font-weight: 600; }
+    .import-conflict-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .import-conflict-option { background: white; border: 2px solid #cbd5e0; border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
+    .import-conflict-option:hover { border-color: #3b82f6; }
+    .import-conflict-option:has(input:checked) { border-color: #3b82f6; background: #eff6ff; }
+    .import-conflict-option input[type="radio"] { margin: 0; cursor: pointer; }
+    .import-conflict-value { flex: 1; }
+    .import-conflict-label { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; margin-bottom: 4px; }
+    .import-conflict-number { font-size: 16px; font-weight: 700; color: #1e293b; }
+    .import-conflict-option-label { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; margin-bottom: 6px; }
+    .import-conflict-option-value { font-size: 16px; font-weight: 700; color: #1e293b; }
+    .import-conflict-option-periods { font-size: 12px; color: #64748b; margin-top: 6px; }
+    .import-conflict-summary { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 12px; font-size: 12px; color: #075985; margin-bottom: 16px; }
+
