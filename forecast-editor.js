@@ -898,13 +898,35 @@ function handleForecastEditorDeleteRow(event) {
   // Save the changes to persist the deletion
   const rowsToSave = window.forecastEditorState.rows.filter(row => {
     if (!row.jobNumber) return false;
-    const hasVolume = window.FORECAST_PERIODS.some(period => Number(row.volumes?.[period] || 0) !== 0);
-    return hasVolume;
+    // Keep row if it has non-zero volumes OR has a comment
+    const hasVolume = window.FORECAST_PERIODS.some(period => {
+      const val = row.volumes?.[period];
+      return val !== undefined && val !== null && val !== '';
+    });
+    const hasComment = row.comment && row.comment.trim().length > 0;
+    return hasVolume || hasComment;
   });
+
+  // If the deleted job had a job number, explicitly remove its work group data
+  if (jobNumber && window.fData.has(jobNumber)) {
+    const job = window.fData.get(jobNumber);
+    if (job.wgs && job.wgs[window.forecastEditorState.workGroup]) {
+      delete job.wgs[window.forecastEditorState.workGroup];
+    }
+    if (job.comments && job.comments[window.forecastEditorState.workGroup]) {
+      delete job.comments[window.forecastEditorState.workGroup];
+    }
+  }
 
   window.fData = updateForecastWorkGroup(window.fData, rowsToSave, window.forecastEditorState.workGroup);
   window.fData = cleanForecastData(window.fData);
   saveForecastToStorage(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
+
+  // If deleting from v1 and job had a number, mark it as explicitly deleted (override)
+  // This prevents it from being inherited from v0
+  if (window.forecastEditorState.planVersion === 'v1' && jobNumber) {
+    addToV1Overrides(window.forecastEditorState.year, [jobNumber]);
+  }
 
   // Re-render
   renderForecastEditorTable();
