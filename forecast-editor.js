@@ -583,13 +583,41 @@ function handleForecastEditorSubmit(event) {
       if (v1Snapshot && v1Snapshot.data) {
         const v1Data = v1Snapshot.data;
 
-        // Update v1 with the v0 changes
+        // Update v1 with the v0 changes - MERGE work group data, don't replace entire job
         rowsToSave.forEach(row => {
           if (conflicts.includes(row.jobNumber)) {
-            // Update v1 job data to match what will be in v0
-            const jobData = window.fData.get(row.jobNumber);
-            if (jobData) {
-              v1Data.set(row.jobNumber, jobData);
+            const v0JobData = window.fData.get(row.jobNumber);
+            if (v0JobData) {
+              // Get existing v1 job data or create new entry
+              if (!v1Data.has(row.jobNumber)) {
+                v1Data.set(row.jobNumber, { periods: {}, wgs: {}, comments: {} });
+              }
+              const v1Job = v1Data.get(row.jobNumber);
+
+              // Merge the work group data for the current work group only
+              const currentWG = window.forecastEditorState.workGroup;
+              if (v0JobData.wgs && v0JobData.wgs[currentWG]) {
+                if (!v1Job.wgs) v1Job.wgs = {};
+                v1Job.wgs[currentWG] = { ...v0JobData.wgs[currentWG] };
+              }
+
+              // Merge the comment for the current work group only
+              if (v0JobData.comments && v0JobData.comments[currentWG]) {
+                if (!v1Job.comments) v1Job.comments = {};
+                v1Job.comments[currentWG] = v0JobData.comments[currentWG];
+              } else if (v1Job.comments && v1Job.comments[currentWG]) {
+                // v0 has no comment for this WG, so remove it from v1
+                delete v1Job.comments[currentWG];
+              }
+
+              // Recalculate period totals from all work groups
+              const totals = {};
+              Object.values(v1Job.wgs || {}).forEach(wgData => {
+                window.FORECAST_PERIODS.forEach(period => {
+                  totals[period] = (totals[period] || 0) + (Number(wgData?.[period]) || 0);
+                });
+              });
+              v1Job.periods = totals;
             }
           }
         });
