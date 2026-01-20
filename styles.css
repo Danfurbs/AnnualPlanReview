@@ -326,4 +326,16 @@
     .stage-selection-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; }
     .stage-button { background: #e2e8f0; color: #1f2937; border-radius: 12px; font-weight: 700; font-size: 14px; padding: 12px; border: 1px solid #cbd5e1; }
     .stage-button:hover { background: #cbd5f5; }
-  
+
+    /* Forecast Comments in Breakdown */
+    .forecast-comments-list { display: flex; flex-direction: column; gap: 12px; }
+    .forecast-comment-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; border-left: 4px solid #3b82f6; }
+    .forecast-comment-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .forecast-comment-header strong { font-size: 13px; color: #1e293b; }
+    .plan-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+    .plan-badge.plan-v0 { background: #dbeafe; color: #1e3a8a; }
+    .plan-badge.plan-v1 { background: #e0e7ff; color: #3730a3; }
+    .forecast-comment-text { font-size: 13px; color: #475569; line-height: 1.6; margin-bottom: 6px; }
+    .forecast-comment-text:last-child { margin-bottom: 0; }
+    .plan-label { font-weight: 700; color: #64748b; font-size: 11px; text-transform: uppercase; margin-right: 4px; }
+

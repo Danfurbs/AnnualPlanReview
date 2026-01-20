@@ -2270,7 +2270,86 @@
           if (toggle) toggle.textContent = isOpen ? 'Hide details' : 'Show details';
         });
       });
-      
+
+      // Forecast Comments Section
+      const forecastCommentsSection = document.getElementById('forecastCommentsSection');
+      const forecastCommentsContainer = document.getElementById('forecastCommentsContainer');
+
+      if (forecastCommentsSection && forecastCommentsContainer) {
+        // Get forecast data for this job
+        const v0Forecast = getForecastSnapshot(window.currentFinancialYear, 'v0');
+        const v1Forecast = getForecastSnapshot(window.currentFinancialYear, 'v1');
+
+        const comments = [];
+
+        // Collect comments from v0 and v1
+        if (v0Forecast && v0Forecast.data) {
+          const v0Job = v0Forecast.data.get(job.jn);
+          if (v0Job?.comments) {
+            Object.entries(v0Job.comments).forEach(([wg, comment]) => {
+              if (comment && (!isFiltered || wg === wgFilter)) {
+                comments.push({ workGroup: wg, plan: 'v0', comment });
+              }
+            });
+          }
+        }
+
+        if (v1Forecast && v1Forecast.data) {
+          const v1Job = v1Forecast.data.get(job.jn);
+          if (v1Job?.comments) {
+            Object.entries(v1Job.comments).forEach(([wg, comment]) => {
+              if (comment && (!isFiltered || wg === wgFilter)) {
+                // Check if we already have a v0 comment for this work group
+                const existingIndex = comments.findIndex(c => c.workGroup === wg && c.plan === 'v0');
+                if (existingIndex >= 0) {
+                  // Add v1 comment to the same entry
+                  comments[existingIndex].v1Comment = comment;
+                } else {
+                  comments.push({ workGroup: wg, plan: 'v1', comment });
+                }
+              }
+            });
+          }
+        }
+
+        if (comments.length > 0) {
+          forecastCommentsSection.style.display = 'block';
+          let commentsHTML = '<div class="forecast-comments-list">';
+
+          comments.forEach(({ workGroup, plan, comment, v1Comment }) => {
+            commentsHTML += `
+              <div class="forecast-comment-item">
+                <div class="forecast-comment-header">
+                  <strong>${escapeHtml(workGroup)}</strong>
+                  ${plan === 'v0' && !v1Comment ? '<span class="plan-badge plan-v0">Plan v0</span>' : ''}
+                  ${plan === 'v1' && !v1Comment ? '<span class="plan-badge plan-v1">Plan v1</span>' : ''}
+                </div>`;
+
+            if (plan === 'v0' || comment) {
+              commentsHTML += `
+                <div class="forecast-comment-text">
+                  ${v1Comment ? '<span class="plan-label">v0:</span>' : ''}
+                  ${escapeHtml(comment)}
+                </div>`;
+            }
+
+            if (v1Comment) {
+              commentsHTML += `
+                <div class="forecast-comment-text">
+                  <span class="plan-label">v1:</span> ${escapeHtml(v1Comment)}
+                </div>`;
+            }
+
+            commentsHTML += '</div>';
+          });
+
+          commentsHTML += '</div>';
+          forecastCommentsContainer.innerHTML = commentsHTML;
+        } else {
+          forecastCommentsSection.style.display = 'none';
+        }
+      }
+
       // Period summary
       const periodGrid = document.getElementById('periodGrid');
       periodGrid.innerHTML = '';
