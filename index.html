@@ -71,6 +71,14 @@
         <span class="helper-text" id="forecastStatusMessage"></span>
       </div>
       <div class="control-group">
+        <label for="dashboardPlanVersion">Plan version</label>
+        <select id="dashboardPlanVersion" onchange="handleDashboardPlanVersionChange()">
+          <option value="v0">Plan v0 (Baseline)</option>
+          <option value="v1">Plan v1 (Updated)</option>
+        </select>
+        <span class="helper-text">v1 mirrors v0 unless edited in Forecast Builder</span>
+      </div>
+      <div class="control-group">
         <label for="viewMode">View mode</label>
         <select id="viewMode" onchange="render()">
           <option value="actual">Show Work Done Only</option>

@@ -60,6 +60,48 @@
     // Expose globally for HTML onclick handler
     window.handleBreakdownPlanVersionChange = handleBreakdownPlanVersionChange;
 
+    function handleDashboardPlanVersionChange() {
+      const select = document.getElementById('dashboardPlanVersion');
+      if (!select) return;
+
+      const newPlanVersion = select.value;
+      if (!PLAN_VERSIONS.some(plan => plan.id === newPlanVersion)) return;
+
+      // Update current plan version
+      currentPlanVersion = newPlanVersion;
+      localStorage.setItem(PLAN_VERSION_KEY, currentPlanVersion);
+
+      // Reload forecast data for new plan version
+      fData = null;
+      const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+      if (forecastCache) {
+        fData = forecastCache.data;
+        updateWorkGroupFilterOptions();
+        console.log(`✓ Switched to ${newPlanVersion}: Forecast cache restored`);
+      } else {
+        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+        if (libraryForecast) {
+          fData = libraryForecast.data;
+          updateWorkGroupFilterOptions();
+          console.log(`✓ Switched to ${newPlanVersion}: Library forecast loaded`);
+        } else if (currentPlanVersion === 'v1') {
+          // Try to initialize v1 from v0
+          const initialized = initializeV1FromV0(currentFinancialYear);
+          if (initialized) {
+            fData = initialized.data;
+            updateWorkGroupFilterOptions();
+            console.log(`✓ Switched to ${newPlanVersion}: Initialized from v0`);
+          }
+        }
+      }
+
+      // Update UI and re-render
+      updateContextControls();
+      render();
+    }
+    // Expose globally for HTML onclick handler
+    window.handleDashboardPlanVersionChange = handleDashboardPlanVersionChange;
+
     function loadCommentStore() {
       try {
         localStorage.removeItem(LEGACY_COMMENT_STORAGE_KEY);
@@ -142,6 +184,11 @@
       if (planDisplay) {
         const label = PLAN_VERSIONS.find(plan => plan.id === currentPlanVersion)?.label || 'Plan';
         planDisplay.textContent = label;
+      }
+      // Sync dashboard plan version selector
+      const dashboardPlanVersionSelect = document.getElementById('dashboardPlanVersion');
+      if (dashboardPlanVersionSelect && dashboardPlanVersionSelect.value !== currentPlanVersion) {
+        dashboardPlanVersionSelect.value = currentPlanVersion;
       }
       const statusMessage = document.getElementById('forecastStatusMessage');
       if (statusMessage) {
@@ -1443,19 +1490,10 @@
         openStageModal();
         return;
       }
-      const preferredPlanVersion = getPreferredPlanVersion(currentFinancialYear);
-      if (preferredPlanVersion !== currentPlanVersion) {
-        currentPlanVersion = preferredPlanVersion;
-        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
-        if (libraryForecast) {
-          fData = libraryForecast.data;
-        } else {
-          const storedForecast = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
-          if (storedForecast) {
-            fData = storedForecast.data;
-          }
-        }
-        updateContextControls();
+      // Sync dashboard plan version selector with current plan version
+      const dashboardPlanVersionSelect = document.getElementById('dashboardPlanVersion');
+      if (dashboardPlanVersionSelect && dashboardPlanVersionSelect.value !== currentPlanVersion) {
+        dashboardPlanVersionSelect.value = currentPlanVersion;
       }
       const viewMode = document.getElementById('viewMode')?.value || 'actual';
       const cutoffValue = document.getElementById('forecastCutoff')?.value || 'auto';
