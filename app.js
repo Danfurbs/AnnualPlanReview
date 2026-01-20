@@ -715,22 +715,6 @@
         });
       }
       if (groupRollupInput) groupRollupInput.addEventListener('change', updateGroupRollupHelp);
-      const forecastEditorForm = document.getElementById('forecastEditorForm');
-      if (forecastEditorForm) {
-        forecastEditorForm.addEventListener('submit', handleForecastEditorSubmit);
-      }
-      const forecastEditorYear = document.getElementById('forecastEditorYear');
-      const forecastEditorStage = document.getElementById('forecastEditorStage');
-      const forecastEditorPlan = document.getElementById('forecastEditorPlan');
-      const forecastEditorWorkGroup = document.getElementById('forecastEditorWorkGroup');
-      const forecastEditorTable = document.getElementById('forecastEditorTable');
-      if (forecastEditorYear) forecastEditorYear.addEventListener('change', handleForecastEditorContextChange);
-      if (forecastEditorStage) forecastEditorStage.addEventListener('change', handleForecastEditorContextChange);
-      if (forecastEditorPlan) forecastEditorPlan.addEventListener('change', handleForecastEditorContextChange);
-      if (forecastEditorWorkGroup) forecastEditorWorkGroup.addEventListener('change', handleForecastEditorWorkGroupChange);
-      if (forecastEditorTable) forecastEditorTable.addEventListener('input', handleForecastEditorTableInput);
-      if (forecastEditorTable) forecastEditorTable.addEventListener('paste', handleForecastEditorTablePaste);
-      if (forecastEditorTable) forecastEditorTable.addEventListener('click', handleForecastEditorTableClick);
     }
 
     function extractJob(txt) {

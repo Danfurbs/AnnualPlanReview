@@ -389,12 +389,41 @@ function addForecastEditorRow() {
  * Clear forecast editor table
  */
 function clearForecastEditorTable() {
+  if (!confirm('This will clear all forecast data for this work group and save it as blank. Continue?')) {
+    return;
+  }
+
+  // Clear rows
   window.forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
+
+  // Remove this work group's data from the forecast
+  if (window.fData && window.forecastEditorState.workGroup) {
+    window.fData.forEach((job) => {
+      if (job.wgs && job.wgs[window.forecastEditorState.workGroup]) {
+        delete job.wgs[window.forecastEditorState.workGroup];
+      }
+      // Recalculate period totals
+      const totals = {};
+      Object.values(job.wgs || {}).forEach(wgData => {
+        window.FORECAST_PERIODS.forEach(period => {
+          totals[period] = (totals[period] || 0) + (Number(wgData?.[period]) || 0);
+        });
+      });
+      job.periods = totals;
+    });
+
+    // Clean up empty jobs
+    window.fData = cleanForecastData(window.fData);
+
+    // Save the cleared forecast
+    saveForecastToStorage(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
+  }
+
   renderForecastEditorTable();
   updateForecastEditorSummary();
 
   const statusEl = document.getElementById('forecastEditorStatus');
-  if (statusEl) statusEl.textContent = 'Table cleared (not saved).';
+  if (statusEl) statusEl.textContent = `✓ Cleared and saved blank forecast for ${window.forecastEditorState.workGroup}`;
 }
 
 /**
@@ -712,13 +741,6 @@ function downloadForecastEditorExport() {
 }
 
 /**
- * Download forecast file
- */
-function downloadForecastFile() {
-  downloadForecastEditorExport();
-}
-
-/**
  * Trigger forecast file upload
  */
 function triggerForecastFileUpload() {
@@ -776,7 +798,6 @@ window.submitForecastEditorForm = submitForecastEditorForm;
 window.addForecastEditorRow = addForecastEditorRow;
 window.clearForecastEditorTable = clearForecastEditorTable;
 window.downloadForecastEditorExport = downloadForecastEditorExport;
-window.downloadForecastFile = downloadForecastFile;
 window.triggerForecastFileUpload = triggerForecastFileUpload;
 window.loadForecastFile = loadForecastFile;
 window.handleForecastEditorContextChange = handleForecastEditorContextChange;

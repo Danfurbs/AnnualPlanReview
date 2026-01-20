@@ -246,10 +246,9 @@
           <h4>Quick actions</h4>
           <div class="forecast-action-list">
             <button type="button" onclick="addForecastEditorRow()">+ Add Row</button>
-            <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear Table</button>
-            <button type="button" class="group-action-button" onclick="downloadForecastEditorExport()">Export Forecast JSON</button>
-            <button type="button" class="group-action-button" onclick="downloadForecastFile()">Save Forecast File</button>
-            <button type="button" class="group-action-button" onclick="triggerForecastFileUpload()">Load Forecast File</button>
+            <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear & Save</button>
+            <button type="button" class="group-action-button" onclick="downloadForecastEditorExport()">Export Forecast</button>
+            <button type="button" class="group-action-button" onclick="triggerForecastFileUpload()">Import Forecast</button>
             <input type="file" id="forecastFileInput" accept="application/json" class="is-hidden" onchange="loadForecastFile(event)">
           </div>
         </div>
