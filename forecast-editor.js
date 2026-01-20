@@ -966,6 +966,228 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+/**
+ * Open copy actuals modal
+ */
+function openCopyActualsModal() {
+  const modal = document.getElementById('copyActualsModal');
+  if (!modal) return;
+
+  // Reset form
+  const form = document.getElementById('copyActualsForm');
+  if (form) form.reset();
+
+  // Hide job list initially
+  const jobListGroup = document.getElementById('copyActualsJobListGroup');
+  if (jobListGroup) jobListGroup.classList.add('is-hidden');
+
+  // Update preview
+  updateCopyActualsPreview();
+
+  modal.classList.add('open');
+}
+
+/**
+ * Close copy actuals modal
+ */
+function closeCopyActualsModal() {
+  const modal = document.getElementById('copyActualsModal');
+  if (modal) modal.classList.remove('open');
+}
+
+/**
+ * Update copy actuals job list based on selection
+ */
+function updateCopyActualsJobList() {
+  const selection = document.getElementById('copyActualsJobSelection')?.value;
+  const jobListGroup = document.getElementById('copyActualsJobListGroup');
+  const jobListDiv = document.getElementById('copyActualsJobList');
+
+  if (selection === 'select') {
+    if (jobListGroup) jobListGroup.classList.remove('is-hidden');
+
+    // Get all jobs with work done in current work group
+    const workGroup = window.forecastEditorState.workGroup;
+    const jobs = new Set();
+
+    if (window.wData) {
+      window.wData.forEach((job, jobNumber) => {
+        const wgData = job?.wgs?.[workGroup];
+        if (wgData && Object.values(wgData).some(periodData => {
+          return window.FORECAST_PERIODS.some(period => Number(periodData?.[period] || 0) !== 0);
+        })) {
+          jobs.add(jobNumber);
+        }
+      });
+    }
+
+    // Render checkboxes
+    if (jobListDiv) {
+      const sortedJobs = Array.from(jobs).sort((a, b) => a.localeCompare(b));
+      jobListDiv.innerHTML = sortedJobs.map(jobNumber => {
+        const meta = getJobMetadata(jobNumber);
+        const desc = meta?.desc || '';
+        return `
+          <label>
+            <input type="checkbox" value="${escapeHtml(jobNumber)}" checked>
+            <span><strong>${escapeHtml(jobNumber)}</strong> ${escapeHtml(desc)}</span>
+          </label>
+        `;
+      }).join('');
+    }
+  } else {
+    if (jobListGroup) jobListGroup.classList.add('is-hidden');
+  }
+
+  updateCopyActualsPreview();
+}
+
+/**
+ * Update copy actuals preview text
+ */
+function updateCopyActualsPreview() {
+  const previewEl = document.getElementById('copyActualsPreview');
+  if (!previewEl) return;
+
+  const period = document.getElementById('copyActualsPeriod')?.value;
+  const selection = document.getElementById('copyActualsJobSelection')?.value;
+
+  if (!period || !selection) {
+    previewEl.textContent = 'Select options above to see preview.';
+    return;
+  }
+
+  const periodIndex = window.FORECAST_PERIODS.indexOf(period);
+  const periodCount = periodIndex + 1;
+
+  let jobText = '';
+  if (selection === 'all') {
+    jobText = 'all jobs with work done in this work group';
+  } else if (selection === 'current') {
+    jobText = 'jobs currently in the forecast table';
+  } else if (selection === 'select') {
+    const checked = document.querySelectorAll('#copyActualsJobList input[type="checkbox"]:checked');
+    jobText = `${checked.length} selected job${checked.length !== 1 ? 's' : ''}`;
+  }
+
+  previewEl.textContent = `Will copy actual values for periods P1–${period} (${periodCount} period${periodCount !== 1 ? 's' : ''}) for ${jobText}.`;
+}
+
+/**
+ * Handle copy actuals form submission
+ */
+function handleCopyActuals(event) {
+  event.preventDefault();
+
+  const period = document.getElementById('copyActualsPeriod')?.value;
+  const selection = document.getElementById('copyActualsJobSelection')?.value;
+  const workGroup = window.forecastEditorState.workGroup;
+  const year = window.forecastEditorState.year;
+  const planVersion = window.forecastEditorState.planVersion;
+
+  if (!period || !selection || !workGroup) {
+    alert('Please select all required options.');
+    return;
+  }
+
+  // Get list of jobs to update
+  let jobsToUpdate = [];
+  if (selection === 'all') {
+    // All jobs with work done in this work group
+    if (window.wData) {
+      window.wData.forEach((job, jobNumber) => {
+        const wgData = job?.wgs?.[workGroup];
+        if (wgData) {
+          jobsToUpdate.push(jobNumber);
+        }
+      });
+    }
+  } else if (selection === 'current') {
+    // Only jobs currently in forecast
+    jobsToUpdate = window.forecastEditorState.rows
+      .filter(row => row.jobNumber)
+      .map(row => row.jobNumber);
+  } else if (selection === 'select') {
+    // Selected jobs from checkboxes
+    const checked = document.querySelectorAll('#copyActualsJobList input[type="checkbox"]:checked');
+    jobsToUpdate = Array.from(checked).map(cb => cb.value);
+  }
+
+  if (!jobsToUpdate.length) {
+    alert('No jobs to update. Make sure work done data is loaded.');
+    return;
+  }
+
+  // Get period range
+  const periodIndex = window.FORECAST_PERIODS.indexOf(period);
+  if (periodIndex < 0) return;
+  const periodsToUpdate = window.FORECAST_PERIODS.slice(0, periodIndex + 1);
+
+  // Copy actual values into forecast
+  let updatedCount = 0;
+  jobsToUpdate.forEach(jobNumber => {
+    const workDoneJob = window.wData?.get(jobNumber);
+    if (!workDoneJob) return;
+
+    const wgData = workDoneJob?.wgs?.[workGroup];
+    if (!wgData) return;
+
+    // Get or create forecast job entry
+    if (!window.fData) window.fData = new Map();
+    let forecastJob = window.fData.get(jobNumber);
+    if (!forecastJob) {
+      forecastJob = { periods: {}, wgs: {} };
+      window.fData.set(jobNumber, forecastJob);
+    }
+
+    // Get or create work group data in forecast
+    if (!forecastJob.wgs[workGroup]) {
+      forecastJob.wgs[workGroup] = {};
+    }
+
+    // Copy actual values for selected periods
+    periodsToUpdate.forEach(p => {
+      const actualValue = Number(wgData[p] || 0);
+      forecastJob.wgs[workGroup][p] = actualValue;
+    });
+
+    // Recalculate period totals
+    const totals = {};
+    Object.values(forecastJob.wgs).forEach(wgData => {
+      window.FORECAST_PERIODS.forEach(period => {
+        totals[period] = (totals[period] || 0) + (Number(wgData?.[period]) || 0);
+      });
+    });
+    forecastJob.periods = totals;
+
+    updatedCount++;
+  });
+
+  // Save to storage
+  saveForecastToStorage(window.fData, window.fData.size, year, planVersion);
+
+  // If saving to v1, mark jobs as overrides
+  if (planVersion === 'v1') {
+    addToV1Overrides(year, jobsToUpdate);
+  }
+
+  // Reload editor
+  loadForecastEditorRows();
+  renderForecastEditorTable();
+  updateForecastEditorSummary();
+
+  // Close modal
+  closeCopyActualsModal();
+
+  // Show success message
+  const statusEl = document.getElementById('forecastEditorStatus');
+  if (statusEl) {
+    statusEl.textContent = `✓ Copied actuals for ${updatedCount} job${updatedCount !== 1 ? 's' : ''} through ${period} at ${new Date().toLocaleTimeString()}`;
+  }
+
+  alert(`✓ Successfully copied actual values for ${updatedCount} job${updatedCount !== 1 ? 's' : ''} through period ${period}.`);
+}
+
 // Expose functions globally for HTML onclick handlers
 window.openForecastEditor = openForecastEditor;
 window.closeForecastEditor = closeForecastEditor;
@@ -976,6 +1198,10 @@ window.downloadForecastEditorExport = downloadForecastEditorExport;
 window.triggerForecastFileUpload = triggerForecastFileUpload;
 window.loadForecastFile = loadForecastFile;
 window.handleForecastEditorContextChange = handleForecastEditorContextChange;
+window.openCopyActualsModal = openCopyActualsModal;
+window.closeCopyActualsModal = closeCopyActualsModal;
+window.updateCopyActualsJobList = updateCopyActualsJobList;
+window.handleCopyActuals = handleCopyActuals;
 
 // Debug: Log that functions are loaded
 console.log('✓ Forecast editor functions loaded and exposed globally');
@@ -1004,5 +1230,19 @@ document.addEventListener('DOMContentLoaded', () => {
     forecastTable.addEventListener('input', handleForecastEditorTableInput);
     forecastTable.addEventListener('paste', handleForecastEditorTablePaste);
     forecastTable.addEventListener('click', handleForecastEditorDeleteRow);
+  }
+
+  // Copy actuals modal listeners
+  const copyActualsPeriod = document.getElementById('copyActualsPeriod');
+  if (copyActualsPeriod) {
+    copyActualsPeriod.addEventListener('change', updateCopyActualsPreview);
+  }
+
+  const copyActualsJobSelection = document.getElementById('copyActualsJobSelection');
+  if (copyActualsJobSelection) {
+    copyActualsJobSelection.addEventListener('change', () => {
+      updateCopyActualsJobList();
+      updateCopyActualsPreview();
+    });
   }
 });

@@ -260,6 +260,7 @@
           <h4>Quick actions</h4>
           <div class="forecast-action-list">
             <button type="button" onclick="addForecastEditorRow()">+ Add Row</button>
+            <button type="button" class="group-action-button" onclick="openCopyActualsModal()" id="copyActualsBtn">Copy from Work Done</button>
             <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear & Save</button>
             <button type="button" class="group-action-button" onclick="downloadForecastEditorExport()">Export Forecast</button>
             <button type="button" class="group-action-button" onclick="triggerForecastFileUpload()">Import Forecast</button>
@@ -301,6 +302,62 @@
           <p class="forecast-editor-meta" id="forecastEditorStatus"></p>
         </form>
       </main>
+    </div>
+  </div>
+
+  <div id="copyActualsModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Copy from Work Done</h2>
+        <button class="close" onclick="closeCopyActualsModal()">&times;</button>
+      </div>
+      <p class="helper-text">Copy actual work done values into the forecast. This will replace forecast values with actuals for the selected jobs and periods.</p>
+
+      <form id="copyActualsForm" onsubmit="handleCopyActuals(event)">
+        <div class="control-group">
+          <label for="copyActualsPeriod">Copy actuals through period</label>
+          <select id="copyActualsPeriod" required>
+            <option value="">Select period...</option>
+            <option value="P1">P1</option>
+            <option value="P2">P2</option>
+            <option value="P3">P3</option>
+            <option value="P4">P4</option>
+            <option value="P5">P5</option>
+            <option value="P6">P6</option>
+            <option value="P7">P7</option>
+            <option value="P8">P8</option>
+            <option value="P9">P9</option>
+            <option value="P10">P10</option>
+            <option value="P11">P11</option>
+            <option value="P12">P12</option>
+            <option value="P13">P13</option>
+          </select>
+          <span class="helper-text">Periods after this will keep forecast values</span>
+        </div>
+
+        <div class="control-group">
+          <label for="copyActualsJobSelection">Apply to jobs</label>
+          <select id="copyActualsJobSelection" required onchange="updateCopyActualsJobList()">
+            <option value="all">All jobs with work done in this work group</option>
+            <option value="current">Only jobs currently in forecast table</option>
+            <option value="select">Select specific jobs...</option>
+          </select>
+        </div>
+
+        <div class="control-group is-hidden" id="copyActualsJobListGroup">
+          <label>Select jobs to update</label>
+          <div id="copyActualsJobList" class="checkbox-list"></div>
+        </div>
+
+        <div class="control-group">
+          <p class="helper-text" id="copyActualsPreview" style="background: #f0f9ff; padding: 12px; border-radius: 4px; margin-top: 12px;"></p>
+        </div>
+
+        <div class="comment-actions">
+          <button type="submit" class="primary-button">Copy Actuals</button>
+          <button type="button" class="group-action-button" onclick="closeCopyActualsModal()">Cancel</button>
+        </div>
+      </form>
     </div>
   </div>
 
