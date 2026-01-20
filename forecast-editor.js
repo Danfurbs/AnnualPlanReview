@@ -125,10 +125,14 @@ function renderForecastEditorSelectors() {
     : (window.currentPlanVersion || 'v0');
   planSelect.value = window.forecastEditorState.planVersion;
 
-  // Work group selector
+  // Work group selector with indicators for groups that have data
   const workGroupOptions = getAllWorkGroupSetNames();
   workGroupSelect.innerHTML = workGroupOptions
-    .map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+    .map(name => {
+      const hasData = workGroupHasForecastData(name);
+      const indicator = hasData ? '✓ ' : '';
+      return `<option value="${escapeHtml(name)}">${indicator}${escapeHtml(name)}</option>`;
+    })
     .join('');
   window.forecastEditorState.workGroup = workGroupOptions.includes(window.forecastEditorState.workGroup)
     ? window.forecastEditorState.workGroup
@@ -138,6 +142,23 @@ function renderForecastEditorSelectors() {
   // Load rows for current context
   loadForecastEditorRows();
   renderForecastEditorJobOptions();
+}
+
+/**
+ * Check if a work group has any forecast data in current context
+ */
+function workGroupHasForecastData(workGroupName) {
+  if (!window.fData || !workGroupName) return false;
+
+  // Check if any job has data for this work group
+  let hasData = false;
+  window.fData.forEach((job) => {
+    if (job?.wgs?.[workGroupName]) {
+      hasData = true;
+    }
+  });
+
+  return hasData;
 }
 
 /**
@@ -701,6 +722,20 @@ function handleForecastEditorDeleteRow(event) {
   const rowIndex = Number(button.dataset.row);
   if (!Number.isFinite(rowIndex)) return;
 
+  // Get the job number for the row being deleted
+  const row = window.forecastEditorState.rows[rowIndex];
+  const jobNumber = row?.jobNumber || '';
+
+  // Confirm deletion
+  const confirmMessage = jobNumber
+    ? `Delete job ${jobNumber} from this forecast?`
+    : 'Delete this empty row?';
+
+  if (!confirm(confirmMessage)) {
+    return;
+  }
+
+  // Remove the row from state
   window.forecastEditorState.rows.splice(rowIndex, 1);
 
   // Ensure at least 1 empty row
@@ -708,8 +743,28 @@ function handleForecastEditorDeleteRow(event) {
     window.forecastEditorState.rows.push(createForecastEditorRow());
   }
 
+  // Save the changes to persist the deletion
+  const rowsToSave = window.forecastEditorState.rows.filter(row => {
+    if (!row.jobNumber) return false;
+    const hasVolume = window.FORECAST_PERIODS.some(period => Number(row.volumes?.[period] || 0) !== 0);
+    return hasVolume;
+  });
+
+  window.fData = updateForecastWorkGroup(window.fData, rowsToSave, window.forecastEditorState.workGroup);
+  window.fData = cleanForecastData(window.fData);
+  saveForecastToStorage(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
+
+  // Re-render
   renderForecastEditorTable();
   updateForecastEditorSummary();
+
+  // Update status
+  const statusEl = document.getElementById('forecastEditorStatus');
+  if (statusEl) {
+    statusEl.textContent = jobNumber
+      ? `✓ Deleted job ${jobNumber} at ${new Date().toLocaleTimeString()}`
+      : `✓ Deleted row at ${new Date().toLocaleTimeString()}`;
+  }
 }
 
 /**
