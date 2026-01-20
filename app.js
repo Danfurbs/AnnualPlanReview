@@ -2084,13 +2084,44 @@
       const allJobs = new Set([...(v0Snapshot.data.keys()), ...(v1Data.keys())]);
       const rows = [];
       allJobs.forEach(jobNumber => {
-        const v0 = getForecastTotal(v0Snapshot.data.get(jobNumber));
-        const v1 = getForecastTotal(v1Data.get(jobNumber));
+        const v0Job = v0Snapshot.data.get(jobNumber);
+        const v1Job = v1Data.get(jobNumber);
+        const v0 = getForecastTotal(v0Job);
+        const v1 = getForecastTotal(v1Job);
         const delta = v1 - v0;
         const desc = window.stdJobs.get(jobNumber)?.desc || `Job ${jobNumber}`;
+
+        // Build work group breakdown for tooltip
+        const v0Breakdown = [];
+        const v1Breakdown = [];
+
+        if (v0Job && v0Job.wgs) {
+          Object.entries(v0Job.wgs).forEach(([wgName, wgData]) => {
+            let wgTotal = 0;
+            window.FORECAST_PERIODS.forEach(period => {
+              wgTotal += Number(wgData?.[period] || 0);
+            });
+            if (wgTotal !== 0) {
+              v0Breakdown.push(`${wgName}: ${wgTotal.toFixed(2)}`);
+            }
+          });
+        }
+
+        if (v1Job && v1Job.wgs) {
+          Object.entries(v1Job.wgs).forEach(([wgName, wgData]) => {
+            let wgTotal = 0;
+            window.FORECAST_PERIODS.forEach(period => {
+              wgTotal += Number(wgData?.[period] || 0);
+            });
+            if (wgTotal !== 0) {
+              v1Breakdown.push(`${wgName}: ${wgTotal.toFixed(2)}`);
+            }
+          });
+        }
+
         if (changedOnly && delta === 0) return;
         if (search && !`${jobNumber} ${desc}`.toLowerCase().includes(search)) return;
-        rows.push({ jobNumber, desc, v0, v1, delta });
+        rows.push({ jobNumber, desc, v0, v1, delta, v0Breakdown, v1Breakdown });
       });
       rows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
       const header = `
@@ -2112,8 +2143,19 @@
           <tbody>
             ${rows.map(row => {
               const deltaClass = row.delta > 0 ? 'positive' : row.delta < 0 ? 'negative' : 'neutral';
+
+              // Build tooltip text
+              const tooltipParts = [];
+              if (row.v0Breakdown.length > 0) {
+                tooltipParts.push(`Plan v0 breakdown:\n${row.v0Breakdown.join('\n')}`);
+              }
+              if (row.v1Breakdown.length > 0) {
+                tooltipParts.push(`Plan v1 breakdown:\n${row.v1Breakdown.join('\n')}`);
+              }
+              const tooltip = tooltipParts.length > 0 ? tooltipParts.join('\n\n') : 'No work group data';
+
               return `
-                <tr>
+                <tr title="${escapeHtml(tooltip)}" style="cursor: help;">
                   <td>${escapeHtml(row.jobNumber)}</td>
                   <td>${escapeHtml(row.desc)}</td>
                   <td>${row.v0.toFixed(2)}</td>
