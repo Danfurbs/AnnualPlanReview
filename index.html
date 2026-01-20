@@ -23,6 +23,50 @@
       </div>
     </header>
 
+    <div class="forecast-health">
+      <div class="health-header">
+        <h3>Forecast Health</h3>
+      </div>
+      <div class="health-content">
+        <div class="health-main">
+          <div class="health-label">Overall Alignment</div>
+          <div class="health-bar-container">
+            <div class="health-bar">
+              <div class="health-bar-fill" id="healthBarFill"></div>
+            </div>
+            <div class="health-percentage" id="healthPercentage">0%</div>
+          </div>
+          <div class="health-legend">
+            <span class="health-legend-item"><span class="health-dot health-good"></span>Good (&gt;90%)</span>
+            <span class="health-legend-item"><span class="health-dot health-acceptable"></span>Acceptable (70-90%)</span>
+            <span class="health-legend-item"><span class="health-dot health-needs-attention"></span>Needs Attention (&lt;70%)</span>
+          </div>
+        </div>
+        <div class="health-stats">
+          <div class="health-stat health-stat-good">
+            <div class="health-stat-value" id="healthGoodCount">0</div>
+            <div class="health-stat-label">On Track</div>
+            <div class="health-stat-percent" id="healthGoodPercent">0%</div>
+          </div>
+          <div class="health-stat health-stat-warning">
+            <div class="health-stat-value" id="healthWarningCount">0</div>
+            <div class="health-stat-label">Minor Variance</div>
+            <div class="health-stat-percent" id="healthWarningPercent">0%</div>
+          </div>
+          <div class="health-stat health-stat-critical">
+            <div class="health-stat-value" id="healthCriticalCount">0</div>
+            <div class="health-stat-label">Critical</div>
+            <div class="health-stat-percent" id="healthCriticalPercent">0%</div>
+          </div>
+          <div class="health-stat health-stat-total">
+            <div class="health-stat-value" id="healthTotalCount">0</div>
+            <div class="health-stat-label">Total Jobs</div>
+          </div>
+        </div>
+      </div>
+      <div class="health-issues" id="healthIssues"></div>
+    </div>
+
     <div class="top-summary">
       <div class="summary-card">
         <div class="card-title">Review Progress</div>

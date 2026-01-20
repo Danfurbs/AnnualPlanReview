@@ -849,6 +849,136 @@
       return { total, counts };
     }
 
+    function getJobHealthStatus(varianceData) {
+      const forecast = Math.abs(varianceData.f || 0);
+      const variance = Math.abs(varianceData.v || 0);
+      const variancePercent = forecast > 0 ? (variance / forecast) * 100 : 0;
+
+      if (variancePercent >= 50) {
+        return { status: 'critical', label: 'CRITICAL VARIANCE', percent: variancePercent };
+      } else if (variancePercent >= 10) {
+        return { status: 'warning', label: 'MINOR VARIANCE', percent: variancePercent };
+      } else {
+        return { status: 'good', label: 'ON TRACK', percent: variancePercent };
+      }
+    }
+
+    function updateForecastHealth({ baseFiltered, period, getJobDisplayData }) {
+      if (!baseFiltered || !baseFiltered.length) {
+        // Hide or clear health indicator when no jobs
+        const healthBarFill = document.getElementById('healthBarFill');
+        const healthPercentage = document.getElementById('healthPercentage');
+        if (healthBarFill) {
+          healthBarFill.style.width = '0%';
+          healthBarFill.className = 'health-bar-fill';
+        }
+        if (healthPercentage) healthPercentage.textContent = '0%';
+
+        ['healthGoodCount', 'healthWarningCount', 'healthCriticalCount', 'healthTotalCount'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = '0';
+        });
+        ['healthGoodPercent', 'healthWarningPercent', 'healthCriticalPercent'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = '0%';
+        });
+
+        const healthIssues = document.getElementById('healthIssues');
+        if (healthIssues) healthIssues.innerHTML = '';
+        return;
+      }
+
+      // Calculate health metrics based on variance
+      let goodCount = 0;
+      let warningCount = 0;
+      let criticalCount = 0;
+      const issues = [];
+
+      baseFiltered.forEach(job => {
+        const displayData = getJobDisplayData(job);
+        const pd = period === 'all' ? displayData.tot : displayData.periods[period];
+        const forecast = Math.abs(pd.f || 0);
+        const variance = Math.abs(pd.v || 0);
+        const variancePercent = forecast > 0 ? (variance / forecast) * 100 : 0;
+
+        if (variancePercent < 10) {
+          goodCount++;
+        } else if (variancePercent < 50) {
+          warningCount++;
+        } else {
+          criticalCount++;
+          if (issues.length < 5) {  // Only show top 5 issues
+            issues.push(`${job.jn} has ${variancePercent.toFixed(0)}% variance`);
+          }
+        }
+      });
+
+      const totalJobs = baseFiltered.length;
+      const goodPercent = totalJobs > 0 ? Math.round((goodCount / totalJobs) * 100) : 0;
+      const warningPercent = totalJobs > 0 ? Math.round((warningCount / totalJobs) * 100) : 0;
+      const criticalPercent = totalJobs > 0 ? Math.round((criticalCount / totalJobs) * 100) : 0;
+
+      // Calculate overall health percentage (inverse of critical jobs)
+      const healthPercent = totalJobs > 0 ? Math.round((goodCount / totalJobs) * 100) : 0;
+
+      // Update health bar
+      const healthBarFill = document.getElementById('healthBarFill');
+      const healthPercentage = document.getElementById('healthPercentage');
+      if (healthBarFill) {
+        healthBarFill.style.width = `${healthPercent}%`;
+        // Set color class based on health
+        healthBarFill.className = 'health-bar-fill';
+        if (healthPercent >= 90) {
+          healthBarFill.classList.add('health-good');
+        } else if (healthPercent >= 70) {
+          healthBarFill.classList.add('health-acceptable');
+        } else {
+          healthBarFill.classList.add('health-needs-attention');
+        }
+      }
+      if (healthPercentage) {
+        healthPercentage.textContent = `${healthPercent}%`;
+      }
+
+      // Update stat counts
+      const healthGoodCount = document.getElementById('healthGoodCount');
+      const healthWarningCount = document.getElementById('healthWarningCount');
+      const healthCriticalCount = document.getElementById('healthCriticalCount');
+      const healthTotalCount = document.getElementById('healthTotalCount');
+
+      if (healthGoodCount) healthGoodCount.textContent = goodCount;
+      if (healthWarningCount) healthWarningCount.textContent = warningCount;
+      if (healthCriticalCount) healthCriticalCount.textContent = criticalCount;
+      if (healthTotalCount) healthTotalCount.textContent = totalJobs;
+
+      // Update percentages
+      const healthGoodPercent = document.getElementById('healthGoodPercent');
+      const healthWarningPercent = document.getElementById('healthWarningPercent');
+      const healthCriticalPercent = document.getElementById('healthCriticalPercent');
+
+      if (healthGoodPercent) healthGoodPercent.textContent = `${goodPercent}%`;
+      if (healthWarningPercent) healthWarningPercent.textContent = `${warningPercent}%`;
+      if (healthCriticalPercent) healthCriticalPercent.textContent = `${criticalPercent}%`;
+
+      // Update issues list
+      const healthIssues = document.getElementById('healthIssues');
+      if (healthIssues) {
+        if (issues.length > 0 || criticalCount > 0) {
+          const issuesList = issues.map(issue => `<li>${escapeHtml(issue)}</li>`).join('');
+          const additionalText = criticalCount > issues.length ? `<li>and ${criticalCount - issues.length} more critical jobs...</li>` : '';
+          healthIssues.innerHTML = `
+            <div class="health-issues-title">Issues Requiring Attention:</div>
+            <ul class="health-issues-list">
+              ${issuesList}
+              ${additionalText}
+            </ul>
+          `;
+        } else {
+          healthIssues.innerHTML = '';
+        }
+      }
+    }
+
     function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter }) {
       const totalJobs = jobs.length;
       const reviewedJobs = jobs.filter(job => isJobReviewed(job.jn, reviewStage)).length;
@@ -1657,6 +1787,7 @@
       cont.innerHTML = '';
       window.currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
       updateTopBarStats({ jobs: baseJobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter });
+      updateForecastHealth({ baseFiltered, period, getJobDisplayData });
 
       Object.keys(byDisc).sort().forEach(disc => {
         const sec = document.createElement('div');
@@ -1708,11 +1839,34 @@
             ? `Group of ${j.groupJobCount} job${j.groupJobCount === 1 ? '' : 's'} • Unit: ${j.unit}`
             : `Discipline: ${j.disc} • Unit: ${j.unit} • Status: ${statusLabel}`;
           
+          // Calculate health status for non-rollup jobs
+          const healthStatus = !isGroupRollup ? getJobHealthStatus(pd) : null;
+
+          // Get work order count
+          const workOrderCount = !isGroupRollup ? (j.wgs && Object.keys(j.wgs).length) || 0 : 0;
+
+          // Calculate period progress for progress bar
+          let periodsPlanned = 0;
+          let periodsActual = 0;
+          if (period === 'all') {
+            for (let i = 1; i <= 13; i++) {
+              const p = `P${i}`;
+              if (displayData.periods[p].f > 0) periodsPlanned++;
+              if (displayData.periods[p].a > 0) periodsActual++;
+            }
+          }
+
           const card = document.createElement('div');
           card.className = `job-card ${stat}`;
           card.onclick = () => showBreakdown(j);
-          
+
           card.innerHTML = `
+            ${!isGroupRollup && healthStatus ? `
+              <div class="job-status-badge status-${healthStatus.status}">
+                ${healthStatus.status === 'critical' ? '🔴' : healthStatus.status === 'warning' ? '🟡' : '🟢'} ${healthStatus.label}
+              </div>
+            ` : ''}
+
             <div class="job-card-header">
               <div class="job-pill-group">
                 ${isPriority ? '<span class="job-pill priority">Priority</span>' : ''}
@@ -1720,30 +1874,81 @@
                 ${!isGroupRollup ? `<span class="job-pill ${statusClass}">${statusLabel}</span>` : ''}
               </div>
             </div>
+
             <div class="job-card-body">
               <div class="job-details">
                 <div class="job-card-title">${escapeHtml(titleText)}</div>
                 <div class="job-card-subtitle">${escapeHtml(subtitleText)}</div>
-                <div class="job-alert ${stat}">
-                  <span>${alertTitle}</span>
-                  <span>${alertDetail}</span>
-                </div>
-              </div>
-              <div class="job-metrics">
-                <div class="metric-card">
-                  <div class="metric-label">Planned</div>
-                  <div class="metric-value">${pd.f.toFixed(1)}</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label">Actual</div>
-                  <div class="metric-value">${pd.a.toFixed(1)}</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label">Variance</div>
-                  <div class="metric-value ${vc}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)}</div>
-                </div>
+
+                ${!isGroupRollup && healthStatus ? `
+                  <div class="job-variance-overview">
+                    <div class="job-variance-row">
+                      <div class="job-variance-item">
+                        <div class="job-variance-label">Planned</div>
+                        <div class="job-variance-value">${pd.f.toFixed(1)}</div>
+                      </div>
+                      <div class="job-variance-item">
+                        <div class="job-variance-label">Actual</div>
+                        <div class="job-variance-value">${pd.a.toFixed(1)}</div>
+                      </div>
+                      <div class="job-variance-item">
+                        <div class="job-variance-label">Variance</div>
+                        <div class="job-variance-value ${vc === 'negative' ? 'variance-negative' : vc === 'positive' ? 'variance-positive' : ''}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)} (${healthStatus.percent.toFixed(0)}%)</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  ${period === 'all' ? `
+                    <div style="margin-top: 12px;">
+                      <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-bottom: 4px;">PERIOD COVERAGE</div>
+                      <div class="job-progress-bar">
+                        <div class="job-progress-actual" style="width: ${(periodsActual / 13 * 100).toFixed(0)}%"></div>
+                        <div class="job-progress-forecast" style="width: ${((periodsPlanned - periodsActual) / 13 * 100).toFixed(0)}%"></div>
+                      </div>
+                      <div class="job-progress-labels">
+                        <span>Actual: ${periodsActual} periods</span>
+                        <span>Planned: ${periodsPlanned} periods</span>
+                      </div>
+                    </div>
+                  ` : ''}
+                ` : `
+                  <div class="job-metrics">
+                    <div class="metric-card">
+                      <div class="metric-label">Planned</div>
+                      <div class="metric-value">${pd.f.toFixed(1)}</div>
+                    </div>
+                    <div class="metric-card">
+                      <div class="metric-label">Actual</div>
+                      <div class="metric-value">${pd.a.toFixed(1)}</div>
+                    </div>
+                    <div class="metric-card">
+                      <div class="metric-label">Variance</div>
+                      <div class="metric-value ${vc}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)}</div>
+                    </div>
+                  </div>
+                `}
+
+                ${!isGroupRollup && healthStatus && (healthStatus.status === 'critical' || healthStatus.status === 'warning') ? `
+                  <div class="job-alerts ${healthStatus.status === 'critical' ? 'alerts-critical' : ''}">
+                    <div class="alert-title">${alertTitle}</div>
+                    <div class="alert-detail">${alertDetail}</div>
+                  </div>
+                ` : isGroupRollup || isReviewed ? `
+                  <div class="job-alert ${stat}">
+                    <span>${alertTitle}</span>
+                    <span>${alertDetail}</span>
+                  </div>
+                ` : ''}
+
+                ${!isGroupRollup ? `
+                  <div class="job-info-row">
+                    <div class="job-rag-indicator rag-${healthStatus?.status === 'critical' ? 'red' : healthStatus?.status === 'warning' ? 'amber' : 'green'}"></div>
+                    <span class="job-info-text">${commentCount} comment${commentCount === 1 ? '' : 's'} • ${workOrderCount} work order${workOrderCount === 1 ? '' : 's'} • ${isReviewed ? 'Reviewed' : 'Needs review'}</span>
+                  </div>
+                ` : ''}
               </div>
             </div>
+
             <div class="job-actions">
               ${isGroupRollup
                 ? '<button type="button" class="group-action-button" data-action="manage-group">Manage Group</button>'

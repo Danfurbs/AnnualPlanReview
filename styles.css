@@ -10,6 +10,76 @@
     .top-bar-icon { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: white; background: linear-gradient(135deg, #60a5fa, #818cf8, #ec4899); box-shadow: 0 8px 18px rgba(59, 130, 246, 0.25); }
     .primary-button { background: #2563eb; }
     .primary-button:hover { background: #1d4ed8; }
+
+    /* Forecast Health Indicator */
+    .forecast-health { background: white; padding: 24px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .health-header h3 { font-size: 18px; color: #1e293b; margin-bottom: 16px; font-weight: 700; }
+    .health-content { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
+    .health-main { display: flex; flex-direction: column; gap: 12px; }
+    .health-label { font-size: 13px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .health-bar-container { display: flex; align-items: center; gap: 12px; }
+    .health-bar { flex: 1; height: 24px; background: #f1f5f9; border-radius: 999px; overflow: hidden; position: relative; }
+    .health-bar-fill { height: 100%; background: linear-gradient(90deg, #22c55e 0%, #22c55e 90%, #f59e0b 90%, #f59e0b 70%, #ef4444 70%); transition: width 0.5s ease; border-radius: 999px; }
+    .health-bar-fill.health-good { background: #22c55e; }
+    .health-bar-fill.health-acceptable { background: #f59e0b; }
+    .health-bar-fill.health-needs-attention { background: #ef4444; }
+    .health-percentage { font-size: 20px; font-weight: 700; color: #1e293b; min-width: 60px; text-align: right; }
+    .health-legend { display: flex; gap: 16px; font-size: 11px; color: #64748b; }
+    .health-legend-item { display: flex; align-items: center; gap: 6px; }
+    .health-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .health-dot.health-good { background: #22c55e; }
+    .health-dot.health-acceptable { background: #f59e0b; }
+    .health-dot.health-needs-attention { background: #ef4444; }
+    .health-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .health-stat { background: #f8fafc; padding: 16px; border-radius: 10px; text-align: center; border: 2px solid transparent; transition: all 0.2s; }
+    .health-stat:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .health-stat-good { border-color: #22c55e; }
+    .health-stat-warning { border-color: #f59e0b; }
+    .health-stat-critical { border-color: #ef4444; }
+    .health-stat-total { border-color: #3b82f6; }
+    .health-stat-value { font-size: 32px; font-weight: 700; color: #1e293b; line-height: 1; }
+    .health-stat-label { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 8px; }
+    .health-stat-percent { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+    .health-issues { margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+    .health-issues-title { font-size: 13px; color: #64748b; font-weight: 600; margin-bottom: 8px; }
+    .health-issues-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    .health-issues-list li { font-size: 13px; color: #475569; padding-left: 20px; position: relative; }
+    .health-issues-list li::before { content: '•'; position: absolute; left: 8px; color: #f59e0b; font-weight: 700; }
+
+    /* Enhanced Job Cards */
+    .job-card { position: relative; }
+    .job-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .job-status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+    .job-status-badge.status-critical { background: #fee2e2; color: #991b1b; }
+    .job-status-badge.status-warning { background: #fef3c7; color: #92400e; }
+    .job-status-badge.status-good { background: #dcfce7; color: #166534; }
+    .job-rag-indicator { width: 12px; height: 12px; border-radius: 50%; }
+    .job-rag-indicator.rag-red { background: #ef4444; }
+    .job-rag-indicator.rag-amber { background: #f59e0b; }
+    .job-rag-indicator.rag-green { background: #22c55e; }
+    .job-card-title { display: flex; align-items: center; gap: 8px; }
+    .job-card-meta { font-size: 12px; color: #64748b; margin-bottom: 12px; }
+    .job-variance-overview { background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+    .job-variance-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 8px; }
+    .job-variance-item { text-align: center; }
+    .job-variance-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin-bottom: 4px; }
+    .job-variance-value { font-size: 18px; font-weight: 700; color: #1e293b; }
+    .job-variance-value.variance-negative { color: #ef4444; }
+    .job-variance-value.variance-positive { color: #22c55e; }
+    .job-progress-bar { width: 100%; height: 12px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 8px; position: relative; }
+    .job-progress-actual { height: 100%; background: #3b82f6; float: left; }
+    .job-progress-forecast { height: 100%; background: #cbd5e0; float: left; }
+    .job-progress-labels { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 4px; }
+    .job-alerts { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px; border-radius: 4px; margin-bottom: 12px; }
+    .job-alerts.alerts-critical { background: #fee2e2; border-left-color: #ef4444; }
+    .job-alerts-item { font-size: 12px; color: #78350f; display: flex; align-items: flex-start; gap: 6px; margin-bottom: 4px; }
+    .job-alerts-item:last-child { margin-bottom: 0; }
+    .job-alerts-critical .job-alerts-item { color: #991b1b; }
+    .job-info-row { display: flex; gap: 16px; font-size: 12px; color: #64748b; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+    .job-info-item { display: flex; align-items: center; gap: 4px; }
+    .job-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .job-actions button { font-size: 12px; padding: 6px 12px; }
+
     .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
     .control-group { display: flex; flex-direction: column; gap: 6px; }
     .control-group label { font-size: 12px; color: #4a5568; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
