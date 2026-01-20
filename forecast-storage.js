@@ -83,6 +83,67 @@ function loadForecastFromStorage(year, planVersion) {
 }
 
 /**
+ * Get v1 overrides storage key (tracks which jobs have been explicitly edited in v1)
+ */
+function getV1OverridesKey(year) {
+  return `${FORECAST_STORAGE_KEY}:${year}:v1-overrides`;
+}
+
+/**
+ * Load v1 overrides (job numbers that have been explicitly edited in v1)
+ */
+function loadV1Overrides(year) {
+  try {
+    const raw = localStorage.getItem(getV1OverridesKey(year));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    console.warn('Failed to load v1 overrides:', err);
+    return new Set();
+  }
+}
+
+/**
+ * Save v1 overrides
+ */
+function saveV1Overrides(year, overridesSet) {
+  try {
+    const arr = Array.from(overridesSet);
+    localStorage.setItem(getV1OverridesKey(year), JSON.stringify(arr));
+  } catch (err) {
+    console.warn('Failed to save v1 overrides:', err);
+  }
+}
+
+/**
+ * Add job numbers to v1 overrides (marks them as explicitly edited in v1)
+ */
+function addToV1Overrides(year, jobNumbers) {
+  const overrides = loadV1Overrides(year);
+  jobNumbers.forEach(jn => overrides.add(jn));
+  saveV1Overrides(year, overrides);
+}
+
+/**
+ * Remove job numbers from v1 overrides (allows them to inherit from v0 again)
+ */
+function removeFromV1Overrides(year, jobNumbers) {
+  const overrides = loadV1Overrides(year);
+  jobNumbers.forEach(jn => overrides.delete(jn));
+  saveV1Overrides(year, overrides);
+}
+
+/**
+ * Check if v0 changes would overwrite v1 edits
+ * Returns array of job numbers that have v1 overrides
+ */
+function checkV0ConflictsWithV1(year, jobNumbers) {
+  const overrides = loadV1Overrides(year);
+  return jobNumbers.filter(jn => overrides.has(jn));
+}
+
+/**
  * Save forecast to localStorage
  */
 function saveForecastToStorage(forecastData, rowCount, year, planVersion) {
@@ -350,4 +411,9 @@ window.getForecastPeriodsForJob = getForecastPeriodsForJob;
 window.getForecastWorkGroupData = getForecastWorkGroupData;
 window.updateForecastWorkGroup = updateForecastWorkGroup;
 window.cleanForecastData = cleanForecastData;
+window.loadV1Overrides = loadV1Overrides;
+window.saveV1Overrides = saveV1Overrides;
+window.addToV1Overrides = addToV1Overrides;
+window.removeFromV1Overrides = removeFromV1Overrides;
+window.checkV0ConflictsWithV1 = checkV0ConflictsWithV1;
 

@@ -174,13 +174,42 @@ function workGroupHasForecastData(workGroupName) {
 
 /**
  * Load forecast editor rows from current forecast data
+ * For v1: Inherits v0 values for jobs not explicitly edited in v1
  */
 function loadForecastEditorRows() {
   const workGroup = window.forecastEditorState.workGroup;
+  const year = window.forecastEditorState.year;
+  const planVersion = window.forecastEditorState.planVersion;
   const rows = [];
 
-  if (window.fData && workGroup) {
-    window.fData.forEach((job, jobNumber) => {
+  // If editing v1, merge with v0 for non-overridden jobs
+  let dataToUse = window.fData;
+  if (planVersion === 'v1') {
+    const v0Snapshot = getForecastSnapshot(year, 'v0');
+    const v1Overrides = loadV1Overrides(year);
+
+    if (v0Snapshot && v0Snapshot.data) {
+      // Create merged data: v1 overrides take precedence, otherwise use v0
+      dataToUse = new Map();
+
+      // First, add all v0 jobs
+      v0Snapshot.data.forEach((job, jobNumber) => {
+        if (!v1Overrides.has(jobNumber)) {
+          dataToUse.set(jobNumber, job);
+        }
+      });
+
+      // Then add/override with v1 jobs
+      if (window.fData) {
+        window.fData.forEach((job, jobNumber) => {
+          dataToUse.set(jobNumber, job);
+        });
+      }
+    }
+  }
+
+  if (dataToUse && workGroup) {
+    dataToUse.forEach((job, jobNumber) => {
       const wgData = job?.wgs?.[workGroup];
       if (!wgData) return;
 
@@ -509,6 +538,49 @@ function handleForecastEditorSubmit(event) {
     return hasVolume;
   });
 
+  const year = window.forecastEditorState.year;
+  const planVersion = window.forecastEditorState.planVersion;
+  const jobNumbers = rowsToSave.map(row => row.jobNumber);
+
+  // If saving v0, check for conflicts with v1 edits
+  if (planVersion === 'v0' && jobNumbers.length > 0) {
+    const conflicts = checkV0ConflictsWithV1(year, jobNumbers);
+    if (conflicts.length > 0) {
+      const jobList = conflicts.join(', ');
+      const confirmed = confirm(
+        `Warning: The following jobs have been edited in Plan v1:\n\n${jobList}\n\n` +
+        `Saving changes to v0 will overwrite your v1 changes for these jobs.\n\n` +
+        `Do you want to continue and sync v1 with these v0 changes?`
+      );
+
+      if (!confirmed) {
+        return; // User cancelled, don't save
+      }
+
+      // User confirmed - remove these jobs from v1 overrides so they inherit from v0 again
+      removeFromV1Overrides(year, conflicts);
+
+      // Also update v1 storage to match v0 for these jobs
+      const v1Snapshot = getForecastSnapshot(year, 'v1');
+      if (v1Snapshot && v1Snapshot.data) {
+        const v1Data = v1Snapshot.data;
+
+        // Update v1 with the v0 changes
+        rowsToSave.forEach(row => {
+          if (conflicts.includes(row.jobNumber)) {
+            // Update v1 job data to match what will be in v0
+            const jobData = window.fData.get(row.jobNumber);
+            if (jobData) {
+              v1Data.set(row.jobNumber, jobData);
+            }
+          }
+        });
+
+        saveForecastToStorage(v1Data, v1Data.size, year, 'v1');
+      }
+    }
+  }
+
   // Update forecast data (empty rowsToSave will clear the work group)
   window.fData = updateForecastWorkGroup(window.fData, rowsToSave, window.forecastEditorState.workGroup);
 
@@ -516,9 +588,14 @@ function handleForecastEditorSubmit(event) {
   window.fData = cleanForecastData(window.fData);
 
   // Save to localStorage
-  const saved = saveForecastToStorage(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
+  const saved = saveForecastToStorage(window.fData, window.fData.size, year, planVersion);
 
   if (saved) {
+    // If saving v1, mark these jobs as explicitly edited (overrides)
+    if (planVersion === 'v1' && jobNumbers.length > 0) {
+      addToV1Overrides(year, jobNumbers);
+    }
+
     const statusEl = document.getElementById('forecastEditorStatus');
     if (statusEl) {
       const message = rowsToSave.length
@@ -526,7 +603,7 @@ function handleForecastEditorSubmit(event) {
         : `✓ Saved blank forecast for ${window.forecastEditorState.workGroup} at ${new Date().toLocaleTimeString()}`;
       statusEl.textContent = message;
     }
-    console.log(`✓ Forecast saved: ${window.forecastEditorState.year} ${window.forecastEditorState.planVersion} (${rowsToSave.length} jobs)`);
+    console.log(`✓ Forecast saved: ${year} ${planVersion} (${rowsToSave.length} jobs)`);
   } else {
     alert('Failed to save forecast. Check console for details.');
   }
