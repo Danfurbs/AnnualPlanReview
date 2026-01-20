@@ -1165,6 +1165,8 @@ function handleMergeForecastImport(fileContent) {
       conflicts: []
     };
 
+    console.log('🔍 Starting conflict detection...');
+
     // Detect conflicts by comparing uploaded data with current storage
     Object.entries(forecasts).forEach(([year, yearData]) => {
       if (!yearData || typeof yearData !== 'object') return;
@@ -1184,11 +1186,18 @@ function handleMergeForecastImport(fileContent) {
           dataToImport = planData.data;
         }
 
-        if (!dataToImport) return;
+        if (!dataToImport) {
+          console.log(`⚠️ No data to import for ${year} ${planVersion}`);
+          return;
+        }
 
         // Get current storage for this year/plan
         const currentSnapshot = getForecastSnapshot(year, planVersion);
         const currentData = currentSnapshot ? serializeForecastData(currentSnapshot.data) : {};
+
+        console.log(`📊 Comparing ${year} ${planVersion}:`);
+        console.log(`  - Current jobs: ${Object.keys(currentData).length}`);
+        console.log(`  - Upload jobs: ${Object.keys(dataToImport).length}`);
 
         // Compare each job/workgroup/period
         Object.entries(dataToImport).forEach(([jobNumber, uploadedJob]) => {
@@ -1201,12 +1210,18 @@ function handleMergeForecastImport(fileContent) {
 
             const currentWgData = currentJob?.wgs?.[workGroup];
 
+            if (!currentWgData) {
+              console.log(`  ℹ️ Job ${jobNumber} ${workGroup}: No current data (will add)`);
+              return;
+            }
+
             window.FORECAST_PERIODS.forEach(period => {
               const uploadedValue = Number(uploadedWgData[period] || 0);
               const currentValue = Number(currentWgData?.[period] || 0);
 
               // Conflict exists if both are non-zero and different
               if (uploadedValue !== 0 && currentValue !== 0 && uploadedValue !== currentValue) {
+                console.log(`  ⚠️ CONFLICT: Job ${jobNumber} ${workGroup} ${period}: current=${currentValue}, upload=${uploadedValue}`);
                 conflicts.push({
                   year,
                   planVersion,
@@ -1225,6 +1240,8 @@ function handleMergeForecastImport(fileContent) {
     });
 
     window.importConflictData.conflicts = conflicts;
+
+    console.log(`✅ Conflict detection complete: ${conflicts.length} conflict(s) found`);
 
     if (conflicts.length === 0) {
       // No conflicts - proceed with merge
