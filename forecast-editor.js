@@ -454,6 +454,9 @@ function filterForecastEditorTable() {
  * Add a new row to the forecast editor
  */
 function addForecastEditorRow() {
+  // Sync current state first to preserve any unsaved changes
+  syncForecastEditorTableState();
+
   window.forecastEditorState.rows.push(createForecastEditorRow());
   renderForecastEditorTable();
   updateForecastEditorSummary();
