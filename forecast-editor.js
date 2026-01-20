@@ -16,7 +16,8 @@ function createForecastEditorRow() {
     jobNumber: '',
     desc: '',
     unit: '',
-    volumes
+    volumes,
+    comment: ''
   };
 }
 
@@ -219,11 +220,14 @@ function loadForecastEditorRows() {
         volumes[period] = Number(wgData[period] || 0);
       });
 
+      const comment = job?.comments?.[workGroup] || '';
+
       rows.push({
         jobNumber,
         desc: meta?.desc || '',
         unit: meta?.unit || '',
-        volumes
+        volumes,
+        comment
       });
     });
   }
@@ -269,6 +273,7 @@ function renderForecastEditorTable() {
         <th>Unit</th>
         ${window.FORECAST_PERIODS.map(period => `<th>${period}</th>`).join('')}
         <th>Total</th>
+        <th>Comment</th>
         <th></th>
       </tr>
     </thead>
@@ -306,16 +311,23 @@ function renderForecastEditorTable() {
                   <input
                     type="number"
                     step="0.01"
-                    min="0"
                     class="forecast-period-input${isChanged ? ' is-changed' : ''}"
                     data-row="${index}"
                     data-period="${period}"
-                    value="${value ? value : ''}"
+                    value="${value !== undefined && value !== null ? value : ''}"
                   >
                 </td>
               `;
             }).join('')}
             <td class="forecast-total-cell" data-role="row-total" data-row="${index}">${formatForecastNumber(rowTotal)}</td>
+            <td class="forecast-comment-cell">
+              <textarea
+                class="forecast-comment-input"
+                data-row="${index}"
+                placeholder="Why this forecast..."
+                rows="1"
+              >${escapeHtml(row.comment || '')}</textarea>
+            </td>
             <td class="forecast-action-cell">
               <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}">Delete</button>
             </td>
@@ -335,6 +347,7 @@ function renderForecastEditorTable() {
           `<td class="forecast-total-cell" data-role="period-total" data-period="${period}">${formatForecastNumber(totals.periodTotals[period])}</td>`
         )).join('')}
         <td class="forecast-total-cell" data-role="grand-total">${formatForecastNumber(totals.grandTotal)}</td>
+        <td></td>
         <td></td>
       </tr>
     </tfoot>
@@ -531,11 +544,16 @@ function handleForecastEditorSubmit(event) {
   // Sync DOM state to editor state
   syncForecastEditorTableState();
 
-  // Filter out empty rows
+  // Filter out empty rows (keep rows with job number that have volumes or comments)
   const rowsToSave = window.forecastEditorState.rows.filter(row => {
     if (!row.jobNumber) return false;
-    const hasVolume = window.FORECAST_PERIODS.some(period => Number(row.volumes?.[period] || 0) !== 0);
-    return hasVolume;
+    // Keep row if it has non-zero volumes OR has a comment
+    const hasVolume = window.FORECAST_PERIODS.some(period => {
+      const val = row.volumes?.[period];
+      return val !== undefined && val !== null && val !== '';
+    });
+    const hasComment = row.comment && row.comment.trim().length > 0;
+    return hasVolume || hasComment;
   });
 
   const year = window.forecastEditorState.year;
@@ -626,11 +644,15 @@ function syncForecastEditorTableState() {
       volumes[period] = Number.isFinite(value) ? value : 0;
     });
 
+    const commentInput = rowEl.querySelector('.forecast-comment-input');
+    const comment = String(commentInput?.value || '').trim();
+
     rows[index] = {
       jobNumber,
       desc: meta?.desc || '',
       unit: meta?.unit || '',
-      volumes
+      volumes,
+      comment
     };
   });
 
@@ -664,9 +686,17 @@ function handleForecastEditorTableInput(event) {
       window.forecastEditorState.rows[rowIndex].volumes[period] = Number(existingVolumes[period] || 0);
     });
 
+    // Load existing comment for this job
+    const existingComment = getForecastComment(window.fData, jobNumber, window.forecastEditorState.workGroup);
+    window.forecastEditorState.rows[rowIndex].comment = existingComment;
+
     // Update DOM
     const descCell = rowEl.querySelector('[data-role="desc"]');
     const unitCell = rowEl.querySelector('[data-role="unit"]');
+    const commentInput = rowEl.querySelector('.forecast-comment-input');
+    if (commentInput) {
+      commentInput.value = existingComment;
+    }
     if (descCell) {
       descCell.textContent = window.forecastEditorState.rows[rowIndex].desc || 'Auto-fill';
       descCell.classList.toggle('forecast-cell-muted', !window.forecastEditorState.rows[rowIndex].desc);
@@ -679,8 +709,8 @@ function handleForecastEditorTableInput(event) {
     // Update period inputs
     rowEl.querySelectorAll('input[data-period]').forEach(input => {
       const period = input.dataset.period;
-      const value = Number(window.forecastEditorState.rows[rowIndex].volumes[period] || 0);
-      input.value = value ? value : '';
+      const value = window.forecastEditorState.rows[rowIndex].volumes[period];
+      input.value = (value !== undefined && value !== null) ? value : '';
       updateCellHighlight(rowIndex, period, input);
     });
 

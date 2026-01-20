@@ -336,6 +336,15 @@ function getForecastWorkGroupData(forecastData, jobNumber, workGroup) {
 }
 
 /**
+ * Get forecast comment for a specific job and work group
+ */
+function getForecastComment(forecastData, jobNumber, workGroup) {
+  if (!forecastData || !jobNumber || !workGroup) return '';
+  const job = forecastData.get(jobNumber);
+  return job?.comments?.[workGroup] || '';
+}
+
+/**
  * Update forecast data for a work group
  * This merges work group data and recalculates period totals
  */
@@ -349,18 +358,27 @@ function updateForecastWorkGroup(forecastData, rows, workGroup) {
 
     // Get or create job entry
     if (!forecastData.has(jobNumber)) {
-      forecastData.set(jobNumber, { periods: {}, wgs: {} });
+      forecastData.set(jobNumber, { periods: {}, wgs: {}, comments: {} });
     }
     const job = forecastData.get(jobNumber);
+
+    // Ensure comments object exists
+    if (!job.comments) job.comments = {};
 
     // Update work group data
     job.wgs[workGroup] = {};
     window.FORECAST_PERIODS.forEach(period => {
       const value = Number(row.volumes?.[period] || 0);
-      if (value) {
-        job.wgs[workGroup][period] = value;
-      }
+      // Save all values including 0
+      job.wgs[workGroup][period] = value;
     });
+
+    // Save comment for this work group
+    if (row.comment) {
+      job.comments[workGroup] = row.comment;
+    } else {
+      delete job.comments[workGroup];
+    }
 
     // Recalculate period totals from all work groups
     const totals = {};
@@ -383,10 +401,15 @@ function cleanForecastData(forecastData) {
 
   const toDelete = [];
   forecastData.forEach((job, jobNumber) => {
-    const hasData = Object.values(job.wgs || {}).some(wgData => {
-      return window.FORECAST_PERIODS.some(period => Number(wgData?.[period] || 0) !== 0);
+    const hasVolumes = Object.values(job.wgs || {}).some(wgData => {
+      return window.FORECAST_PERIODS.some(period => {
+        const val = wgData?.[period];
+        return val !== undefined && val !== null && val !== '';
+      });
     });
-    if (!hasData) {
+    const hasComments = job.comments && Object.keys(job.comments).length > 0;
+
+    if (!hasVolumes && !hasComments) {
       toDelete.push(jobNumber);
     }
   });
@@ -409,6 +432,7 @@ window.exportForecastFile = exportForecastFile;
 window.importForecastFile = importForecastFile;
 window.getForecastPeriodsForJob = getForecastPeriodsForJob;
 window.getForecastWorkGroupData = getForecastWorkGroupData;
+window.getForecastComment = getForecastComment;
 window.updateForecastWorkGroup = updateForecastWorkGroup;
 window.cleanForecastData = cleanForecastData;
 window.loadV1Overrides = loadV1Overrides;
