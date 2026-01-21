@@ -1351,6 +1351,81 @@
       XLSX.writeFile(wb, `apr-comments-${currentFinancialYear}.xlsx`);
     }
 
+    function exportWorkGroupJobSummary() {
+      // Get all work groups
+      const workGroups = [];
+      if (window.workGroupSets) {
+        window.workGroupSets.forEach((desc, code) => {
+          workGroups.push({ code, description: desc });
+        });
+      }
+
+      // Sort work groups by code
+      workGroups.sort((a, b) => a.code.localeCompare(b.code));
+
+      const rows = [];
+      const fiscalYears = ['FY27', 'FY28', 'FY29', 'FY30'];
+
+      // For each work group, count jobs in V0 and V1 for each FY
+      workGroups.forEach(wg => {
+        const row = {
+          'Work Group Code': wg.code,
+          'Work Group Description': wg.description
+        };
+
+        fiscalYears.forEach(fy => {
+          // Load V0 data
+          const v0Data = loadForecastFromStorage(fy, 'v0');
+          let v0JobCount = 0;
+          if (v0Data && v0Data.data) {
+            v0Data.data.forEach((job) => {
+              if (job.wgs && job.wgs[wg.description]) {
+                // Check if any period has data for this work group
+                const wgData = job.wgs[wg.description];
+                const hasData = Object.values(wgData).some(val => val && val !== 0);
+                if (hasData) v0JobCount++;
+              }
+            });
+          }
+
+          // Load V1 data
+          const v1Data = loadForecastFromStorage(fy, 'v1');
+          let v1JobCount = 0;
+          if (v1Data && v1Data.data) {
+            v1Data.data.forEach((job) => {
+              if (job.wgs && job.wgs[wg.description]) {
+                // Check if any period has data for this work group
+                const wgData = job.wgs[wg.description];
+                const hasData = Object.values(wgData).some(val => val && val !== 0);
+                if (hasData) v1JobCount++;
+              }
+            });
+          }
+
+          row[`${fy} V0`] = v0JobCount;
+          row[`${fy} V1`] = v1JobCount;
+        });
+
+        rows.push(row);
+      });
+
+      if (!rows.length) {
+        alert('No work group data to export.');
+        return;
+      }
+
+      // Create Excel workbook
+      const ws = XLSX.utils.json_to_sheet(rows, {
+        header: ['Work Group Code', 'Work Group Description',
+                 'FY27 V0', 'FY27 V1', 'FY28 V0', 'FY28 V1',
+                 'FY29 V0', 'FY29 V1', 'FY30 V0', 'FY30 V1']
+      });
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Work Group Job Summary');
+      XLSX.writeFile(wb, 'apr-workgroup-job-summary.xlsx');
+    }
+
     function computeQuantile(sorted, q) {
       if (!sorted.length) return 0;
       const pos = (sorted.length - 1) * q;
