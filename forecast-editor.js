@@ -934,8 +934,8 @@ function updateForecastEditorTotalsDisplay() {
 function handleForecastEditorTablePaste(event) {
   const target = event.target;
 
-  // Allow paste on job number inputs and period inputs
-  if (!target || (!target.matches('input[data-period]') && !target.matches('.forecast-job-input'))) {
+  // Allow paste on job number inputs, period inputs, and comment inputs
+  if (!target || (!target.matches('input[data-period]') && !target.matches('.forecast-job-input') && !target.matches('.forecast-comment-input'))) {
     return;
   }
 
@@ -946,6 +946,13 @@ function handleForecastEditorTablePaste(event) {
   if (!rows.length) return;
 
   const parsed = rows.map(row => row.split('\t'));
+
+  // Special handling for comment column - allow single value paste to preserve default textarea behavior
+  if (target.matches('.forecast-comment-input') && parsed.length === 1 && parsed[0].length === 1) {
+    // Single value paste in comment - allow default behavior
+    return;
+  }
+
   if (parsed.length === 1 && parsed[0].length === 1) {
     // Single value paste - allow default behavior
     return;
@@ -958,6 +965,7 @@ function handleForecastEditorTablePaste(event) {
 
   // Determine starting column
   let startColIndex = 0;
+  let isCommentPaste = false;
   if (target.matches('input[data-period]')) {
     // Pasting into a period column
     startColIndex = window.FORECAST_PERIODS.indexOf(target.dataset.period);
@@ -966,6 +974,9 @@ function handleForecastEditorTablePaste(event) {
   } else if (target.matches('.forecast-job-input')) {
     // Pasting into job number column
     startColIndex = 0;
+  } else if (target.matches('.forecast-comment-input')) {
+    // Pasting into comment column - handle specially
+    isCommentPaste = true;
   }
 
   // Ensure enough rows exist
@@ -974,34 +985,45 @@ function handleForecastEditorTablePaste(event) {
     window.forecastEditorState.rows.push(createForecastEditorRow());
   }
 
-  // Paste data
-  parsed.forEach((rowData, rowOffset) => {
-    const rowIndex = startRowIndex + rowOffset;
-    const row = window.forecastEditorState.rows[rowIndex];
-
-    rowData.forEach((cellValue, colOffset) => {
-      const colIndex = startColIndex + colOffset;
-
-      if (colIndex === 0) {
-        // Column 0: Job number
-        const jobNumber = String(cellValue || '').trim().replace(/\D/g, '').padStart(6, '0');
-        if (jobNumber && jobNumber !== '000000') {
-          row.jobNumber = jobNumber;
-          const meta = getJobMetadata(jobNumber);
-          row.desc = meta?.desc || '';
-          row.unit = meta?.unit || '';
-        }
-      } else {
-        // Columns 1+: Period values (P1, P2, P3, etc.)
-        const periodIndex = colIndex - 1;
-        if (periodIndex < window.FORECAST_PERIODS.length) {
-          const period = window.FORECAST_PERIODS[periodIndex];
-          const value = parseFloat(cellValue);
-          row.volumes[period] = Number.isFinite(value) ? value : 0;
-        }
+  // Handle comment paste specially - each line is a comment
+  if (isCommentPaste) {
+    rows.forEach((commentLine, rowOffset) => {
+      const rowIndex = startRowIndex + rowOffset;
+      const row = window.forecastEditorState.rows[rowIndex];
+      if (row) {
+        row.comment = commentLine.trim();
       }
     });
-  });
+  } else {
+    // Paste data for job numbers and periods
+    parsed.forEach((rowData, rowOffset) => {
+      const rowIndex = startRowIndex + rowOffset;
+      const row = window.forecastEditorState.rows[rowIndex];
+
+      rowData.forEach((cellValue, colOffset) => {
+        const colIndex = startColIndex + colOffset;
+
+        if (colIndex === 0) {
+          // Column 0: Job number
+          const jobNumber = String(cellValue || '').trim().replace(/\D/g, '').padStart(6, '0');
+          if (jobNumber && jobNumber !== '000000') {
+            row.jobNumber = jobNumber;
+            const meta = getJobMetadata(jobNumber);
+            row.desc = meta?.desc || '';
+            row.unit = meta?.unit || '';
+          }
+        } else {
+          // Columns 1+: Period values (P1, P2, P3, etc.)
+          const periodIndex = colIndex - 1;
+          if (periodIndex < window.FORECAST_PERIODS.length) {
+            const period = window.FORECAST_PERIODS[periodIndex];
+            const value = parseFloat(cellValue);
+            row.volumes[period] = Number.isFinite(value) ? value : 0;
+          }
+        }
+      });
+    });
+  }
 
   // Re-render table
   renderForecastEditorTable();
