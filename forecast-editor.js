@@ -50,6 +50,28 @@ function openForecastEditor() {
  * Close the forecast editor page
  */
 function closeForecastEditor() {
+  // CRITICAL: Sync any unsaved changes before closing
+  syncForecastEditorTableState();
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = window.forecastEditorState.rows.some(row => {
+    if (!row.jobNumber) return false;
+    const hasVolume = Object.values(row.volumes).some(v => v !== 0);
+    const hasComment = row.comment && row.comment.trim().length > 0;
+    return hasVolume || hasComment;
+  });
+
+  if (hasUnsavedChanges) {
+    const shouldSave = confirm(
+      'You have unsaved changes in the forecast editor.\n\n' +
+      'Click OK to save before closing, or Cancel to discard changes.'
+    );
+
+    if (shouldSave) {
+      handleForecastEditorSubmit();
+    }
+  }
+
   const dashboardPage = document.getElementById('dashboardPage');
   const forecastPage = document.getElementById('forecastPage');
 
@@ -487,6 +509,24 @@ function addForecastEditorRow() {
  * Initialize v1 from v0 (explicit copy)
  */
 function initializeV1FromV0Explicit() {
+  // CRITICAL: Warn user about unsaved changes
+  const hasUnsavedChanges = window.forecastEditorState.rows.some(row => {
+    return row.jobNumber || row.comment || Object.values(row.volumes).some(v => v !== 0);
+  });
+
+  if (hasUnsavedChanges) {
+    const saveFirst = confirm(
+      'WARNING: You have unsaved changes in the current table.\n\n' +
+      'Initializing v1 from v0 will REPLACE all current data.\n\n' +
+      'Click OK to save your changes first, or Cancel to discard them and continue.'
+    );
+
+    if (saveFirst) {
+      // Save current changes before initializing
+      handleForecastEditorSubmit();
+    }
+  }
+
   const year = window.forecastEditorState.year;
   const planVersion = window.forecastEditorState.planVersion;
 
@@ -582,6 +622,9 @@ function clearForecastEditorTable() {
  * Handle context change (year, plan, work group)
  */
 function handleForecastEditorContextChange() {
+  // CRITICAL: Sync current state before switching contexts to prevent data loss
+  syncForecastEditorTableState();
+
   const yearSelect = document.getElementById('forecastEditorYear');
   const planSelect = document.getElementById('forecastEditorPlan');
   const workGroupSelect = document.getElementById('forecastEditorWorkGroup');
@@ -1857,7 +1900,22 @@ document.addEventListener('DOMContentLoaded', () => {
     forecastTable.addEventListener('input', handleForecastEditorTableInput);
     forecastTable.addEventListener('paste', handleForecastEditorTablePaste);
     forecastTable.addEventListener('click', handleForecastEditorDeleteRow);
+
+    // CRITICAL: Auto-sync on blur to prevent data loss when user clicks away
+    forecastTable.addEventListener('blur', (e) => {
+      if (e.target.matches('input, textarea')) {
+        syncForecastEditorTableState();
+      }
+    }, true); // Use capture phase to catch all blur events
   }
+
+  // CRITICAL: Periodic auto-sync every 10 seconds to protect typed values
+  setInterval(() => {
+    const forecastPage = document.getElementById('forecastPage');
+    if (forecastPage && !forecastPage.classList.contains('is-hidden')) {
+      syncForecastEditorTableState();
+    }
+  }, 10000);
 
   // Copy actuals modal listeners
   const copyActualsPeriod = document.getElementById('copyActualsPeriod');
