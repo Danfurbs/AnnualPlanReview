@@ -111,28 +111,17 @@
         <span class="helper-text" id="reviewStageHelper"></span>
       </div>
       <div class="control-group">
-        <label>Forecast status</label>
-        <span class="helper-text" id="forecastStatusMessage"></span>
-      </div>
-      <div class="control-group">
         <label for="dashboardPlanVersion">Plan version</label>
         <select id="dashboardPlanVersion" onchange="handleDashboardPlanVersionChange()">
           <option value="v0">Plan v0 (Baseline)</option>
           <option value="v1">Plan v1 (Updated)</option>
         </select>
-        <span class="helper-text">v1 mirrors v0 unless edited in Forecast Builder</span>
+        <span class="helper-text">Use 'Initialize v1 from v0' in Forecast Builder to populate v1</span>
       </div>
       <div class="control-group">
-        <label for="viewMode">View mode</label>
-        <select id="viewMode" onchange="render()">
-          <option value="actual">Show Work Done Only</option>
-          <option value="forecast">Show Work Done &amp; Forecast</option>
-        </select>
-      </div>
-      <div class="control-group" id="forecastCutoffGroup">
-        <label for="forecastCutoff">Work done cutoff</label>
+        <label for="forecastCutoff">Forecast starts after</label>
         <select id="forecastCutoff" onchange="render()">
-          <option value="auto">Auto (latest work done period)</option>
+          <option value="auto">Auto (latest work done)</option>
           <option value="P1">Period 1</option>
           <option value="P2">Period 2</option>
           <option value="P3">Period 3</option>
@@ -147,6 +136,7 @@
           <option value="P12">Period 12</option>
           <option value="P13">Period 13</option>
         </select>
+        <span class="helper-text">Periods after this use forecast values</span>
       </div>
       <div class="control-group">
         <label for="wgFilter">Work group set</label>

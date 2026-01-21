@@ -190,21 +190,6 @@
       if (dashboardPlanVersionSelect && dashboardPlanVersionSelect.value !== currentPlanVersion) {
         dashboardPlanVersionSelect.value = currentPlanVersion;
       }
-      const statusMessage = document.getElementById('forecastStatusMessage');
-      if (statusMessage) {
-        if (!currentFinancialYear || !currentReviewStage) {
-          statusMessage.textContent = 'Select a financial year and RF stage to load forecasts.';
-        } else {
-          const availability = getForecastAvailability(currentFinancialYear);
-          if (!availability.v0 && !availability.v1) {
-            statusMessage.textContent = `No forecast updated for ${currentFinancialYear} yet.`;
-          } else {
-            const label = PLAN_VERSIONS.find(plan => plan.id === currentPlanVersion)?.label || 'Plan';
-            const suffix = availability.v1 && availability.v0 ? ' (v0 & v1 available)' : '';
-            statusMessage.textContent = `Using ${label} forecast${suffix} (FY-wide across RF stages).`;
-          }
-        }
-      }
       const forecastPage = document.getElementById('forecastPage');
       if (forecastPage && !forecastPage.classList.contains('is-hidden')) {
         renderForecastEditorSelectors();
@@ -1655,11 +1640,10 @@
       if (dashboardPlanVersionSelect && dashboardPlanVersionSelect.value !== currentPlanVersion) {
         dashboardPlanVersionSelect.value = currentPlanVersion;
       }
-      const viewMode = document.getElementById('viewMode')?.value || 'actual';
+      // Always show work done and forecast (no view mode toggle)
       const cutoffValue = document.getElementById('forecastCutoff')?.value || 'auto';
       const varianceFilter = document.getElementById('varianceFilter')?.value || 'all';
       const maxWorkDonePeriod = (() => {
-        if (viewMode !== 'forecast') return 0;
         if (cutoffValue === 'auto') return getMaxWorkDonePeriod();
         const numeric = parseInt(String(cutoffValue).replace(/[^0-9]/g, ''), 10);
         return Number.isNaN(numeric) ? 0 : numeric;
@@ -1714,7 +1698,8 @@
           const p = `P${i}`;
           const fv = f?.periods[p]||0;
           const avRaw = a?.periods[p]||0;
-          const useForecast = viewMode === 'forecast' && i > maxWorkDonePeriod;
+          // Always use forecast mode: periods after cutoff use forecast, before use actual
+          const useForecast = i > maxWorkDonePeriod;
           const av = useForecast ? fv : avRaw;
           job.periods[p] = {f:fv, a:av, v:av-fv};
           job.tot.f += fv;
@@ -1732,7 +1717,8 @@
             const p = `P${i}`;
             const fv = f?.wgs?.[wg]?.[p] || 0;
             const avRaw = a?.wgs?.[wg]?.[p] || 0;
-            const useForecast = viewMode === 'forecast' && i > maxWorkDonePeriod;
+            // Always use forecast mode: periods after cutoff use forecast, before use actual
+            const useForecast = i > maxWorkDonePeriod;
             const av = useForecast ? fv : avRaw;
             job.wgs[wg].periods[p] = {f: fv, a: av, v: av - fv};
           }
@@ -1994,23 +1980,13 @@
         sec.appendChild(grid);
         cont.appendChild(sec);
       });
-      updateForecastCutoffVisibility(viewMode);
-      updateModalModeNotes(viewMode, maxWorkDonePeriod, cutoffValue);
+      updateModalModeNotes(maxWorkDonePeriod, cutoffValue);
     }
 
-    function updateForecastCutoffVisibility(viewMode) {
-      const cutoffGroup = document.getElementById('forecastCutoffGroup');
-      if (!cutoffGroup) return;
-      cutoffGroup.style.display = viewMode === 'forecast' ? 'flex' : 'none';
-    }
-
-    function updateModalModeNotes(viewMode, maxWorkDonePeriod, cutoffValue) {
-      const isForecast = viewMode === 'forecast';
+    function updateModalModeNotes(maxWorkDonePeriod, cutoffValue) {
       const cutoffLabel = cutoffValue === 'auto' ? 'Auto' : 'Selected';
       const periodLabel = maxWorkDonePeriod > 0 ? `Period ${maxWorkDonePeriod}` : 'Period N/A';
-      const message = isForecast
-        ? `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining. Forecasts are managed in the Forecast Builder.`
-        : 'Units derived from Work Done only.';
+      const message = `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining. Forecasts are managed in the Forecast Builder.`;
       const uploadNote = document.getElementById('uploadModeNote');
       const breakdownNote = document.getElementById('breakdownModeNote');
       if (uploadNote) uploadNote.textContent = message;
