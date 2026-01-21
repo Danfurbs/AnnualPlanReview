@@ -1152,7 +1152,7 @@ function downloadExcelUploadFormat() {
   const financialYear = year.startsWith('FY') ? '20' + year.substring(2) : year;
 
   // Build CSV content
-  const headers = ['Strategic Route', 'WGST', 'Financial Year', 'Standard Job', 'Account Code',
+  const headers = ['Strategic Route', 'WGST', 'Financial Year', 'Standard Job', 'SJN and Desc', 'Account Code',
                    'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13', 'Comment'];
 
   const rows = [];
@@ -1169,11 +1169,17 @@ function downloadExcelUploadFormat() {
 
     if (!hasData) return;
 
+    // Get job description from stdJobs
+    const jobInfo = window.stdJobs?.get(jobNumber);
+    const jobDesc = jobInfo?.desc || '';
+    const sjnAndDesc = jobDesc ? `${jobNumber} - ${jobDesc}` : jobNumber;
+
     const row = [
       '', // Strategic Route (blank)
       workGroup, // WGST
       financialYear, // Financial Year (e.g., 2027)
       jobNumber, // Standard Job
+      sjnAndDesc, // SJN and Desc (e.g., "006206 - T/C - TCAID - ACTIVATE")
       'XXXX', // Account Code (always XXXX)
     ];
 
