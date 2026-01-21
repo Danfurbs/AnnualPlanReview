@@ -160,9 +160,30 @@ function renderForecastEditorSelectors() {
  * Check if a work group has any forecast data in current context
  */
 function workGroupHasForecastData(workGroupName) {
-  if (!window.fData || !workGroupName) return false;
+  if (!workGroupName) return false;
 
-  // Check if any job has data for this work group
+  const year = window.forecastEditorState.year;
+  const planVersion = window.forecastEditorState.planVersion;
+
+  // For v1, check both v1 and inherited v0 data
+  if (planVersion === 'v1') {
+    const v0Snapshot = getForecastSnapshot(year, 'v0');
+    const v1Overrides = loadV1Overrides(year);
+
+    // Check v0 for non-overridden jobs
+    if (v0Snapshot && v0Snapshot.data) {
+      let hasV0Data = false;
+      v0Snapshot.data.forEach((job, jobNumber) => {
+        if (!v1Overrides.has(jobNumber) && job?.wgs?.[workGroupName]) {
+          hasV0Data = true;
+        }
+      });
+      if (hasV0Data) return true;
+    }
+  }
+
+  // Check current fData (v0 or v1 explicit edits)
+  if (!window.fData) return false;
   let hasData = false;
   window.fData.forEach((job) => {
     if (job?.wgs?.[workGroupName]) {
@@ -460,6 +481,60 @@ function addForecastEditorRow() {
   window.forecastEditorState.rows.push(createForecastEditorRow());
   renderForecastEditorTable();
   updateForecastEditorSummary();
+}
+
+/**
+ * Initialize v1 from v0 (explicit copy)
+ */
+function initializeV1FromV0Explicit() {
+  const year = window.forecastEditorState.year;
+  const planVersion = window.forecastEditorState.planVersion;
+
+  if (planVersion !== 'v1') {
+    alert('This action is only available when editing Plan v1.');
+    return;
+  }
+
+  const v0Snapshot = getForecastSnapshot(year, 'v0');
+  if (!v0Snapshot || !v0Snapshot.data) {
+    alert('Plan v0 must exist before initializing v1. Please create a v0 forecast first.');
+    return;
+  }
+
+  const confirmed = confirm(
+    `Initialize Plan v1 from v0?\n\n` +
+    `This will:\n` +
+    `• Copy all ${v0Snapshot.data.size} jobs from Plan v0 to Plan v1\n` +
+    `• Replace any existing Plan v1 data\n` +
+    `• Clear the v1 overrides list\n\n` +
+    `You can then edit Plan v1 independently.\n\n` +
+    `Continue?`
+  );
+
+  if (!confirmed) return;
+
+  // Clone v0 data to v1
+  const v1Data = cloneForecastData(v0Snapshot.data);
+
+  // Save to v1 storage
+  saveForecastToStorage(v1Data, v1Data.size, year, 'v1');
+
+  // Clear v1 overrides since we're starting fresh
+  saveV1Overrides(year, new Set());
+
+  // Reload the forecast editor
+  window.fData = v1Data;
+  loadForecastEditorRows();
+  renderForecastEditorTable();
+  updateForecastEditorSummary();
+
+  // Show success message
+  const statusEl = document.getElementById('forecastEditorStatus');
+  if (statusEl) {
+    statusEl.textContent = `✓ Initialized v1 with ${v1Data.size} jobs from v0 at ${new Date().toLocaleTimeString()}`;
+  }
+
+  alert(`✓ Plan v1 initialized with ${v1Data.size} jobs from Plan v0.\n\nYou can now edit Plan v1 independently.`);
 }
 
 /**
@@ -1742,6 +1817,7 @@ window.closeForecastEditor = closeForecastEditor;
 window.submitForecastEditorForm = submitForecastEditorForm;
 window.addForecastEditorRow = addForecastEditorRow;
 window.clearForecastEditorTable = clearForecastEditorTable;
+window.initializeV1FromV0Explicit = initializeV1FromV0Explicit;
 window.downloadForecastEditorExport = downloadForecastEditorExport;
 window.downloadExcelUploadFormat = downloadExcelUploadFormat;
 window.triggerForecastFileUpload = triggerForecastFileUpload;
