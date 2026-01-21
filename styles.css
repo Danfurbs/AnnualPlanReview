@@ -307,6 +307,22 @@
     .forecast-table tbody td { padding: 8px 10px; border-bottom: 1px solid #edf2f7; font-size: 12px; vertical-align: middle; }
     .forecast-table tbody tr:nth-child(even) { background: #f8fafc; }
     .forecast-table tbody tr:hover { background: #edf2f7; }
+
+    /* Sticky columns for horizontal scrolling */
+    .forecast-table thead th:nth-child(1),
+    .forecast-table tbody td:nth-child(1),
+    .forecast-table tfoot td:nth-child(1) { position: sticky; left: 0; z-index: 5; background: #f1f5f9; }
+    .forecast-table thead th:nth-child(2),
+    .forecast-table tbody td:nth-child(2),
+    .forecast-table tfoot td:nth-child(2) { position: sticky; left: 140px; z-index: 5; background: #f1f5f9; box-shadow: 2px 0 4px rgba(0,0,0,0.05); }
+    .forecast-table tbody tr:nth-child(even) td:nth-child(1),
+    .forecast-table tbody tr:nth-child(even) td:nth-child(2) { background: #f8fafc; }
+    .forecast-table tbody tr:hover td:nth-child(1),
+    .forecast-table tbody tr:hover td:nth-child(2) { background: #edf2f7; }
+    .forecast-table thead th:nth-child(1),
+    .forecast-table thead th:nth-child(2) { z-index: 15; }
+    .forecast-table tfoot td:nth-child(1),
+    .forecast-table tfoot td:nth-child(2) { background: #f1f5f9; }
     .forecast-table .forecast-job-input { width: 120px; }
     .forecast-table .forecast-period-input { width: 90px; text-align: right; }
     .forecast-table .forecast-period-input.is-changed { background: #dbeafe; border-color: #60a5fa; color: #1d4ed8; font-weight: 700; }
