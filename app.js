@@ -2330,6 +2330,22 @@
         fill: true
       });
 
+      // Add baseline if it exists
+      const baselineCumulative = getBaselineCumulative(job.jn, 13);
+      const hasBaseline = baselineCumulative.some(val => val > 0);
+      if (hasBaseline) {
+        datasets.push({
+          label: 'Baseline (Cumulative)',
+          data: baselineCumulative,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.08)',
+          tension: 0.3,
+          fill: false,
+          borderDash: [5, 5],
+          borderWidth: 2
+        });
+      }
+
       currentChart = new Chart(ctx, {
         type: 'line',
         data: {

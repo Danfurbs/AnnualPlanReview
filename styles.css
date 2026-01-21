@@ -375,3 +375,10 @@
     .import-conflict-option-periods { font-size: 12px; color: #64748b; margin-top: 6px; }
     .import-conflict-summary { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 12px; font-size: 12px; color: #075985; margin-bottom: 16px; }
 
+    /* Baseline Page Styles */
+    .baseline-table-wrapper { max-height: calc(100vh - 320px); overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .baseline-input { width: 120px; text-align: right; padding: 6px 10px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 12px; transition: all 0.2s; }
+    .baseline-input:focus { outline: none; border-color: #3b82f6; background: #eff6ff; }
+    .baseline-input:hover { border-color: #94a3b8; }
+    .per-period { text-align: right; color: #64748b; font-weight: 600; font-size: 12px; }
+
