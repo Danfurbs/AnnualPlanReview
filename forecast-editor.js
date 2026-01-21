@@ -562,8 +562,9 @@ function initializeV1FromV0Explicit() {
   // Clear v1 overrides since we're starting fresh
   saveV1Overrides(year, new Set());
 
-  // Reload the forecast editor
+  // Reload the forecast editor and refresh selectors to update checkmarks
   window.fData = v1Data;
+  renderForecastEditorSelectors();
   loadForecastEditorRows();
   renderForecastEditorTable();
   updateForecastEditorSummary();
@@ -611,6 +612,8 @@ function clearForecastEditorTable() {
     saveForecastToStorage(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
   }
 
+  // Refresh selectors to update checkmarks
+  renderForecastEditorSelectors();
   renderForecastEditorTable();
   updateForecastEditorSummary();
 
@@ -762,6 +765,9 @@ function handleForecastEditorSubmit(event) {
     if (planVersion === 'v1' && jobNumbers.length > 0) {
       addToV1Overrides(year, jobNumbers);
     }
+
+    // Refresh work group selector to update checkmarks
+    renderForecastEditorSelectors();
 
     const statusEl = document.getElementById('forecastEditorStatus');
     if (statusEl) {
@@ -1077,7 +1083,8 @@ function handleForecastEditorDeleteRow(event) {
     addToV1Overrides(window.forecastEditorState.year, [jobNumber]);
   }
 
-  // Re-render
+  // Re-render and refresh selectors to update checkmarks
+  renderForecastEditorSelectors();
   renderForecastEditorTable();
   updateForecastEditorSummary();
 
@@ -1837,7 +1844,8 @@ function handleCopyActuals(event) {
     addToV1Overrides(year, jobsToUpdate);
   }
 
-  // Reload editor
+  // Reload editor and refresh selectors to update checkmarks
+  renderForecastEditorSelectors();
   loadForecastEditorRows();
   renderForecastEditorTable();
   updateForecastEditorSummary();
