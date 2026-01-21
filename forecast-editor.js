@@ -506,7 +506,7 @@ function addForecastEditorRow() {
 }
 
 /**
- * Initialize v1 from v0 (explicit copy)
+ * Initialize v1 from v0 (explicit copy for current work group only)
  */
 function initializeV1FromV0Explicit() {
   // CRITICAL: Warn user about unsaved changes
@@ -517,7 +517,7 @@ function initializeV1FromV0Explicit() {
   if (hasUnsavedChanges) {
     const saveFirst = confirm(
       'WARNING: You have unsaved changes in the current table.\n\n' +
-      'Initializing v1 from v0 will REPLACE all current data.\n\n' +
+      'Initializing v1 from v0 will REPLACE current work group data.\n\n' +
       'Click OK to save your changes first, or Cancel to discard them and continue.'
     );
 
@@ -529,9 +529,15 @@ function initializeV1FromV0Explicit() {
 
   const year = window.forecastEditorState.year;
   const planVersion = window.forecastEditorState.planVersion;
+  const workGroup = window.forecastEditorState.workGroup;
 
   if (planVersion !== 'v1') {
     alert('This action is only available when editing Plan v1.');
+    return;
+  }
+
+  if (!workGroup) {
+    alert('Please select a work group first.');
     return;
   }
 
@@ -541,26 +547,78 @@ function initializeV1FromV0Explicit() {
     return;
   }
 
+  // Count how many jobs have data for this work group in v0
+  let jobsWithWgData = 0;
+  v0Snapshot.data.forEach((job) => {
+    if (job?.wgs?.[workGroup]) {
+      jobsWithWgData++;
+    }
+  });
+
+  if (jobsWithWgData === 0) {
+    alert(`No data found in Plan v0 for work group "${workGroup}".\n\nPlease add forecast data to v0 first.`);
+    return;
+  }
+
   const confirmed = confirm(
-    `Initialize Plan v1 from v0?\n\n` +
+    `Initialize v1 from v0 for work group "${workGroup}"?\n\n` +
     `This will:\n` +
-    `• Copy all ${v0Snapshot.data.size} jobs from Plan v0 to Plan v1\n` +
-    `• Replace any existing Plan v1 data\n` +
-    `• Clear the v1 overrides list\n\n` +
-    `You can then edit Plan v1 independently.\n\n` +
+    `• Copy ${jobsWithWgData} job(s) from Plan v0 to Plan v1\n` +
+    `• Only affect the "${workGroup}" work group\n` +
+    `• Replace any existing v1 data for this work group\n` +
+    `• Other work groups in v1 remain unchanged\n\n` +
     `Continue?`
   );
 
   if (!confirmed) return;
 
-  // Clone v0 data to v1
-  const v1Data = cloneForecastData(v0Snapshot.data);
+  // Get or create v1 data
+  const v1Snapshot = getForecastSnapshot(year, 'v1');
+  const v1Data = v1Snapshot ? cloneForecastData(v1Snapshot.data) : new Map();
+  const v1Overrides = loadV1Overrides(year);
+
+  let copiedCount = 0;
+
+  // Copy work group data from v0 to v1
+  v0Snapshot.data.forEach((v0Job, jobNumber) => {
+    const wgData = v0Job?.wgs?.[workGroup];
+    if (!wgData) return;
+
+    // Get or create job in v1
+    if (!v1Data.has(jobNumber)) {
+      v1Data.set(jobNumber, { periods: {}, wgs: {}, comments: {} });
+    }
+    const v1Job = v1Data.get(jobNumber);
+
+    // Copy work group data
+    if (!v1Job.wgs) v1Job.wgs = {};
+    v1Job.wgs[workGroup] = { ...wgData };
+
+    // Copy comment if exists
+    if (v0Job.comments && v0Job.comments[workGroup]) {
+      if (!v1Job.comments) v1Job.comments = {};
+      v1Job.comments[workGroup] = v0Job.comments[workGroup];
+    }
+
+    // Recalculate period totals from all work groups
+    const totals = {};
+    Object.values(v1Job.wgs || {}).forEach(wg => {
+      window.FORECAST_PERIODS.forEach(period => {
+        totals[period] = (totals[period] || 0) + (Number(wg?.[period]) || 0);
+      });
+    });
+    v1Job.periods = totals;
+
+    // Mark this job as explicitly edited in v1
+    v1Overrides.add(jobNumber);
+    copiedCount++;
+  });
 
   // Save to v1 storage
   saveForecastToStorage(v1Data, v1Data.size, year, 'v1');
 
-  // Clear v1 overrides since we're starting fresh
-  saveV1Overrides(year, new Set());
+  // Save updated overrides
+  saveV1Overrides(year, v1Overrides);
 
   // Reload the forecast editor and refresh selectors to update checkmarks
   window.fData = v1Data;
@@ -572,10 +630,10 @@ function initializeV1FromV0Explicit() {
   // Show success message
   const statusEl = document.getElementById('forecastEditorStatus');
   if (statusEl) {
-    statusEl.textContent = `✓ Initialized v1 with ${v1Data.size} jobs from v0 at ${new Date().toLocaleTimeString()}`;
+    statusEl.textContent = `✓ Initialized v1 "${workGroup}" with ${copiedCount} jobs from v0 at ${new Date().toLocaleTimeString()}`;
   }
 
-  alert(`✓ Plan v1 initialized with ${v1Data.size} jobs from Plan v0.\n\nYou can now edit Plan v1 independently.`);
+  alert(`✓ Work group "${workGroup}" initialized in Plan v1.\n\nCopied ${copiedCount} job(s) from Plan v0.\n\nYou can now edit this work group in v1 independently.`);
 }
 
 /**
