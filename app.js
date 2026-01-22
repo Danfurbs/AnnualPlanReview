@@ -2332,7 +2332,14 @@
 
       // Add baseline if it exists and not filtered by workgroup
       // (baseline is route-level, so don't show when viewing a specific workgroup)
-      const baselineCumulative = getBaselineCumulative(job.jn, 13);
+      // For group rollups, aggregate baselines from all jobs in the group
+      let baselineCumulative;
+      if (job.isGroupRollup) {
+        const group = groupStore.find(g => g.id === job.groupId);
+        baselineCumulative = group ? getGroupBaselineCumulative(group.jobNumbers, 13) : Array(13).fill(0);
+      } else {
+        baselineCumulative = getBaselineCumulative(job.jn, 13);
+      }
       const hasBaseline = baselineCumulative.some(val => val > 0);
       if (hasBaseline && wgFilter === 'all') {
         datasets.push({

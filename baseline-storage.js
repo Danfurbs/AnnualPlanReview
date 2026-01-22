@@ -85,6 +85,35 @@ function getBaselineCumulative(jobNumber, periodCount = 13) {
 }
 
 /**
+ * Get cumulative baseline values for a group of jobs (rolled up)
+ * @param {string[]} jobNumbers - Array of job numbers in the group
+ * @param {number} periodCount - Number of periods (default 13)
+ * @returns {number[]} Array of cumulative values per period for the entire group
+ */
+function getGroupBaselineCumulative(jobNumbers, periodCount = 13) {
+  if (!jobNumbers || !jobNumbers.length) {
+    return Array(periodCount).fill(0);
+  }
+
+  // Sum up all baselines from the group's jobs
+  const baselineData = loadBaselineData();
+  const totalBaseline = jobNumbers.reduce((sum, jobNumber) => {
+    return sum + (baselineData.get(jobNumber) || 0);
+  }, 0);
+
+  if (totalBaseline === 0) return Array(periodCount).fill(0);
+
+  const perPeriod = totalBaseline / periodCount;
+  const cumulative = [];
+
+  for (let i = 0; i < periodCount; i++) {
+    cumulative.push(perPeriod * (i + 1));
+  }
+
+  return cumulative;
+}
+
+/**
  * Export baseline data as JSON
  * @returns {string} JSON string of baseline data
  */
