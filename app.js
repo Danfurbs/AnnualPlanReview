@@ -1461,7 +1461,8 @@
       let foundCount = 0;
       let notFoundCount = 0;
       window.STANDARD_JOBS.forEach(job => {
-        const jobNumber = job.standardJobNo;
+        // Pad job number to 6 digits to match forecast data format
+        const jobNumber = String(job.standardJobNo).padStart(6, '0');
         const forecastJob = forecastData.get(jobNumber);
         if (forecastJob) foundCount++; else notFoundCount++;
 
