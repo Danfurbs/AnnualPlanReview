@@ -534,9 +534,16 @@
       </div>
 
       <div class="breakdown-section">
-        <h3>Work Group Performance by Period</h3>
-        <div style="overflow-x: auto;">
-          <table class="wg-table" id="wgTable"></table>
+        <div class="discipline-header">
+          <h3>Work Group Performance by Period</h3>
+          <div class="header-actions">
+            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('wgTableContainer', this)">Collapse</button>
+          </div>
+        </div>
+        <div class="collapsible-content" id="wgTableContainer">
+          <div style="overflow-x: auto;">
+            <table class="wg-table" id="wgTable"></table>
+          </div>
         </div>
       </div>
 
