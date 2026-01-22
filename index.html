@@ -162,6 +162,13 @@
         </select>
       </div>
       <div class="control-group">
+        <label for="hideZeroVolume">
+          <input type="checkbox" id="hideZeroVolume" onchange="render()" style="margin-right: 8px; width: auto;">
+          Hide zero volume cards
+        </label>
+        <span class="helper-text">Hide jobs with 0 forecast AND 0 work done</span>
+      </div>
+      <div class="control-group">
         <label for="search">Search</label>
         <input type="search" id="search" placeholder="Search..." oninput="render()">
       </div>

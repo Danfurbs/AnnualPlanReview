@@ -1857,7 +1857,15 @@
         return status === varianceFilter;
       };
 
-      const filtered = [...baseFiltered.filter(applyVarianceFilter), ...rollupFiltered.filter(applyVarianceFilter)];
+      const hideZeroVolume = document.getElementById('hideZeroVolume')?.checked || false;
+      const applyZeroVolumeFilter = (job) => {
+        if (!hideZeroVolume) return true;
+        const displayData = getJobDisplayData(job);
+        // Hide only if BOTH forecast AND actual are 0
+        return !(displayData.tot.f === 0 && displayData.tot.a === 0);
+      };
+
+      const filtered = [...baseFiltered.filter(applyVarianceFilter).filter(applyZeroVolumeFilter), ...rollupFiltered.filter(applyVarianceFilter).filter(applyZeroVolumeFilter)];
       
       filtered.sort((a,b) => {
         const aDisplay = getJobDisplayData(a);
