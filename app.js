@@ -1483,12 +1483,15 @@
         row['Work Groups'] = workGroupsWithData.join(', ');
 
         // Add period columns (P01-P13)
+        // Check if job has been forecast (has any work group data)
+        const jobHasBeenForecast = forecastJob && forecastJob.wgs && Object.keys(forecastJob.wgs).length > 0;
+
         window.FORECAST_PERIODS.forEach((period, index) => {
           // Use padded format for column headers (P01, P02, etc.)
           const paddedPeriod = `P${String(index + 1).padStart(2, '0')}`;
-          if (forecastJob && forecastJob.periods && forecastJob.periods.hasOwnProperty(period)) {
-            // Forecast has been entered (even if 0)
-            row[paddedPeriod] = forecastJob.periods[period];
+          if (jobHasBeenForecast) {
+            // Forecast has been entered - show period total (may be 0)
+            row[paddedPeriod] = forecastJob.periods?.[period] || 0;
           } else {
             // No forecast entered
             row[paddedPeriod] = '(not forecast)';
