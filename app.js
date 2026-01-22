@@ -1435,6 +1435,16 @@
       const forecastSnapshot = getForecastSnapshot(year, planVersion);
       const forecastData = forecastSnapshot?.data || new Map();
 
+      // Debug: Log what we got
+      console.log('Export Debug:', {
+        year,
+        planVersion,
+        forecastSnapshot,
+        forecastDataSize: forecastData.size,
+        forecastDataKeys: Array.from(forecastData.keys()).slice(0, 5), // First 5 job numbers
+        sampleJob: forecastData.size > 0 ? forecastData.values().next().value : null
+      });
+
       // Get all standard jobs
       if (!window.STANDARD_JOBS || !window.STANDARD_JOBS.length) {
         alert('Standard jobs data not loaded.');
@@ -1443,10 +1453,17 @@
 
       const rows = [];
 
+      // Debug: Check first few job numbers
+      const firstFewStdJobs = window.STANDARD_JOBS.slice(0, 5).map(j => j.standardJobNo);
+      console.log('First 5 standard job numbers:', firstFewStdJobs);
+
       // Process each standard job
+      let foundCount = 0;
+      let notFoundCount = 0;
       window.STANDARD_JOBS.forEach(job => {
         const jobNumber = job.standardJobNo;
         const forecastJob = forecastData.get(jobNumber);
+        if (forecastJob) foundCount++; else notFoundCount++;
 
         // Create row with basic info
         const row = {
@@ -1500,6 +1517,8 @@
 
         rows.push(row);
       });
+
+      console.log('Export matching results:', { foundCount, notFoundCount, totalStandardJobs: window.STANDARD_JOBS.length });
 
       if (!rows.length) {
         alert('No standard jobs data to export.');
