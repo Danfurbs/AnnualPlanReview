@@ -1426,6 +1426,108 @@
       XLSX.writeFile(wb, 'apr-workgroup-job-summary.xlsx');
     }
 
+    function exportForecastSummary() {
+      // Get current year and plan version from UI or use defaults
+      const year = currentFinancialYear || 'FY27';
+      const planVersion = currentPlanVersion || 'v0';
+
+      // Load forecast data
+      const forecastSnapshot = getForecastSnapshot(year, planVersion);
+      const forecastData = forecastSnapshot?.data || new Map();
+
+      // Get all standard jobs
+      if (!window.STANDARD_JOBS || !window.STANDARD_JOBS.length) {
+        alert('Standard jobs data not loaded.');
+        return;
+      }
+
+      const rows = [];
+
+      // Process each standard job
+      window.STANDARD_JOBS.forEach(job => {
+        const jobNumber = job.standardJobNo;
+        const forecastJob = forecastData.get(jobNumber);
+
+        // Create row with basic info
+        const row = {
+          'Standard Job No': jobNumber,
+          'Description': job.standardJobDescription,
+          'Discipline': job.discipline,
+          'MNT Code': job.mntCode
+        };
+
+        // Determine which work groups have allocated volume (even if 0)
+        const workGroupsWithData = [];
+        if (forecastJob && forecastJob.wgs) {
+          Object.keys(forecastJob.wgs).forEach(wgName => {
+            // Check if this work group has any data defined (even if all zeros)
+            const wgData = forecastJob.wgs[wgName];
+            const hasDefined = window.FORECAST_PERIODS.some(period => {
+              return wgData.hasOwnProperty(period);
+            });
+            if (hasDefined) {
+              // Find the work group code for this description
+              let wgCode = wgName;
+              if (window.workGroupSets) {
+                window.workGroupSets.forEach((desc, code) => {
+                  if (desc === wgName) {
+                    wgCode = code;
+                  }
+                });
+              }
+              workGroupsWithData.push(wgCode);
+            }
+          });
+        }
+
+        row['Work Groups'] = workGroupsWithData.join(', ');
+
+        // Add period columns (P01-P13)
+        window.FORECAST_PERIODS.forEach((period, index) => {
+          // Use padded format for column headers (P01, P02, etc.)
+          const paddedPeriod = `P${String(index + 1).padStart(2, '0')}`;
+          if (forecastJob && forecastJob.periods && forecastJob.periods.hasOwnProperty(period)) {
+            // Forecast has been entered (even if 0)
+            row[paddedPeriod] = forecastJob.periods[period];
+          } else {
+            // No forecast entered
+            row[paddedPeriod] = '(not forecast)';
+          }
+        });
+
+        rows.push(row);
+      });
+
+      if (!rows.length) {
+        alert('No standard jobs data to export.');
+        return;
+      }
+
+      // Create Excel workbook with padded period headers (P01-P13)
+      const periodHeaders = Array.from({ length: 13 }, (_, i) => `P${String(i + 1).padStart(2, '0')}`);
+      const headers = ['Standard Job No', 'Description', 'Discipline', 'MNT Code', 'Work Groups']
+        .concat(periodHeaders);
+
+      const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+
+      // Auto-size columns
+      const colWidths = headers.map(h => {
+        if (h === 'Description') return { wch: 50 };
+        if (h === 'Work Groups') return { wch: 30 };
+        if (h === 'Standard Job No') return { wch: 15 };
+        if (h === 'Discipline') return { wch: 20 };
+        if (h === 'MNT Code') return { wch: 12 };
+        return { wch: 12 };
+      });
+      ws['!cols'] = colWidths;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Forecast Summary');
+      XLSX.writeFile(wb, `apr-forecast-summary-${year}-${planVersion}.xlsx`);
+
+      console.log(`✓ Exported forecast summary for ${year} ${planVersion}`);
+    }
+
     function computeQuantile(sorted, q) {
       if (!sorted.length) return 0;
       const pos = (sorted.length - 1) * q;
