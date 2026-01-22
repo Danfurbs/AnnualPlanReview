@@ -47,6 +47,9 @@ function initializeBaselinePage() {
 
   // Update stats
   updateBaselineStats();
+
+  // Initialize event listeners
+  initializeBaselineTableListeners();
 }
 
 /**
@@ -264,4 +267,102 @@ function getStandardJobList() {
   jobs.sort((a, b) => a.jobNumber.localeCompare(b.jobNumber));
 
   return jobs;
+}
+
+/**
+ * Handle paste events on the baseline table
+ * Supports multi-row paste for job numbers and baseline values
+ */
+function handleBaselineTablePaste(event) {
+  const target = event.target;
+
+  // Only handle paste on baseline input fields
+  if (!target || !target.matches('.baseline-input')) {
+    return;
+  }
+
+  const clipboard = event.clipboardData?.getData('text');
+  if (!clipboard) return;
+
+  const rows = clipboard.replace(/\r/g, '').split('\n').filter(line => line.length);
+  if (!rows.length) return;
+
+  const parsed = rows.map(row => row.split('\t'));
+
+  // Single value paste - allow default behavior
+  if (parsed.length === 1 && parsed[0].length === 1) {
+    return;
+  }
+
+  event.preventDefault();
+
+  // Get all currently displayed job numbers in table order
+  const tableBody = document.getElementById('baselineTableBody');
+  if (!tableBody) return;
+
+  const tableRows = Array.from(tableBody.querySelectorAll('tr'));
+  const currentRowIndex = tableRows.findIndex(row =>
+    row.querySelector('.baseline-input') === target
+  );
+
+  if (currentRowIndex < 0) return;
+
+  // Process each pasted row
+  parsed.forEach((rowData, rowOffset) => {
+    const targetRowIndex = currentRowIndex + rowOffset;
+    if (targetRowIndex >= tableRows.length) return; // No more rows to paste into
+
+    const tableRow = tableRows[targetRowIndex];
+    const jobNumber = tableRow.querySelector('td:first-child')?.textContent?.trim();
+    if (!jobNumber) return;
+
+    // Determine what to paste based on number of columns
+    let baselineValue;
+
+    if (rowData.length === 1) {
+      // Single column: just the baseline value
+      baselineValue = rowData[0];
+    } else if (rowData.length >= 2) {
+      // Two columns: assume job number + baseline value (like copy from Excel)
+      // Use the second column as the baseline value
+      baselineValue = rowData[1];
+    }
+
+    // Update the baseline value
+    const numValue = parseFloat(baselineValue);
+    if (!isNaN(numValue) && numValue >= 0) {
+      if (numValue === 0) {
+        baselineEdits.delete(jobNumber);
+      } else {
+        baselineEdits.set(jobNumber, numValue);
+      }
+
+      // Update the input field
+      const input = tableRow.querySelector('.baseline-input');
+      if (input) {
+        input.value = numValue;
+      }
+
+      // Update per-period display
+      updatePerPeriodDisplay(jobNumber);
+    }
+  });
+
+  // Update stats
+  updateBaselineStats();
+
+  console.log(`✓ Pasted ${parsed.length} baseline values`);
+}
+
+/**
+ * Initialize baseline table event listeners
+ */
+function initializeBaselineTableListeners() {
+  const tableBody = document.getElementById('baselineTableBody');
+  if (tableBody) {
+    // Remove existing listener if any
+    tableBody.removeEventListener('paste', handleBaselineTablePaste);
+    // Add paste listener
+    tableBody.addEventListener('paste', handleBaselineTablePaste);
+  }
 }
