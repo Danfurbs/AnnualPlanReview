@@ -5,7 +5,7 @@
 
 // Configuration
 const API_CONFIG = {
-  baseUrl: window.location.origin,
+  baseUrl: window.location.origin, // Will be overridden by loadApiConfig()
   enabled: true, // Set to true to use backend API, false to use localStorage only
   timeout: 30000,
   retryAttempts: 3,
@@ -17,6 +17,23 @@ const API_CONFIG = {
  */
 function isApiEnabled() {
   return API_CONFIG.enabled;
+}
+
+/**
+ * Get current API base URL
+ */
+function getApiBaseUrl() {
+  return API_CONFIG.baseUrl;
+}
+
+/**
+ * Set API base URL
+ */
+function setApiBaseUrl(url) {
+  // Remove trailing slash if present
+  API_CONFIG.baseUrl = url.replace(/\/$/, '');
+  localStorage.setItem('aprApiBaseUrl', API_CONFIG.baseUrl);
+  console.log(`API base URL set to: ${API_CONFIG.baseUrl}`);
 }
 
 /**
@@ -33,9 +50,20 @@ function toggleApiMode(enabled) {
  */
 function loadApiConfig() {
   try {
-    const saved = localStorage.getItem('aprApiEnabled');
-    if (saved !== null) {
-      API_CONFIG.enabled = JSON.parse(saved);
+    // Load enabled status
+    const savedEnabled = localStorage.getItem('aprApiEnabled');
+    if (savedEnabled !== null) {
+      API_CONFIG.enabled = JSON.parse(savedEnabled);
+    }
+
+    // Load base URL
+    const savedBaseUrl = localStorage.getItem('aprApiBaseUrl');
+    if (savedBaseUrl) {
+      API_CONFIG.baseUrl = savedBaseUrl;
+      console.log(`Loaded API base URL: ${API_CONFIG.baseUrl}`);
+    } else {
+      // Default to current origin
+      console.log(`Using default API base URL: ${API_CONFIG.baseUrl}`);
     }
   } catch (err) {
     console.warn('Failed to load API config:', err);
@@ -384,6 +412,8 @@ async function checkApiHealth() {
 // Expose API functions globally
 window.API_CONFIG = API_CONFIG;
 window.isApiEnabled = isApiEnabled;
+window.getApiBaseUrl = getApiBaseUrl;
+window.setApiBaseUrl = setApiBaseUrl;
 window.toggleApiMode = toggleApiMode;
 window.checkApiHealth = checkApiHealth;
 window.loadForecastFromApi = loadForecastFromApi;

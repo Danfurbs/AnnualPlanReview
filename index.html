@@ -20,6 +20,7 @@
           <button class="group-action-button" onclick="openBaselinePage()">Baseline Management</button>
           <button class="group-action-button" onclick="openForecastEditor()">Forecast Builder</button>
           <button class="primary-button" onclick="openModal()">Upload Files</button>
+          <button class="settings-button" onclick="openSettings()" title="Settings">⚙️</button>
         </div>
       </div>
     </header>
@@ -649,6 +650,72 @@
     </div>
   </div>
 
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="close" onclick="closeSettings()">&times;</button>
+      </div>
+      <div class="settings-content">
+        <div class="settings-section">
+          <h3>Backend API Configuration</h3>
+          <p class="helper-text">Configure your Render backend API to sync forecasts across all devices.</p>
+
+          <div class="file-input-group">
+            <label for="apiBaseUrlInput">Backend API URL</label>
+            <input type="url" id="apiBaseUrlInput" placeholder="https://your-app.onrender.com" style="width: 100%;">
+            <small>Example: https://annual-plan-review-backend.onrender.com</small>
+          </div>
+
+          <div class="settings-row">
+            <label class="wo-flag-toggle">
+              <input type="checkbox" id="apiEnabledToggle">
+              <span>Enable Backend API</span>
+            </label>
+          </div>
+
+          <div class="settings-status" id="settingsStatus"></div>
+
+          <div class="settings-actions">
+            <button class="secondary-button" onclick="testApiConnection()">Test Connection</button>
+            <button class="primary-button" onclick="saveSettings()">Save Settings</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Current Status</h3>
+          <div class="status-grid">
+            <div class="status-item">
+              <span class="status-label">API Status:</span>
+              <span class="status-value" id="apiStatusValue">Unknown</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Backend URL:</span>
+              <span class="status-value" id="apiUrlValue">Not configured</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Database:</span>
+              <span class="status-value" id="databaseValue">Unknown</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Instructions</h3>
+          <ol class="settings-instructions">
+            <li>Enter your Render backend URL (find it in your Render dashboard)</li>
+            <li>Click "Test Connection" to verify it's working</li>
+            <li>Enable "Enable Backend API" checkbox</li>
+            <li>Click "Save Settings"</li>
+            <li>Configure the same settings on all your PCs</li>
+          </ol>
+          <p class="helper-text"><strong>Important:</strong> All PCs must use the same backend URL to share forecasts.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
   <script src="work-group-sets-data.js"></script>
@@ -665,3 +732,6 @@
   <script src="baseline-storage.js"></script>
   <script src="baseline-page.js"></script>
   <script src="app.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>
