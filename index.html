@@ -114,7 +114,7 @@
       <div class="control-group">
         <label for="dashboardPlanVersion">Plan version</label>
         <select id="dashboardPlanVersion" onchange="handleDashboardPlanVersionChange()">
-          <option value="v0">Plan v0 (Baseline)</option>
+          <option value="v0">Plan v0 (Prior Submission)</option>
           <option value="v1">Plan v1 (Updated)</option>
         </select>
         <span class="helper-text">Use 'Initialize v1 from v0' in Forecast Builder to populate v1</span>
@@ -357,7 +357,7 @@
         <div class="forecast-page-icon">BL</div>
         <div>
           <h1>Baseline Management</h1>
-          <p class="subtitle">Set baseline values for Standard Jobs that apply across all financial years</p>
+          <p class="subtitle">Set prior submission values for Standard Jobs that apply across all financial years</p>
         </div>
       </div>
       <div class="forecast-page-actions">
@@ -368,45 +368,45 @@
     <div class="forecast-page-layout">
       <aside class="forecast-sidebar">
         <div class="forecast-card">
-          <h4>About Baselines</h4>
-          <p class="helper-text">Baselines are total values per Standard Job that apply across all financial years. They appear as evenly distributed cumulative lines on graphs.</p>
-          <p class="helper-text" style="margin-top: 12px;">Example: A baseline of 1300 over 13 periods = 100 per period cumulative.</p>
+          <h4>About Prior Submissions</h4>
+          <p class="helper-text">Prior submissions are total values per Standard Job that apply across all financial years. They appear as evenly distributed cumulative lines on graphs.</p>
+          <p class="helper-text" style="margin-top: 12px;">Example: A prior submission of 1300 over 13 periods = 100 per period cumulative.</p>
         </div>
         <div class="forecast-card">
           <h4>Current status</h4>
           <div>
             <div class="forecast-stat" id="baselineJobCount">0</div>
-            <small>Jobs with baselines</small>
+            <small>Jobs with prior submissions</small>
           </div>
           <div>
             <div class="forecast-stat" id="baselineTotalValue">0</div>
-            <small>Total baseline value</small>
+            <small>Total prior submission value</small>
           </div>
         </div>
         <div class="forecast-card">
           <h4>Quick actions</h4>
           <div class="forecast-action-list">
-            <button type="button" class="group-action-button" onclick="exportBaselineDataFile()">Export Baselines</button>
-            <button type="button" class="group-action-button" onclick="triggerBaselineImport()">Import Baselines</button>
+            <button type="button" class="group-action-button" onclick="exportBaselineDataFile()">Export Prior Submissions</button>
+            <button type="button" class="group-action-button" onclick="triggerBaselineImport()">Import Prior Submissions</button>
             <input type="file" id="baselineFileInput" accept="application/json" class="is-hidden" onchange="handleBaselineImport(event)">
-            <button type="button" class="group-action-button" onclick="clearAllBaselines()">Clear All Baselines</button>
+            <button type="button" class="group-action-button" onclick="clearAllBaselines()">Clear All Prior Submissions</button>
           </div>
         </div>
         <div class="forecast-card">
           <h4>Tips</h4>
           <ul class="forecast-tips">
-            <li>Baselines appear on breakdown graphs as reference lines</li>
+            <li>Prior submissions appear on breakdown graphs as reference lines</li>
             <li>Values are distributed evenly across all periods</li>
-            <li>Enter 0 or leave empty to remove a baseline</li>
-            <li>Export baselines to share with other users</li>
+            <li>Enter 0 or leave empty to remove a prior submission</li>
+            <li>Export prior submissions to share with other users</li>
           </ul>
         </div>
       </aside>
       <main class="forecast-main">
         <div class="forecast-main-header">
           <div>
-            <h3>Standard Job Baselines</h3>
-            <p class="helper-text">Set total baseline values for each Standard Job</p>
+            <h3>Standard Job Prior Submissions</h3>
+            <p class="helper-text">Set total prior submission values for each Standard Job</p>
           </div>
           <div class="forecast-toolbar">
             <input type="search" id="baselineSearch" placeholder="Search job number or description..." oninput="filterBaselineTable()">
@@ -419,7 +419,7 @@
                 <th>Job Number</th>
                 <th>Description</th>
                 <th>Unit</th>
-                <th>Baseline Value</th>
+                <th>Prior Submission Value</th>
                 <th>Per Period</th>
               </tr>
             </thead>
@@ -517,7 +517,7 @@
       <div class="breakdown-controls" style="display: flex; gap: 16px; align-items: center; margin-bottom: 16px; padding: 12px; background: #f5f5f5; border-radius: 4px;">
         <label style="font-weight: 500;">Compare against:</label>
         <select id="breakdownPlanVersion" onchange="handleBreakdownPlanVersionChange()" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; background: white;">
-          <option value="v0">Plan v0 (Baseline)</option>
+          <option value="v0">Plan v0 (Prior Submission)</option>
           <option value="v1">Plan v1 (Updated)</option>
           <option value="both">Both (v0 & v1)</option>
         </select>

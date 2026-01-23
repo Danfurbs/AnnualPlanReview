@@ -2476,7 +2476,7 @@
       const hasBaseline = baselineCumulative.some(val => val > 0);
       if (hasBaseline && wgFilter === 'all') {
         datasets.push({
-          label: 'Baseline (Cumulative)',
+          label: 'Prior Submission (Cumulative)',
           data: baselineCumulative,
           borderColor: '#f59e0b',
           backgroundColor: 'rgba(245, 158, 11, 0.08)',
