@@ -10,10 +10,10 @@ module.exports = (db) => {
    * GET /api/forecasts/:fiscalYear/:planVersion
    * Get all forecasts for a fiscal year and plan version
    */
-  router.get('/:fiscalYear/:planVersion', (req, res) => {
+  router.get('/:fiscalYear/:planVersion', async (req, res) => {
     try {
       const { fiscalYear, planVersion } = req.params;
-      const data = db.getForecastData(fiscalYear, planVersion);
+      const data = await db.getForecastData(fiscalYear, planVersion);
 
       res.json({
         success: true,
@@ -34,10 +34,10 @@ module.exports = (db) => {
    * GET /api/forecasts/:fiscalYear/:planVersion/job/:jobNumber
    * Get forecast for a specific job
    */
-  router.get('/:fiscalYear/:planVersion/job/:jobNumber', (req, res) => {
+  router.get('/:fiscalYear/:planVersion/job/:jobNumber', async (req, res) => {
     try {
       const { fiscalYear, planVersion, jobNumber } = req.params;
-      const data = db.getForecastByJob(jobNumber, fiscalYear, planVersion);
+      const data = await db.getForecastByJob(jobNumber, fiscalYear, planVersion);
 
       res.json({
         success: true,
@@ -57,7 +57,7 @@ module.exports = (db) => {
    * Save all forecasts for a fiscal year and plan version
    * Body: { data: { jobNumber: { periods, wgs, comments }, ... } }
    */
-  router.post('/:fiscalYear/:planVersion', (req, res) => {
+  router.post('/:fiscalYear/:planVersion', async (req, res) => {
     try {
       const { fiscalYear, planVersion } = req.params;
       const { data } = req.body;
@@ -70,9 +70,9 @@ module.exports = (db) => {
       }
 
       // Save each job's forecast data
-      Object.entries(data).forEach(([jobNumber, forecastData]) => {
-        db.saveForecast(jobNumber, fiscalYear, planVersion, forecastData);
-      });
+      for (const [jobNumber, forecastData] of Object.entries(data)) {
+        await db.saveForecast(jobNumber, fiscalYear, planVersion, forecastData);
+      }
 
       res.json({
         success: true,
@@ -93,7 +93,7 @@ module.exports = (db) => {
    * Save forecast for a specific job
    * Body: { periods, wgs, comments }
    */
-  router.post('/:fiscalYear/:planVersion/job/:jobNumber', (req, res) => {
+  router.post('/:fiscalYear/:planVersion/job/:jobNumber', async (req, res) => {
     try {
       const { fiscalYear, planVersion, jobNumber } = req.params;
       const forecastData = req.body;
@@ -105,7 +105,7 @@ module.exports = (db) => {
         });
       }
 
-      db.saveForecast(jobNumber, fiscalYear, planVersion, forecastData);
+      await db.saveForecast(jobNumber, fiscalYear, planVersion, forecastData);
 
       res.json({
         success: true,
@@ -124,10 +124,10 @@ module.exports = (db) => {
    * GET /api/forecasts/v1-overrides/:fiscalYear
    * Get list of jobs with v1 overrides
    */
-  router.get('/v1-overrides/:fiscalYear', (req, res) => {
+  router.get('/v1-overrides/:fiscalYear', async (req, res) => {
     try {
       const { fiscalYear } = req.params;
-      const overrides = db.getV1Overrides(fiscalYear);
+      const overrides = await db.getV1Overrides(fiscalYear);
 
       res.json({
         success: true,
@@ -146,10 +146,10 @@ module.exports = (db) => {
    * POST /api/forecasts/v1-overrides/:fiscalYear/:jobNumber
    * Mark a job as having v1 overrides
    */
-  router.post('/v1-overrides/:fiscalYear/:jobNumber', (req, res) => {
+  router.post('/v1-overrides/:fiscalYear/:jobNumber', async (req, res) => {
     try {
       const { fiscalYear, jobNumber } = req.params;
-      db.addV1Override(jobNumber, fiscalYear);
+      await db.addV1Override(jobNumber, fiscalYear);
 
       res.json({
         success: true,
@@ -168,10 +168,10 @@ module.exports = (db) => {
    * DELETE /api/forecasts/v1-overrides/:fiscalYear/:jobNumber
    * Remove v1 override for a job
    */
-  router.delete('/v1-overrides/:fiscalYear/:jobNumber', (req, res) => {
+  router.delete('/v1-overrides/:fiscalYear/:jobNumber', async (req, res) => {
     try {
       const { fiscalYear, jobNumber } = req.params;
-      db.removeV1Override(jobNumber, fiscalYear);
+      await db.removeV1Override(jobNumber, fiscalYear);
 
       res.json({
         success: true,

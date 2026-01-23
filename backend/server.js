@@ -1,6 +1,7 @@
 /**
  * Annual Plan Review - Backend Server
- * Express server with SQLite database for forecasts, baselines, and comments
+ * Express server with database for forecasts, baselines, and comments
+ * Supports both SQLite (local dev) and PostgreSQL (production)
  */
 
 // Load environment variables
@@ -11,7 +12,12 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const path = require('path');
-const DatabaseService = require('./services/database');
+
+// Select database service based on environment
+const USE_POSTGRESQL = process.env.USE_POSTGRESQL === 'true' || process.env.DATABASE_URL;
+const DatabaseService = USE_POSTGRESQL
+  ? require('./services/database-pg')
+  : require('./services/database');
 
 // Initialize Express app
 const app = express();
@@ -21,6 +27,8 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
 // Initialize database service
 const db = new DatabaseService();
+
+console.log(`Using ${USE_POSTGRESQL ? 'PostgreSQL' : 'SQLite'} database`);
 
 // Middleware
 const corsOptions = {
@@ -42,6 +50,7 @@ app.get('/api/health', (req, res) => {
     success: true,
     message: 'API is running',
     environment: NODE_ENV,
+    database: USE_POSTGRESQL ? 'PostgreSQL' : 'SQLite',
     timestamp: new Date().toISOString()
   });
 });
@@ -82,6 +91,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Annual Plan Review Backend Server`);
   console.log(`========================================`);
   console.log(`Environment: ${NODE_ENV}`);
+  console.log(`Database: ${USE_POSTGRESQL ? 'PostgreSQL' : 'SQLite'}`);
   console.log(`Server running on: http://localhost:${PORT}`);
   console.log(`API endpoints available at: http://localhost:${PORT}/api`);
   console.log(`Health check: http://localhost:${PORT}/api/health`);
@@ -90,14 +100,14 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('\nShutting down gracefully...');
-  db.close();
+  await db.close();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('\nShutting down gracefully...');
-  db.close();
+  await db.close();
   process.exit(0);
 });

@@ -1,15 +1,20 @@
+databases:
+  # PostgreSQL Database (Free Tier with Persistence)
+  # This is the RECOMMENDED option for production deployment
+  - name: annual-plan-review-db
+    databaseName: annual_plan_review
+    plan: free
+    region: oregon
+
 services:
   # Backend API Service (Free Tier)
-  # WARNING: Free tier does NOT support persistent disks
-  # Database will be reset on each deploy. For production use:
-  # - Upgrade to Starter plan ($7/mo) with disk support, OR
-  # - Use Render's free PostgreSQL database (see RENDER_DEPLOYMENT.md)
+  # Uses PostgreSQL database by default for persistent storage
   - type: web
     name: annual-plan-review-backend
     env: node
     region: oregon
     plan: free
-    buildCommand: cd backend && npm install && npm run init-db
+    buildCommand: cd backend && npm install && npm run init-db-pg
     startCommand: cd backend && npm start
     healthCheckPath: /api/health
     envVars:
@@ -17,16 +22,38 @@ services:
         value: production
       - key: PORT
         value: 3000
-      - key: DATABASE_PATH
-        value: ./db/apr.db
+      - key: USE_POSTGRESQL
+        value: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: annual-plan-review-db
+          property: connectionString
       - key: CORS_ORIGIN
         sync: false
-    # Disk configuration - ONLY available on paid plans (Starter or higher)
-    # Uncomment the section below if you upgrade to a paid plan:
-    # disk:
-    #   name: sqlite-data
-    #   mountPath: /opt/render/project/src/backend/db
-    #   sizeGB: 1
+  # ALTERNATIVE: SQLite with Persistent Disk (Paid Tier Only)
+  # Uncomment the entire section below and comment out the PostgreSQL configuration above
+  # if you prefer SQLite with a paid plan ($7/mo Starter or higher)
+  # - type: web
+  #   name: annual-plan-review-backend
+  #   env: node
+  #   region: oregon
+  #   plan: starter  # Change to 'starter' or higher
+  #   buildCommand: cd backend && npm install && npm run init-db
+  #   startCommand: cd backend && npm start
+  #   healthCheckPath: /api/health
+  #   envVars:
+  #     - key: NODE_ENV
+  #       value: production
+  #     - key: PORT
+  #       value: 3000
+  #     - key: DATABASE_PATH
+  #       value: ./db/apr.db
+  #     - key: CORS_ORIGIN
+  #       sync: false
+  #   disk:
+  #     name: sqlite-data
+  #     mountPath: /opt/render/project/src/backend/db
+  #     sizeGB: 1
 
   # Static Site Service (Optional - for hosting the frontend separately)
   # Uncomment if you want to deploy frontend separately from backend

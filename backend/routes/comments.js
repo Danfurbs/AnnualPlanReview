@@ -11,9 +11,9 @@ module.exports = (db) => {
    * GET /api/comments
    * Get all job comments
    */
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     try {
-      const commentStore = db.getAllJobComments();
+      const commentStore = await db.getAllJobComments();
 
       res.json({
         success: true,
@@ -32,10 +32,10 @@ module.exports = (db) => {
    * GET /api/comments/:jobNumber
    * Get all comments for a specific job
    */
-  router.get('/:jobNumber', (req, res) => {
+  router.get('/:jobNumber', async (req, res) => {
     try {
       const { jobNumber } = req.params;
-      const comments = db.getJobComments(jobNumber);
+      const comments = await db.getJobComments(jobNumber);
 
       res.json({
         success: true,
@@ -55,7 +55,7 @@ module.exports = (db) => {
    * Save a job comment
    * Body: { id, jobNumber, category, text, timestamp, fy, rf }
    */
-  router.post('/', (req, res) => {
+  router.post('/', async (req, res) => {
     try {
       const comment = req.body;
 
@@ -70,7 +70,7 @@ module.exports = (db) => {
         });
       }
 
-      db.saveJobComment(comment);
+      await db.saveJobComment(comment);
 
       res.json({
         success: true,
@@ -90,7 +90,7 @@ module.exports = (db) => {
    * Save multiple job comments at once
    * Body: { commentStore: { jobNumber: [comments...], ... } }
    */
-  router.post('/bulk', (req, res) => {
+  router.post('/bulk', async (req, res) => {
     try {
       const { commentStore } = req.body;
 
@@ -102,12 +102,12 @@ module.exports = (db) => {
       }
 
       let count = 0;
-      Object.entries(commentStore).forEach(([jobNumber, comments]) => {
-        comments.forEach(comment => {
-          db.saveJobComment(comment);
+      for (const [jobNumber, comments] of Object.entries(commentStore)) {
+        for (const comment of comments) {
+          await db.saveJobComment(comment);
           count++;
-        });
-      });
+        }
+      }
 
       res.json({
         success: true,
@@ -127,10 +127,10 @@ module.exports = (db) => {
    * DELETE /api/comments/:commentId
    * Delete a specific comment
    */
-  router.delete('/:commentId', (req, res) => {
+  router.delete('/:commentId', async (req, res) => {
     try {
       const { commentId } = req.params;
-      db.deleteJobComment(commentId);
+      await db.deleteJobComment(commentId);
 
       res.json({
         success: true,

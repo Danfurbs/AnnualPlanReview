@@ -2,22 +2,23 @@
 
 This guide will help you deploy the Annual Plan Review backend to Render.com.
 
-## ⚠️ CRITICAL: Free Tier Database Limitation
+## ✅ Ready for Production with Free PostgreSQL!
 
-**The free tier does NOT support persistent disks. Your database will be reset on every deploy.**
+**The application is now configured to use Render's FREE PostgreSQL database for persistent storage.**
 
-**For production use, you have two options:**
-1. **Upgrade to Starter plan** ($7/month) - Supports persistent disk for SQLite
-2. **Use PostgreSQL** (Render offers free PostgreSQL) - See "PostgreSQL Migration" section below
+Your `render.yaml` is pre-configured to:
+- Create a free PostgreSQL database
+- Connect it to your backend automatically
+- Initialize all tables on first deploy
+- Provide persistent storage at ZERO cost
 
-**For testing/development only**, the free tier works but data will be lost on each deploy.
+No additional configuration needed - just deploy!
 
 ## Prerequisites
 
 1. A [Render.com](https://render.com) account (free tier available)
 2. Your GitHub repository pushed to GitHub
 3. Basic knowledge of environment variables
-4. **Decision**: Free tier (ephemeral) vs Paid tier (persistent) vs PostgreSQL (free + persistent)
 
 ## Deployment Steps
 
@@ -58,25 +59,24 @@ Render will prompt you to set environment variables. Here's what you need to con
 ### 3. Review and Deploy
 
 1. Review the service configuration:
+   - **Database**: `annual-plan-review-db` (PostgreSQL, Free, **Persistent**)
    - **Service Name**: `annual-plan-review-backend`
    - **Environment**: `node`
-   - **Build Command**: `cd backend && npm install && npm run init-db`
+   - **Build Command**: `cd backend && npm install && npm run init-db-pg`
    - **Start Command**: `cd backend && npm start`
-   - **Plan**: Free ⚠️ **Database will be reset on each deploy**
-   - **Persistent Disk**: None (not available on free tier)
+   - **Plan**: Free ✅ **Database is persistent!**
 
 2. Click **"Apply"** to create the service
 
 3. Render will:
+   - Create a free PostgreSQL database
    - Clone your repository
    - Install dependencies (`npm install`)
-   - Initialize the database (`npm run init-db`)
+   - Initialize the PostgreSQL database (`npm run init-db-pg`)
+   - Connect your backend to the database
    - Start the server (`npm start`)
 
-**⚠️ Important**: On the free tier, your database will be recreated empty on each deploy. Any data you save will be lost when:
-- You push new code to GitHub (triggers auto-deploy)
-- You manually deploy from the Render dashboard
-- Render restarts your service
+✅ **Your data will persist across deploys and restarts!**
 
 ### 4. Verify Deployment
 
@@ -114,114 +114,84 @@ const API_BASE_URL = 'https://your-service-name.onrender.com';
 
 3. Commit and push the changes
 
-## Database Persistence Options
+## Database: PostgreSQL (Default)
 
-### Option 1: Free Tier with SQLite (⚠️ NOT PERSISTENT)
+**Your application is pre-configured with PostgreSQL for free, persistent storage.**
 
-**Current configuration** - Database resets on each deploy:
-- ❌ Data is **LOST** on every deploy
-- ❌ Data is **LOST** when service restarts
-- ✅ Works for testing/demos
-- ✅ No cost
+### What You Get
+- ✅ **FREE** - Render's free PostgreSQL plan
+- ✅ **PERSISTENT** - Data survives deploys and restarts
+- ✅ **PRODUCTION-READY** - Better concurrency and reliability than SQLite
+- ✅ **AUTOMATIC BACKUPS** - Daily backups included
+- ✅ **NO CONFIGURATION NEEDED** - Works out of the box
 
-**When to use**: Testing, development, demos where data loss is acceptable
+### How It Works
+1. `render.yaml` defines a PostgreSQL database
+2. Database is created automatically on first deploy
+3. Backend connects using `DATABASE_URL` (provided by Render)
+4. Tables are initialized automatically during build
+5. All API routes use PostgreSQL automatically
 
-### Option 2: Paid Tier with SQLite (✅ PERSISTENT)
+### Free Tier Limitations
+- Database max size: 1 GB
+- Shared compute resources
+- Automatic backups retained for 7 days
+- After 90 days of inactivity, database may be removed
 
-**Upgrade to Starter plan** ($7/month):
-1. In render.yaml, uncomment the disk section:
-   ```yaml
-   disk:
-     name: sqlite-data
-     mountPath: /opt/render/project/src/backend/db
-     sizeGB: 1
+## Alternative: SQLite with Persistent Disk (Paid Only)
+
+If you prefer SQLite over PostgreSQL, you can use SQLite with a paid plan ($7/month):
+
+1. In `render.yaml`, comment out the `databases` section and the default service
+2. Uncomment the "ALTERNATIVE: SQLite" service configuration
+3. Change `plan: free` to `plan: starter` or higher
+4. Deploy
+
+**Note**: SQLite requires a paid plan for persistent storage. PostgreSQL is FREE and persistent.
+
+## Local Development
+
+### With PostgreSQL (Recommended)
+
+To use PostgreSQL locally:
+
+1. Install PostgreSQL on your machine
+2. Create a database: `createdb annual_plan_review`
+3. Create `.env` file in `backend/` directory:
+   ```bash
+   cd backend
+   cp .env.example .env
    ```
-2. In Render Dashboard, upgrade your service to Starter plan
-3. Redeploy
+4. Edit `.env` and set:
+   ```env
+   USE_POSTGRESQL=true
+   DATABASE_URL=postgresql://localhost/annual_plan_review
+   ```
+5. Initialize and start:
+   ```bash
+   npm install
+   npm run init-db-pg
+   npm start
+   ```
 
-**Benefits**:
-- ✅ Data persists across deploys
-- ✅ Data persists across restarts
-- ✅ No code changes needed
-- ✅ Simple SQLite database
+### With SQLite (Simpler, Local Only)
 
-### Option 3: PostgreSQL (✅ PERSISTENT + FREE)
+SQLite requires no installation:
 
-**Use Render's free PostgreSQL** (recommended for production):
-1. Create a free PostgreSQL database in Render
-2. Install `pg` package: `npm install pg`
-3. Modify database service to support PostgreSQL
-4. Update DATABASE_URL environment variable
+1. Create `.env` file:
+   ```bash
+   cd backend
+   cp .env.example .env
+   ```
+2. Keep the default settings (SQLite is default)
+3. Initialize and start:
+   ```bash
+   npm install
+   npm run init-db
+   npm start
+   ```
 
-See "PostgreSQL Migration Guide" section below for detailed steps.
-
-**Benefits**:
-- ✅ FREE and persistent
-- ✅ Better for production (concurrent access, reliability)
-- ✅ Automatic backups
-- ⚠️ Requires code changes
-
-**Important Notes (All Options):**
-- Free tier services sleep after 15 minutes of inactivity
-- First request after sleep may take 30-60 seconds
-- Sleeping does NOT affect database (if persistent)
-
-## PostgreSQL Migration Guide
-
-To use Render's free PostgreSQL database instead of SQLite:
-
-### Step 1: Create PostgreSQL Database in Render
-
-1. In Render Dashboard, click **"New +"** → **"PostgreSQL"**
-2. Name it (e.g., `annual-plan-review-db`)
-3. Select **Free** plan
-4. Click **"Create Database"**
-5. Copy the **Internal Database URL** (format: `postgresql://user:pass@host/db`)
-
-### Step 2: Update Backend Dependencies
-
-```bash
-cd backend
-npm install pg
-```
-
-Add to `backend/package.json`:
-```json
-"dependencies": {
-  "pg": "^8.11.3"
-}
-```
-
-### Step 3: Create PostgreSQL Database Service
-
-Create `backend/services/database-pg.js` (PostgreSQL version of database service).
-This requires modifying SQL queries to use PostgreSQL syntax instead of SQLite.
-
-**Key differences:**
-- SQLite: `INTEGER PRIMARY KEY AUTOINCREMENT`
-- PostgreSQL: `SERIAL PRIMARY KEY`
-- Date handling differs between SQLite and PostgreSQL
-
-### Step 4: Update Environment Variables
-
-In Render web service settings, add:
-- `DATABASE_URL`: (paste Internal Database URL from Step 1)
-- `USE_POSTGRESQL`: `true`
-
-### Step 5: Update server.js
-
-Modify `backend/server.js` to conditionally use PostgreSQL:
-```javascript
-const DatabaseService = process.env.USE_POSTGRESQL
-  ? require('./services/database-pg')
-  : require('./services/database');
-```
-
-### Step 6: Deploy
-
-Push changes to GitHub and Render will auto-deploy.
-
-**Note:** Full PostgreSQL migration requires significant code changes. For a quick start, consider using an ORM like Prisma or Sequelize that abstracts database differences.
+**Note**: Your production deployment uses PostgreSQL. Using PostgreSQL locally ensures development matches production.
 
 ## Environment-Specific Configuration
 
@@ -256,15 +226,17 @@ Common issues:
 
 ### Database Not Persisting
 
-**If on free tier:** This is expected - free tier does NOT support persistent disks.
-- Your options: Upgrade to paid plan OR use PostgreSQL (free)
+**PostgreSQL (default):** Data should persist automatically. If not:
+1. Check that the PostgreSQL database is running (Dashboard → Databases)
+2. Verify `DATABASE_URL` environment variable is set in web service
+3. Check build logs for database initialization errors
+4. Ensure `npm run init-db-pg` completed successfully
 
-**If on paid tier with disk:**
-1. Go to service settings
-2. Check **"Disks"** section
+**SQLite (paid tier only):**
+1. Verify you're on Starter plan or higher (free tier doesn't support disks)
+2. Check **"Disks"** section in service settings
 3. Verify mount path is `/opt/render/project/src/backend/db`
-4. Verify disk is attached and healthy
-5. Ensure render.yaml disk section is uncommented
+4. Ensure render.yaml disk section is uncommented
 
 ### CORS Errors
 
@@ -284,17 +256,22 @@ If Render shows "Service Unavailable":
 
 ### Free Tier Limitations
 
-Render free tier:
-- ❌ **NO persistent disk support** (database resets on deploy)
+Render free tier (Web Service):
 - Services sleep after 15 minutes of inactivity
+- First request after sleep: 30-60 seconds (cold start)
 - 750 hours/month of runtime
-- Slower cold starts (30-60 seconds)
 - No custom domains on free tier
 
-For production use, consider:
-- **Free PostgreSQL**: Free database with persistence (recommended)
-- **Starter Plan**: $7/month, includes persistent disk for SQLite
-- **Standard Plan**: $25/month, includes monitoring
+Render free tier (PostgreSQL):
+- 1 GB storage limit
+- Shared compute resources
+- Database inactive >90 days may be removed
+- ✅ **Data persists** across web service deploys/restarts
+
+For production at scale:
+- **Starter Plan** (Web): $7/month, no sleeping, faster performance
+- **Standard Plan** (Web): $25/month, includes monitoring, autoscaling
+- **Starter Plan** (DB): $7/month, 10 GB storage, dedicated resources
 
 ## Updating Your Deployment
 

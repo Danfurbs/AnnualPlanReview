@@ -10,9 +10,9 @@ module.exports = (db) => {
    * GET /api/baselines
    * Get all baselines
    */
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     try {
-      const baselines = db.getAllBaselines();
+      const baselines = await db.getAllBaselines();
 
       res.json({
         success: true,
@@ -31,10 +31,10 @@ module.exports = (db) => {
    * GET /api/baselines/:jobNumber
    * Get baseline for a specific job
    */
-  router.get('/:jobNumber', (req, res) => {
+  router.get('/:jobNumber', async (req, res) => {
     try {
       const { jobNumber } = req.params;
-      const value = db.getBaseline(jobNumber);
+      const value = await db.getBaseline(jobNumber);
 
       res.json({
         success: true,
@@ -54,7 +54,7 @@ module.exports = (db) => {
    * Save all baselines
    * Body: { jobNumber: totalValue, ... }
    */
-  router.post('/', (req, res) => {
+  router.post('/', async (req, res) => {
     try {
       const baselines = req.body;
 
@@ -65,7 +65,7 @@ module.exports = (db) => {
         });
       }
 
-      db.saveAllBaselines(baselines);
+      await db.saveAllBaselines(baselines);
 
       res.json({
         success: true,
@@ -86,7 +86,7 @@ module.exports = (db) => {
    * Save baseline for a specific job
    * Body: { value: number }
    */
-  router.post('/:jobNumber', (req, res) => {
+  router.post('/:jobNumber', async (req, res) => {
     try {
       const { jobNumber } = req.params;
       const { value } = req.body;
@@ -98,7 +98,7 @@ module.exports = (db) => {
         });
       }
 
-      db.saveBaseline(jobNumber, value);
+      await db.saveBaseline(jobNumber, value);
 
       res.json({
         success: true,
@@ -117,10 +117,10 @@ module.exports = (db) => {
    * DELETE /api/baselines/:jobNumber
    * Delete baseline for a specific job
    */
-  router.delete('/:jobNumber', (req, res) => {
+  router.delete('/:jobNumber', async (req, res) => {
     try {
       const { jobNumber } = req.params;
-      db.deleteBaseline(jobNumber);
+      await db.deleteBaseline(jobNumber);
 
       res.json({
         success: true,
