@@ -24,7 +24,10 @@ function createForecastEditorRow() {
 /**
  * Open the forecast editor page
  */
-function openForecastEditor() {
+/**
+ * Open the forecast editor page
+ */
+async function openForecastEditor() {
   console.log('openForecastEditor called');
 
   try {
@@ -38,7 +41,7 @@ function openForecastEditor() {
     if (forecastPage) forecastPage.classList.remove('is-hidden');
 
     console.log('  - Calling initializeForecastEditor...');
-    initializeForecastEditor();
+    await initializeForecastEditor();
     console.log('  - initializeForecastEditor completed');
   } catch (error) {
     console.error('Error in openForecastEditor:', error);
@@ -146,7 +149,7 @@ function hasActualUnsavedChanges() {
 /**
  * Initialize forecast editor (load data and render)
  */
-function initializeForecastEditor() {
+async function initializeForecastEditor() {
   console.log('initializeForecastEditor called');
 
   try {
@@ -160,9 +163,9 @@ function initializeForecastEditor() {
 
     console.log('  - Editor state:', window.forecastEditorState);
 
-    // Load forecast for this context
+    // Load forecast for this context (checks API if enabled)
     console.log('  - Loading forecast snapshot...');
-    const snapshot = getForecastSnapshot(window.forecastEditorState.year, window.forecastEditorState.planVersion);
+    const snapshot = await getForecastSnapshotAsync(window.forecastEditorState.year, window.forecastEditorState.planVersion);
     console.log('  - Snapshot:', snapshot);
 
     if (snapshot) {
@@ -735,7 +738,7 @@ async function clearForecastEditorTable() {
 /**
  * Handle context change (year, plan, work group)
  */
-function handleForecastEditorContextChange() {
+async function handleForecastEditorContextChange() {
   // CRITICAL: Sync current state before switching contexts to prevent data loss
   syncForecastEditorTableState();
 
@@ -754,9 +757,9 @@ function handleForecastEditorContextChange() {
   window.forecastEditorState.planVersion = newPlan;
   window.forecastEditorState.workGroup = newWorkGroup;
 
-  // Reload forecast data if year/plan changed
+  // Reload forecast data if year/plan changed (checks API if enabled)
   if (contextChanged) {
-    const snapshot = getForecastSnapshot(window.forecastEditorState.year, window.forecastEditorState.planVersion);
+    const snapshot = await getForecastSnapshotAsync(window.forecastEditorState.year, window.forecastEditorState.planVersion);
     if (snapshot) {
       window.fData = snapshot.data;
     } else {
