@@ -308,10 +308,6 @@
             <button type="button" class="group-action-button" onclick="openCopyActualsModal()" id="copyActualsBtn">Copy from Work Done</button>
             <button type="button" class="primary-button" onclick="initializeV1FromV0Explicit()" id="initV1Btn" title="Copy all jobs from Plan v0 to Plan v1 (only works when editing Plan v1)">Initialize v1 from v0</button>
             <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear & Save</button>
-            <button type="button" class="group-action-button" onclick="downloadForecastEditorExport()">Export Forecast</button>
-            <button type="button" class="group-action-button" onclick="downloadExcelUploadFormat()">Export for Upload (Excel)</button>
-            <button type="button" class="group-action-button" onclick="triggerForecastFileUpload()">Import Forecast</button>
-            <input type="file" id="forecastFileInput" accept="application/json" class="is-hidden" onchange="loadForecastFile(event)">
           </div>
         </div>
         <div class="forecast-card">
@@ -711,6 +707,30 @@
             <li>Configure the same settings on all your PCs</li>
           </ol>
           <p class="helper-text"><strong>Important:</strong> All PCs must use the same backend URL to share forecasts.</p>
+        </div>
+
+        <div class="settings-section">
+          <h3>Data Management</h3>
+          <p class="helper-text">Import and export forecast data and comments.</p>
+
+          <div class="settings-data-actions">
+            <div class="data-action-group">
+              <h4>Forecast Data</h4>
+              <button class="secondary-button" onclick="downloadForecastEditorExport()">📥 Export Forecast JSON</button>
+              <button class="secondary-button" onclick="downloadExcelUploadFormat()">📊 Export Excel Template</button>
+              <button class="secondary-button" onclick="triggerForecastFileUpload()">📤 Import Forecast</button>
+              <input type="file" id="forecastFileInput" accept="application/json" class="is-hidden" onchange="loadForecastFile(event)">
+            </div>
+
+            <div class="data-action-group">
+              <h4>Comments</h4>
+              <button class="secondary-button" onclick="downloadComments()">📥 Export Comments</button>
+              <button class="secondary-button" onclick="triggerCommentFileUpload()">📤 Import Comments</button>
+              <input type="file" id="commentFileInput" accept="application/json" class="is-hidden" onchange="loadCommentFile(event)">
+            </div>
+          </div>
+
+          <p class="helper-text" style="margin-top: 16px;"><strong>Tip:</strong> Export data as backup or to transfer between systems.</p>
         </div>
       </div>
     </div>

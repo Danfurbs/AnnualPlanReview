@@ -73,11 +73,11 @@
 
       // Reload forecast data for new plan version
       fData = null;
-      const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+      const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
         fData = forecastCache.data;
         updateWorkGroupFilterOptions();
-        console.log(`✓ Switched to ${newPlanVersion}: Forecast cache restored`);
+        console.log(`✓ Switched to ${newPlanVersion}: Forecast loaded (${window.isApiEnabled() ? 'API' : 'local'})`);
       } else {
         const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
@@ -178,11 +178,11 @@
       updateReviewContextDisplay();
       updateContextControls();
       fData = null;
-      const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+      const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
         fData = forecastCache.data;
         updateWorkGroupFilterOptions();
-        console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+        console.log('✓ Forecast loaded', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '', window.isApiEnabled() ? '[API]' : '[local]');
       } else {
         const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
@@ -242,11 +242,11 @@
       updateReviewContextDisplay();
       updateContextControls();
       fData = null;
-      const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+      const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
         fData = forecastCache.data;
         updateWorkGroupFilterOptions();
-        console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+        console.log('✓ Forecast loaded', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '', window.isApiEnabled() ? '[API]' : '[local]');
       } else {
         const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
@@ -735,7 +735,7 @@
       }
     }
 
-    function init() {
+    async function init() {
       loadCommentStore();
       loadReviewStore();
       initializeForecastContext();  // Load forecast context from localStorage
@@ -775,24 +775,20 @@
       }
       if (currentFinancialYear && currentReviewStage) {
         currentPlanVersion = getPreferredPlanVersion(currentFinancialYear);
-        const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+        const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
         if (forecastCache) {
           fData = forecastCache.data;
           updateWorkGroupFilterOptions();
-          console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+          console.log('✓ Forecast loaded on init', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '', window.isApiEnabled() ? '[API]' : '[local]');
         } else {
-          // Load from GitHub or library asynchronously
-          loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion).then(libraryForecast => {
-            if (libraryForecast) {
-              fData = libraryForecast.data;
-              updateWorkGroupFilterOptions();
-              const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
-              console.log(`✓ Forecast loaded from ${source} on init`);
-              render(); // Re-render after async load
-            }
-          }).catch(err => {
-            console.warn('Failed to load forecast from library/GitHub:', err);
-          });
+          // Load from GitHub or library if not in storage/API
+          const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
+          if (libraryForecast) {
+            fData = libraryForecast.data;
+            updateWorkGroupFilterOptions();
+            const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
+            console.log(`✓ Forecast loaded from ${source} on init`);
+          }
         }
       }
       updateGroupFilterOptions();
@@ -1203,7 +1199,7 @@
           }
         });
         console.log('✓ Matched:', matched, 'of', rows.length);
-        saveForecastToStorage(fData, rows.length, selectedYear, selectedPlan);
+        await saveForecastToStorageAsync(fData, rows.length, selectedYear, selectedPlan);
         setReviewContext(currentReviewStage, selectedYear);
         closeModal();
       } catch(err) {

@@ -205,11 +205,11 @@ async function loadForecastForCurrentContextAsync() {
     return null;
   }
 
-  // Try localStorage first
-  const cached = loadForecastFromStorage(window.currentFinancialYear, window.currentPlanVersion);
+  // Try API/localStorage (API checked first if enabled)
+  const cached = await loadForecastFromStorageAsync(window.currentFinancialYear, window.currentPlanVersion);
   if (cached) {
     window.fData = cached.data;
-    console.log(`✓ Forecast loaded from storage: ${window.currentFinancialYear} ${window.currentPlanVersion} (${cached.savedAt || 'unknown date'})`);
+    console.log(`✓ Forecast loaded: ${window.currentFinancialYear} ${window.currentPlanVersion} (${cached.savedAt || 'unknown date'})`, window.isApiEnabled() ? '[API]' : '[local]');
     return cached;
   }
 
@@ -240,7 +240,7 @@ async function loadForecastForCurrentContextAsync() {
 /**
  * Save current forecast data
  */
-function saveCurrentForecast(rowCount) {
+async function saveCurrentForecast(rowCount) {
   if (!window.fData) {
     console.warn('No forecast data to save');
     return false;
@@ -251,7 +251,7 @@ function saveCurrentForecast(rowCount) {
     return false;
   }
 
-  return saveForecastToStorage(window.fData, rowCount, window.currentFinancialYear, window.currentPlanVersion);
+  return await saveForecastToStorageAsync(window.fData, rowCount, window.currentFinancialYear, window.currentPlanVersion);
 }
 
 /**

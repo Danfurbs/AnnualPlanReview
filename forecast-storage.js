@@ -365,14 +365,14 @@ function getForecastSnapshot(year, planVersion) {
 }
 
 /**
- * Get forecast data from storage, GitHub, or library (async version)
- * Priority: localStorage > GitHub > FORECAST_LIBRARY
+ * Get forecast data from storage/API, GitHub, or library (async version)
+ * Priority: API (if enabled) > localStorage > GitHub > FORECAST_LIBRARY
  */
 async function getForecastSnapshotAsync(year, planVersion) {
   if (!year || !planVersion) return null;
 
-  // Try localStorage first
-  const cached = loadForecastFromStorage(year, planVersion);
+  // Try API/localStorage (API checked first if enabled)
+  const cached = await loadForecastFromStorageAsync(year, planVersion);
   if (cached) return cached;
 
   // Try GitHub or library
