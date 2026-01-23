@@ -1,5 +1,9 @@
 services:
-  # Backend API Service
+  # Backend API Service (Free Tier)
+  # WARNING: Free tier does NOT support persistent disks
+  # Database will be reset on each deploy. For production use:
+  # - Upgrade to Starter plan ($7/mo) with disk support, OR
+  # - Use Render's free PostgreSQL database (see RENDER_DEPLOYMENT.md)
   - type: web
     name: annual-plan-review-backend
     env: node
@@ -17,10 +21,12 @@ services:
         value: ./db/apr.db
       - key: CORS_ORIGIN
         sync: false
-    disk:
-      name: sqlite-data
-      mountPath: /opt/render/project/src/backend/db
-      sizeGB: 1
+    # Disk configuration - ONLY available on paid plans (Starter or higher)
+    # Uncomment the section below if you upgrade to a paid plan:
+    # disk:
+    #   name: sqlite-data
+    #   mountPath: /opt/render/project/src/backend/db
+    #   sizeGB: 1
 
   # Static Site Service (Optional - for hosting the frontend separately)
   # Uncomment if you want to deploy frontend separately from backend
