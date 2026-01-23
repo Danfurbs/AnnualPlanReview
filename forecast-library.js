@@ -24,7 +24,7 @@
  * - Forecasts are FY-wide and persist across all RF stages (RF3, RF6, RF9, RF11)
  * - RF stages are review checkpoints, not separate forecast versions
  * - Use export/import to share forecasts between computers
- * - Plan v0 is the prior submission, v1 is the updated plan
+ * - Plan v0 and v1 are different forecast versions
  *
  * Example:
  * {
