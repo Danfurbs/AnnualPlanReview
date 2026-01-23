@@ -205,11 +205,11 @@ async function loadForecastForCurrentContextAsync() {
     return null;
   }
 
-  // Try localStorage first
-  const cached = loadForecastFromStorage(window.currentFinancialYear, window.currentPlanVersion);
+  // Try API/localStorage (API checked first if enabled)
+  const cached = await loadForecastFromStorageAsync(window.currentFinancialYear, window.currentPlanVersion);
   if (cached) {
     window.fData = cached.data;
-    console.log(`✓ Forecast loaded from storage: ${window.currentFinancialYear} ${window.currentPlanVersion} (${cached.savedAt || 'unknown date'})`);
+    console.log(`✓ Forecast loaded: ${window.currentFinancialYear} ${window.currentPlanVersion} (${cached.savedAt || 'unknown date'})`, window.isApiEnabled() ? '[API]' : '[local]');
     return cached;
   }
 

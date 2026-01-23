@@ -49,17 +49,12 @@ function openForecastEditor() {
 /**
  * Close the forecast editor page
  */
-function closeForecastEditor() {
-  // CRITICAL: Sync any unsaved changes before closing
+async function closeForecastEditor() {
+  // Sync DOM state to editor state
   syncForecastEditorTableState();
 
-  // Check if there are unsaved changes
-  const hasUnsavedChanges = window.forecastEditorState.rows.some(row => {
-    if (!row.jobNumber) return false;
-    const hasVolume = Object.values(row.volumes).some(v => v !== 0);
-    const hasComment = row.comment && row.comment.trim().length > 0;
-    return hasVolume || hasComment;
-  });
+  // Check if there are ACTUAL unsaved changes by comparing editor state to saved data
+  const hasUnsavedChanges = hasActualUnsavedChanges();
 
   if (hasUnsavedChanges) {
     const shouldSave = confirm(
@@ -68,7 +63,8 @@ function closeForecastEditor() {
     );
 
     if (shouldSave) {
-      handleForecastEditorSubmit();
+      // Wait for save to complete before closing
+      await handleForecastEditorSubmit();
     }
   }
 
@@ -78,8 +74,8 @@ function closeForecastEditor() {
   if (forecastPage) forecastPage.classList.add('is-hidden');
   if (dashboardPage) dashboardPage.classList.remove('is-hidden');
 
-  // Reload forecast data and refresh dashboard
-  const forecastCache = loadForecastFromStorage(window.currentFinancialYear, window.currentPlanVersion);
+  // Reload forecast data from API/storage and refresh dashboard
+  const forecastCache = await loadForecastFromStorageAsync(window.currentFinancialYear, window.currentPlanVersion);
   if (forecastCache) {
     window.fData = forecastCache.data;
   }
@@ -88,6 +84,63 @@ function closeForecastEditor() {
   if (typeof window.render === 'function') {
     window.render();
   }
+}
+
+/**
+ * Check if there are actual unsaved changes by comparing editor state to saved data
+ */
+function hasActualUnsavedChanges() {
+  if (!window.forecastEditorState.workGroup || !window.fData) {
+    return false;
+  }
+
+  const workGroup = window.forecastEditorState.workGroup;
+
+  // Get rows with data from editor state
+  const editorRows = window.forecastEditorState.rows.filter(row => {
+    if (!row.jobNumber) return false;
+    const hasVolume = Object.values(row.volumes).some(v => v !== 0);
+    const hasComment = row.comment && row.comment.trim().length > 0;
+    return hasVolume || hasComment;
+  });
+
+  // Compare each editor row against saved data
+  for (const row of editorRows) {
+    const savedJob = window.fData.get(row.jobNumber);
+    const savedWgData = savedJob?.wgs?.[workGroup];
+    const savedComment = savedJob?.comments?.[workGroup];
+
+    // Check volumes
+    for (const period of window.FORECAST_PERIODS) {
+      const editorValue = Number(row.volumes[period]) || 0;
+      const savedValue = Number(savedWgData?.[period]) || 0;
+      if (editorValue !== savedValue) {
+        return true; // Found a difference
+      }
+    }
+
+    // Check comments
+    const editorComment = (row.comment || '').trim();
+    const savedCommentText = (savedComment || '').trim();
+    if (editorComment !== savedCommentText) {
+      return true; // Comment differs
+    }
+  }
+
+  // Check if any saved jobs for this work group are missing from editor (deletions)
+  if (window.fData) {
+    for (const [jobNumber, job] of window.fData.entries()) {
+      if (job.wgs && job.wgs[workGroup]) {
+        // This job exists in saved data for this work group
+        const inEditor = editorRows.some(row => row.jobNumber === jobNumber);
+        if (!inEditor) {
+          return true; // Job was deleted in editor
+        }
+      }
+    }
+  }
+
+  return false; // No changes detected
 }
 
 /**
@@ -748,8 +801,19 @@ async function handleForecastEditorSubmit(event) {
   // Clean up empty jobs
   window.fData = cleanForecastData(window.fData);
 
+  // Show saving indicator
+  const statusEl = document.getElementById('forecastEditorStatus');
+  if (statusEl) {
+    statusEl.textContent = '⏳ Saving forecast...';
+  }
+
   // Save to localStorage and API
   const saved = await saveForecastToStorageAsync(window.fData, window.fData.size, year, planVersion);
+
+  // Update API sync indicator
+  if (window.updateApiSyncIndicator) {
+    await window.updateApiSyncIndicator();
+  }
 
   if (saved) {
     // If saving v1, mark these jobs as explicitly edited (overrides)
