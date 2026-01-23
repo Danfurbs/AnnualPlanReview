@@ -1610,11 +1610,12 @@ async function applyMergeImport(uploadedForecasts, resolutions) {
 
   let importedCount = 0;
 
-  Object.entries(uploadedForecasts).forEach(([year, yearData]) => {
-    if (!yearData || typeof yearData !== 'object') return;
+  // Use for...of instead of forEach to support await
+  for (const [year, yearData] of Object.entries(uploadedForecasts)) {
+    if (!yearData || typeof yearData !== 'object') continue;
 
-    Object.entries(yearData).forEach(([planVersion, planData]) => {
-      if (!planData || typeof planData !== 'object') return;
+    for (const [planVersion, planData] of Object.entries(yearData)) {
+      if (!planData || typeof planData !== 'object') continue;
 
       // Handle old format (stage-nested)
       let dataToImport = null;
@@ -1628,7 +1629,7 @@ async function applyMergeImport(uploadedForecasts, resolutions) {
         dataToImport = planData.data;
       }
 
-      if (!dataToImport) return;
+      if (!dataToImport) continue;
 
       // Get current storage
       const currentSnapshot = getForecastSnapshot(year, planVersion);
@@ -1702,8 +1703,8 @@ async function applyMergeImport(uploadedForecasts, resolutions) {
       // Save the merged data (and API)
       await saveForecastToStorageAsync(currentData, currentData.size, year, planVersion);
       importedCount++;
-    });
-  });
+    }
+  }
 
   console.log(`✓ Merged ${importedCount} forecast(s)`);
 }
