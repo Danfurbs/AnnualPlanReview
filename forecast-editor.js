@@ -24,25 +24,15 @@ function createForecastEditorRow() {
 /**
  * Open the forecast editor page
  */
-/**
- * Open the forecast editor page
- */
 async function openForecastEditor() {
-  console.log('openForecastEditor called');
-
   try {
     const dashboardPage = document.getElementById('dashboardPage');
     const forecastPage = document.getElementById('forecastPage');
 
-    console.log('  - dashboardPage:', dashboardPage);
-    console.log('  - forecastPage:', forecastPage);
-
     if (dashboardPage) dashboardPage.classList.add('is-hidden');
     if (forecastPage) forecastPage.classList.remove('is-hidden');
 
-    console.log('  - Calling initializeForecastEditor...');
     await initializeForecastEditor();
-    console.log('  - initializeForecastEditor completed');
   } catch (error) {
     console.error('Error in openForecastEditor:', error);
     alert('Error opening forecast editor: ' + error.message);
@@ -150,36 +140,24 @@ function hasActualUnsavedChanges() {
  * Initialize forecast editor (load data and render)
  */
 async function initializeForecastEditor() {
-  console.log('initializeForecastEditor called');
-
   try {
     // Set initial context
-    console.log('  - Getting financial year options...');
     const yearOptions = getFinancialYearOptions();
-    console.log('  - Year options:', yearOptions);
 
     window.forecastEditorState.year = window.currentFinancialYear || yearOptions[0] || 'FY27';
     window.forecastEditorState.planVersion = window.currentPlanVersion || 'v0';
 
-    console.log('  - Editor state:', window.forecastEditorState);
-
     // Load forecast for this context (checks API if enabled)
-    console.log('  - Loading forecast snapshot...');
     const snapshot = await getForecastSnapshotAsync(window.forecastEditorState.year, window.forecastEditorState.planVersion);
-    console.log('  - Snapshot:', snapshot);
 
     if (snapshot) {
       window.fData = snapshot.data;
     }
 
     // Render selectors and table
-    console.log('  - Rendering selectors...');
     renderForecastEditorSelectors();
-    console.log('  - Rendering table...');
     renderForecastEditorTable();
-    console.log('  - Updating summary...');
     updateForecastEditorSummary();
-    console.log('  - Initialization complete');
   } catch (error) {
     console.error('Error in initializeForecastEditor:', error);
     throw error;
@@ -1376,7 +1354,6 @@ function handleMergeForecastImport(fileContent) {
       conflicts: []
     };
 
-    console.log('🔍 Starting conflict detection...');
 
     // Detect conflicts by comparing uploaded data with current storage
     Object.entries(forecasts).forEach(([year, yearData]) => {
@@ -1398,7 +1375,6 @@ function handleMergeForecastImport(fileContent) {
         }
 
         if (!dataToImport) {
-          console.log(`⚠️ No data to import for ${year} ${planVersion}`);
           return;
         }
 
@@ -1406,24 +1382,18 @@ function handleMergeForecastImport(fileContent) {
         const currentSnapshot = getForecastSnapshot(year, planVersion);
         const currentData = currentSnapshot ? serializeForecastData(currentSnapshot.data) : {};
 
-        console.log(`📊 Comparing ${year} ${planVersion}:`);
-        console.log(`  - Current jobs: ${Object.keys(currentData).length}`);
-        console.log(`  - Upload jobs: ${Object.keys(dataToImport).length}`);
 
         // Compare each job/workgroup/period
         Object.entries(dataToImport).forEach(([jobNumber, uploadedJob]) => {
           const currentJob = currentData[jobNumber];
 
           if (!uploadedJob || !uploadedJob.wgs) {
-            console.log(`  ⚠️ Job ${jobNumber}: No wgs in uploaded data`);
             return;
           }
 
           const uploadedWgNames = Object.keys(uploadedJob.wgs);
-          console.log(`  📋 Job ${jobNumber}: Checking ${uploadedWgNames.length} workgroup(s): ${uploadedWgNames.join(', ')}`);
 
           if (!currentJob) {
-            console.log(`  ℹ️ Job ${jobNumber}: Not in current data (will add)`);
             return;
           }
 
@@ -1434,12 +1404,9 @@ function handleMergeForecastImport(fileContent) {
 
             if (!currentWgData) {
               const currentWgNames = Object.keys(currentJob.wgs || {});
-              console.log(`  ℹ️ Job ${jobNumber} WG "${workGroup}": Not in current data`);
-              console.log(`     Current has: ${currentWgNames.join(', ') || 'none'}`);
               return;
             }
 
-            console.log(`  ✓ Job ${jobNumber} WG "${workGroup}": Found in both, comparing periods...`);
 
             let foundConflictInThisWg = false;
             window.FORECAST_PERIODS.forEach(period => {
@@ -1448,7 +1415,6 @@ function handleMergeForecastImport(fileContent) {
 
               // Conflict exists if both are non-zero and different
               if (uploadedValue !== 0 && currentValue !== 0 && uploadedValue !== currentValue) {
-                console.log(`    ⚠️ CONFLICT ${period}: current=${currentValue}, upload=${uploadedValue}`);
                 foundConflictInThisWg = true;
                 conflicts.push({
                   year,
@@ -1464,7 +1430,6 @@ function handleMergeForecastImport(fileContent) {
             });
 
             if (!foundConflictInThisWg) {
-              console.log(`    ✓ No conflicts in ${workGroup}`);
             }
           });
         });
@@ -1473,7 +1438,6 @@ function handleMergeForecastImport(fileContent) {
 
     window.importConflictData.conflicts = conflicts;
 
-    console.log(`✅ Conflict detection complete: ${conflicts.length} conflict(s) found`);
 
     if (conflicts.length === 0) {
       // No conflicts - proceed with merge
@@ -1966,11 +1930,6 @@ window.updateCopyActualsJobList = updateCopyActualsJobList;
 window.handleCopyActuals = handleCopyActuals;
 window.closeImportConflictsModal = closeImportConflictsModal;
 window.applyImportConflictResolution = applyImportConflictResolution;
-
-// Debug: Log that functions are loaded
-console.log('✓ Forecast editor functions loaded and exposed globally');
-console.log('  - openForecastEditor:', typeof window.openForecastEditor);
-console.log('  - closeForecastEditor:', typeof window.closeForecastEditor);
 
 // Event listener setup
 document.addEventListener('DOMContentLoaded', () => {
