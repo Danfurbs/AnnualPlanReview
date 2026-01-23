@@ -240,7 +240,7 @@ async function loadForecastForCurrentContextAsync() {
 /**
  * Save current forecast data
  */
-function saveCurrentForecast(rowCount) {
+async function saveCurrentForecast(rowCount) {
   if (!window.fData) {
     console.warn('No forecast data to save');
     return false;
@@ -251,7 +251,7 @@ function saveCurrentForecast(rowCount) {
     return false;
   }
 
-  return saveForecastToStorage(window.fData, rowCount, window.currentFinancialYear, window.currentPlanVersion);
+  return await saveForecastToStorageAsync(window.fData, rowCount, window.currentFinancialYear, window.currentPlanVersion);
 }
 
 /**

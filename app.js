@@ -1203,7 +1203,7 @@
           }
         });
         console.log('✓ Matched:', matched, 'of', rows.length);
-        saveForecastToStorage(fData, rows.length, selectedYear, selectedPlan);
+        await saveForecastToStorageAsync(fData, rows.length, selectedYear, selectedPlan);
         setReviewContext(currentReviewStage, selectedYear);
         closeModal();
       } catch(err) {

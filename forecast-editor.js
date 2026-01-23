@@ -508,7 +508,7 @@ function addForecastEditorRow() {
 /**
  * Initialize v1 from v0 (explicit copy for current work group only)
  */
-function initializeV1FromV0Explicit() {
+async function initializeV1FromV0Explicit() {
   // CRITICAL: Warn user about unsaved changes
   const hasUnsavedChanges = window.forecastEditorState.rows.some(row => {
     return row.jobNumber || row.comment || Object.values(row.volumes).some(v => v !== 0);
@@ -614,8 +614,8 @@ function initializeV1FromV0Explicit() {
     copiedCount++;
   });
 
-  // Save to v1 storage
-  saveForecastToStorage(v1Data, v1Data.size, year, 'v1');
+  // Save to v1 storage (and API)
+  await saveForecastToStorageAsync(v1Data, v1Data.size, year, 'v1');
 
   // Save updated overrides
   saveV1Overrides(year, v1Overrides);
@@ -639,7 +639,7 @@ function initializeV1FromV0Explicit() {
 /**
  * Clear forecast editor table
  */
-function clearForecastEditorTable() {
+async function clearForecastEditorTable() {
   if (!confirm('This will clear all forecast data for this work group and save it as blank. Continue?')) {
     return;
   }
@@ -666,8 +666,8 @@ function clearForecastEditorTable() {
     // Clean up empty jobs
     window.fData = cleanForecastData(window.fData);
 
-    // Save the cleared forecast
-    saveForecastToStorage(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
+    // Save the cleared forecast (and API)
+    await saveForecastToStorageAsync(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
   }
 
   // Refresh selectors to update checkmarks
@@ -720,7 +720,7 @@ function handleForecastEditorContextChange() {
 /**
  * Handle forecast editor form submit
  */
-function handleForecastEditorSubmit(event) {
+async function handleForecastEditorSubmit(event) {
   if (event) event.preventDefault();
 
   // Sync DOM state to editor state
@@ -748,8 +748,8 @@ function handleForecastEditorSubmit(event) {
   // Clean up empty jobs
   window.fData = cleanForecastData(window.fData);
 
-  // Save to localStorage
-  const saved = saveForecastToStorage(window.fData, window.fData.size, year, planVersion);
+  // Save to localStorage and API
+  const saved = await saveForecastToStorageAsync(window.fData, window.fData.size, year, planVersion);
 
   if (saved) {
     // If saving v1, mark these jobs as explicitly edited (overrides)
@@ -1035,7 +1035,7 @@ function handleForecastEditorTablePaste(event) {
 /**
  * Handle delete row
  */
-function handleForecastEditorDeleteRow(event) {
+async function handleForecastEditorDeleteRow(event) {
   const button = event.target;
   if (!button || !button.matches('[data-action="delete-row"]')) return;
 
@@ -1088,7 +1088,7 @@ function handleForecastEditorDeleteRow(event) {
 
   window.fData = updateForecastWorkGroup(window.fData, rowsToSave, window.forecastEditorState.workGroup);
   window.fData = cleanForecastData(window.fData);
-  saveForecastToStorage(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
+  await saveForecastToStorageAsync(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
 
   // If deleting from v1 and job had a number, mark it as explicitly deleted (override)
   // This prevents it from being inherited from v0
@@ -1503,7 +1503,7 @@ function closeImportConflictsModal() {
 /**
  * Apply import conflict resolution
  */
-function applyImportConflictResolution() {
+async function applyImportConflictResolution() {
   if (!window.importConflictData) return;
 
   const { uploadedForecasts, conflicts } = window.importConflictData;
@@ -1518,7 +1518,7 @@ function applyImportConflictResolution() {
   });
 
   // Apply the merge with conflict resolutions
-  applyMergeImport(uploadedForecasts, resolutions);
+  await applyMergeImport(uploadedForecasts, resolutions);
 
   // Close modal
   closeImportConflictsModal();
@@ -1533,7 +1533,7 @@ function applyImportConflictResolution() {
 /**
  * Apply merge import with conflict resolutions
  */
-function applyMergeImport(uploadedForecasts, resolutions) {
+async function applyMergeImport(uploadedForecasts, resolutions) {
   // Build resolution map for quick lookup
   const resolutionMap = {};
   resolutions.forEach(r => {
@@ -1632,8 +1632,8 @@ function applyMergeImport(uploadedForecasts, resolutions) {
         job.periods = totals;
       });
 
-      // Save the merged data
-      saveForecastToStorage(currentData, currentData.size, year, planVersion);
+      // Save the merged data (and API)
+      await saveForecastToStorageAsync(currentData, currentData.size, year, planVersion);
       importedCount++;
     });
   });
@@ -1768,7 +1768,7 @@ function updateCopyActualsPreview() {
 /**
  * Handle copy actuals form submission
  */
-function handleCopyActuals(event) {
+async function handleCopyActuals(event) {
   event.preventDefault();
 
   const period = document.getElementById('copyActualsPeriod')?.value;
@@ -1855,8 +1855,8 @@ function handleCopyActuals(event) {
     updatedCount++;
   });
 
-  // Save to storage
-  saveForecastToStorage(window.fData, window.fData.size, year, planVersion);
+  // Save to storage (and API)
+  await saveForecastToStorageAsync(window.fData, window.fData.size, year, planVersion);
 
   // If saving to v1, mark jobs as overrides
   if (planVersion === 'v1') {
