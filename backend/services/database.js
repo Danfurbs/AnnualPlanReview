@@ -5,10 +5,21 @@
 
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 
 class DatabaseService {
   constructor() {
-    const dbPath = path.join(__dirname, '..', 'db', 'apr.db');
+    // Support environment variable for database path
+    const dbPath = process.env.DATABASE_PATH
+      ? path.resolve(process.env.DATABASE_PATH)
+      : path.join(__dirname, '..', 'db', 'apr.db');
+
+    // Ensure database directory exists
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+
     this.db = new Database(dbPath);
     this.db.pragma('foreign_keys = ON');
 

@@ -3,6 +3,9 @@
  * Express server with SQLite database for forecasts, baselines, and comments
  */
 
+// Load environment variables
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -13,15 +16,22 @@ const DatabaseService = require('./services/database');
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
 // Initialize database service
 const db = new DatabaseService();
 
 // Middleware
-app.use(cors()); // Enable CORS for all routes
+const corsOptions = {
+  origin: CORS_ORIGIN,
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions)); // Enable CORS for all routes
 app.use(bodyParser.json({ limit: '50mb' })); // Parse JSON bodies (increased limit for bulk data)
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
-app.use(morgan('dev')); // HTTP request logging
+app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev')); // HTTP request logging
 
 // Serve static files from parent directory (frontend)
 app.use(express.static(path.join(__dirname, '..')));
@@ -31,6 +41,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     success: true,
     message: 'API is running',
+    environment: NODE_ENV,
     timestamp: new Date().toISOString()
   });
 });
@@ -66,13 +77,15 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n========================================`);
   console.log(`Annual Plan Review Backend Server`);
   console.log(`========================================`);
+  console.log(`Environment: ${NODE_ENV}`);
   console.log(`Server running on: http://localhost:${PORT}`);
   console.log(`API endpoints available at: http://localhost:${PORT}/api`);
   console.log(`Health check: http://localhost:${PORT}/api/health`);
+  console.log(`CORS origin: ${CORS_ORIGIN}`);
   console.log(`========================================\n`);
 });
 
