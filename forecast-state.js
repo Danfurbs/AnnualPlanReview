@@ -130,6 +130,16 @@ function getForecastAvailability(year) {
 }
 
 /**
+ * Get forecast availability for a year (async version with GitHub support)
+ */
+async function getForecastAvailabilityAsync(year) {
+  return {
+    v1: Boolean(await getForecastSnapshotAsync(year, 'v1')),
+    v0: Boolean(await getForecastSnapshotAsync(year, 'v0'))
+  };
+}
+
+/**
  * Get preferred plan version based on availability
  * Preference order: v1 > v0 > current
  */
@@ -166,6 +176,49 @@ function loadForecastForCurrentContext() {
   if (library) {
     window.fData = library.data;
     console.log(`✓ Forecast loaded from library: ${window.currentFinancialYear} ${window.currentPlanVersion}`);
+    return library;
+  }
+
+  // Auto-initialize v1 from v0 if needed
+  if (window.currentPlanVersion === 'v1') {
+    const initialized = initializeV1FromV0(window.currentFinancialYear);
+    if (initialized) {
+      window.fData = initialized.data;
+      return initialized;
+    }
+  }
+
+  // No forecast available
+  window.fData = null;
+  console.log(`No forecast available for ${window.currentFinancialYear} ${window.currentPlanVersion}`);
+  return null;
+}
+
+/**
+ * Load forecast for current context (async version with GitHub support)
+ * Tries: localStorage > GitHub > library > initialize v1 from v0
+ */
+async function loadForecastForCurrentContextAsync() {
+  if (!window.currentFinancialYear || !window.currentPlanVersion) {
+    console.warn('Cannot load forecast: missing year or plan version');
+    window.fData = null;
+    return null;
+  }
+
+  // Try localStorage first
+  const cached = loadForecastFromStorage(window.currentFinancialYear, window.currentPlanVersion);
+  if (cached) {
+    window.fData = cached.data;
+    console.log(`✓ Forecast loaded from storage: ${window.currentFinancialYear} ${window.currentPlanVersion} (${cached.savedAt || 'unknown date'})`);
+    return cached;
+  }
+
+  // Try GitHub or library
+  const library = await loadForecastFromLibraryAsync(window.currentFinancialYear, window.currentPlanVersion);
+  if (library) {
+    window.fData = library.data;
+    const source = library.source === 'github' ? 'GitHub' : 'library';
+    console.log(`✓ Forecast loaded from ${source}: ${window.currentFinancialYear} ${window.currentPlanVersion}`);
     return library;
   }
 
@@ -310,8 +363,10 @@ window.setForecastContext = setForecastContext;
 window.getCurrentContext = getCurrentContext;
 window.getFinancialYearOptions = getFinancialYearOptions;
 window.getForecastAvailability = getForecastAvailability;
+window.getForecastAvailabilityAsync = getForecastAvailabilityAsync;
 window.getPreferredPlanVersion = getPreferredPlanVersion;
 window.loadForecastForCurrentContext = loadForecastForCurrentContext;
+window.loadForecastForCurrentContextAsync = loadForecastForCurrentContextAsync;
 window.saveCurrentForecast = saveCurrentForecast;
 window.getAllWorkGroupSetNames = getAllWorkGroupSetNames;
 window.getJobNumbersForWorkGroupSet = getJobNumbersForWorkGroupSet;

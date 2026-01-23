@@ -28,3 +28,20 @@ window.forecastEditorState = {
   workGroup: '',
   rows: []
 };
+
+// GitHub forecast library configuration (Option A: Semi-Automatic)
+// To enable GitHub-based forecast sharing:
+// 1. Export your forecasts from Computer A
+// 2. Commit the JSON files to GitHub (e.g., in a 'forecasts/' folder)
+// 3. Configure the URLs below to point to the raw GitHub URLs
+// Example: 'https://raw.githubusercontent.com/yourrepo/main/forecasts/FY27-v0.json'
+window.GITHUB_FORECAST_URLS = {
+  // FY27: {
+  //   v0: 'https://raw.githubusercontent.com/yourrepo/main/forecasts/FY27-v0.json',
+  //   v1: 'https://raw.githubusercontent.com/yourrepo/main/forecasts/FY27-v1.json'
+  // },
+  // FY28: {
+  //   v0: 'https://raw.githubusercontent.com/yourrepo/main/forecasts/FY28-v0.json',
+  //   v1: 'https://raw.githubusercontent.com/yourrepo/main/forecasts/FY28-v1.json'
+  // }
+};

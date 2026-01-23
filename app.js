@@ -60,7 +60,7 @@
     // Expose globally for HTML onclick handler
     window.handleBreakdownPlanVersionChange = handleBreakdownPlanVersionChange;
 
-    function handleDashboardPlanVersionChange() {
+    async function handleDashboardPlanVersionChange() {
       const select = document.getElementById('dashboardPlanVersion');
       if (!select) return;
 
@@ -79,11 +79,12 @@
         updateWorkGroupFilterOptions();
         console.log(`✓ Switched to ${newPlanVersion}: Forecast cache restored`);
       } else {
-        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+        const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
           fData = libraryForecast.data;
           updateWorkGroupFilterOptions();
-          console.log(`✓ Switched to ${newPlanVersion}: Library forecast loaded`);
+          const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
+          console.log(`✓ Switched to ${newPlanVersion}: ${source} forecast loaded`);
         } else if (currentPlanVersion === 'v1') {
           // Try to initialize v1 from v0
           const initialized = initializeV1FromV0(currentFinancialYear);
@@ -113,6 +114,26 @@
       }
     }
 
+    async function loadCommentStoreAsync() {
+      // Try API first if enabled
+      if (window.isApiEnabled && window.isApiEnabled() && window.loadJobCommentsFromApi) {
+        try {
+          const apiData = await window.loadJobCommentsFromApi();
+          if (apiData) {
+            commentStore = apiData;
+            // Cache in localStorage for offline access
+            localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
+            return;
+          }
+        } catch (err) {
+          console.warn('Failed to load comments from API, falling back to localStorage:', err);
+        }
+      }
+
+      // Fall back to localStorage
+      loadCommentStore();
+    }
+
     function loadReviewStore() {
       try {
         const raw = localStorage.getItem(REVIEW_STORAGE_KEY);
@@ -139,7 +160,7 @@
       }
     }
 
-    function setReviewContext(stage, year, { persist = true } = {}) {
+    async function setReviewContext(stage, year, { persist = true } = {}) {
       if (!REVIEW_STAGES.includes(stage)) return;
       currentReviewStage = stage;
       currentFinancialYear = year || currentFinancialYear;
@@ -163,10 +184,12 @@
         updateWorkGroupFilterOptions();
         console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
       } else {
-        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+        const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
           fData = libraryForecast.data;
           updateWorkGroupFilterOptions();
+          const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
+          console.log(`✓ Forecast loaded from ${source}`);
         }
       }
       closeStageModal();
@@ -200,7 +223,7 @@
       return String(value || '').trim();
     }
 
-    function setForecastContext(stage, year, planVersion, { persist = true } = {}) {
+    async function setForecastContext(stage, year, planVersion, { persist = true } = {}) {
       if (!REVIEW_STAGES.includes(stage)) return;
       if (planVersion && !PLAN_VERSIONS.some(plan => plan.id === planVersion)) return;
       currentReviewStage = stage;
@@ -225,10 +248,12 @@
         updateWorkGroupFilterOptions();
         console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
       } else {
-        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+        const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
           fData = libraryForecast.data;
           updateWorkGroupFilterOptions();
+          const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
+          console.log(`✓ Forecast loaded from ${source}`);
         } else if (currentPlanVersion === 'v1') {
           const initialized = initializeV1FromV0(currentFinancialYear);
           if (initialized) {
@@ -307,6 +332,20 @@
     // - forecast-editor.js: All forecast editor UI and interaction functions
     function saveCommentStore() {
       localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
+    }
+
+    async function saveCommentStoreAsync() {
+      // Save to localStorage first (always)
+      saveCommentStore();
+
+      // Also save to API if enabled
+      if (window.isApiEnabled && window.isApiEnabled() && window.saveCommentsToApi) {
+        try {
+          await window.saveCommentsToApi(commentStore);
+        } catch (err) {
+          console.warn('Failed to save comments to API (data saved locally):', err);
+        }
+      }
     }
 
     function loadWorkOrderAmendments() {
@@ -664,21 +703,36 @@
       const trimmed = value.trim();
       if (!trimmed) return;
       if (!commentStore[jobNumber]) commentStore[jobNumber] = [];
-      commentStore[jobNumber].unshift({
+      const newComment = {
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         category,
         text: trimmed,
         timestamp: new Date().toISOString(),
         fy: currentFinancialYear,
         rf: currentReviewStage
-      });
+      };
+      commentStore[jobNumber].unshift(newComment);
+
+      // Save to both localStorage and API
       saveCommentStore();
+      if (window.isApiEnabled && window.isApiEnabled() && window.saveCommentToApi) {
+        window.saveCommentToApi({ ...newComment, jobNumber }).catch(err => {
+          console.warn('Failed to save comment to API (saved locally):', err);
+        });
+      }
     }
 
     function deleteJobComment(jobNumber, id) {
       if (!commentStore[jobNumber]) return;
       commentStore[jobNumber] = commentStore[jobNumber].filter(entry => entry.id !== id);
       saveCommentStore();
+
+      // Delete from API if enabled
+      if (window.isApiEnabled && window.isApiEnabled() && window.deleteCommentFromApi) {
+        window.deleteCommentFromApi(id).catch(err => {
+          console.warn('Failed to delete comment from API (deleted locally):', err);
+        });
+      }
     }
 
     function init() {
@@ -727,11 +781,18 @@
           updateWorkGroupFilterOptions();
           console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
         } else {
-          const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
-          if (libraryForecast) {
-            fData = libraryForecast.data;
-            updateWorkGroupFilterOptions();
-          }
+          // Load from GitHub or library asynchronously
+          loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion).then(libraryForecast => {
+            if (libraryForecast) {
+              fData = libraryForecast.data;
+              updateWorkGroupFilterOptions();
+              const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
+              console.log(`✓ Forecast loaded from ${source} on init`);
+              render(); // Re-render after async load
+            }
+          }).catch(err => {
+            console.warn('Failed to load forecast from library/GitHub:', err);
+          });
         }
       }
       updateGroupFilterOptions();
