@@ -884,116 +884,146 @@ async function handleForecastEditorContextChange() {
 async function handleForecastEditorSubmit(event) {
   if (event) event.preventDefault();
 
-  // Sync DOM state to fData
-  syncForecastEditorTableState();
+  try {
+    // Sync DOM state to fData
+    syncForecastEditorTableState();
 
-  // Clean up empty jobs
-  window.fData = cleanForecastData(window.fData);
+    // Clean up empty jobs
+    window.fData = cleanForecastData(window.fData);
 
-  const year = window.forecastEditorState.year;
-  const planVersion = window.forecastEditorState.planVersion;
-  const workGroup = window.forecastEditorState.workGroup;
+    const year = window.forecastEditorState.year;
+    const planVersion = window.forecastEditorState.planVersion;
+    const workGroup = window.forecastEditorState.workGroup;
 
-  // Count jobs with data for this work group
-  let jobCount = 0;
-  const jobNumbers = [];
-  window.fData.forEach((job, jobNumber) => {
-    const wgData = job.wgs?.[workGroup];
-    const hasVolume = wgData && window.FORECAST_PERIODS.some(p => Number(wgData[p] || 0) !== 0);
-    const hasComment = job.comments?.[workGroup]?.trim().length > 0;
-    if (hasVolume || hasComment) {
-      jobCount++;
-      jobNumbers.push(jobNumber);
-    }
-  });
-
-  // Show saving indicator
-  const statusEl = document.getElementById('forecastEditorStatus');
-  if (statusEl) {
-    statusEl.textContent = '⏳ Saving forecast...';
-  }
-
-  // Save to localStorage and API
-  const saved = await saveForecastToStorageAsync(window.fData, window.fData.size, year, planVersion);
-
-  // Update API sync indicator
-  if (window.updateApiSyncIndicator) {
-    await window.updateApiSyncIndicator();
-  }
-
-  if (saved) {
-    // If saving v1, mark these jobs as explicitly edited (overrides)
-    if (planVersion === 'v1' && jobNumbers.length > 0) {
-      addToV1Overrides(year, jobNumbers);
+    if (!year || !planVersion || !workGroup) {
+      alert('Missing year, plan version, or work group. Cannot save.');
+      return;
     }
 
-    // Refresh work group selector to update checkmarks
-    renderForecastEditorSelectors();
+    // Count jobs with data for this work group
+    let jobCount = 0;
+    const jobNumbers = [];
+    window.fData.forEach((job, jobNumber) => {
+      const wgData = job.wgs?.[workGroup];
+      const hasVolume = wgData && window.FORECAST_PERIODS.some(p => Number(wgData[p] || 0) !== 0);
+      const hasComment = job.comments?.[workGroup]?.trim().length > 0;
+      if (hasVolume || hasComment) {
+        jobCount++;
+        jobNumbers.push(jobNumber);
+      }
+    });
 
+    // Show saving indicator
+    const statusEl = document.getElementById('forecastEditorStatus');
     if (statusEl) {
-      const message = jobCount
-        ? `✓ Saved ${jobCount} jobs for ${workGroup} at ${new Date().toLocaleTimeString()}`
-        : `✓ Saved blank forecast for ${workGroup} at ${new Date().toLocaleTimeString()}`;
-      statusEl.textContent = message;
+      statusEl.textContent = '⏳ Saving forecast...';
     }
-    console.log(`✓ Forecast saved: ${year} ${planVersion} (${jobCount} jobs)`);
-  } else {
-    alert('Failed to save forecast. Check console for details.');
+
+    // Save to localStorage and API
+    const saved = await saveForecastToStorageAsync(window.fData, window.fData.size, year, planVersion);
+
+    // Update API sync indicator
+    if (window.updateApiSyncIndicator) {
+      await window.updateApiSyncIndicator();
+    }
+
+    if (saved) {
+      // If saving v1, mark these jobs as explicitly edited (overrides)
+      if (planVersion === 'v1' && jobNumbers.length > 0) {
+        addToV1Overrides(year, jobNumbers);
+      }
+
+      // Refresh work group selector to update checkmarks
+      renderForecastEditorSelectors();
+
+      if (statusEl) {
+        const message = jobCount
+          ? `✓ Saved ${jobCount} jobs for ${workGroup} at ${new Date().toLocaleTimeString()}`
+          : `✓ Saved blank forecast for ${workGroup} at ${new Date().toLocaleTimeString()}`;
+        statusEl.textContent = message;
+      }
+
+      // Show success toast
+      if (window.Toast) {
+        window.Toast.success(`Saved ${jobCount} job${jobCount !== 1 ? 's' : ''} for ${workGroup}`);
+      }
+
+      console.log(`✓ Forecast saved: ${year} ${planVersion} (${jobCount} jobs)`);
+    } else {
+      if (statusEl) {
+        statusEl.textContent = '⚠️ Failed to save forecast';
+      }
+      alert('Failed to save forecast. Check console for details.');
+    }
+  } catch (error) {
+    console.error('Error saving forecast:', error);
+    const statusEl = document.getElementById('forecastEditorStatus');
+    if (statusEl) {
+      statusEl.textContent = `⚠️ Error: ${error.message}`;
+    }
+    alert(`Error saving forecast: ${error.message}`);
   }
 }
 
 /**
- * Sync DOM table state to editor state
+ * Sync DOM table state to fData
+ * Performance optimized: only syncs rows with data
  */
 function syncForecastEditorTableState() {
   const workGroup = window.forecastEditorState.workGroup;
   if (!workGroup) return;
 
-  // Sync all job rows from DOM to fData
-  document.querySelectorAll('#forecastEditorTable tbody tr.discipline-job-row').forEach((rowEl) => {
+  // Only sync rows that have forecast data (much faster than all 600+ rows)
+  const rowsWithData = document.querySelectorAll('#forecastEditorTable tbody tr.discipline-job-row.has-forecast-data');
+
+  rowsWithData.forEach((rowEl) => {
     const jobNumber = rowEl.dataset.job;
     if (!jobNumber) return;
 
     // Collect volumes from input fields
     const volumes = {};
-    let hasAnyVolume = false;
     rowEl.querySelectorAll('input[data-period]').forEach(input => {
       const period = input.dataset.period;
       const value = parseFloat(input.value);
       const numericValue = Number.isFinite(value) ? value : 0;
       volumes[period] = numericValue;
-      if (numericValue !== 0) hasAnyVolume = true;
     });
 
     // Get comment
     const commentInput = rowEl.querySelector('.forecast-comment-input');
     const comment = String(commentInput?.value || '').trim();
 
-    // Update fData
-    if (hasAnyVolume || comment) {
-      // Ensure job exists in fData
-      if (!window.fData.has(jobNumber)) {
-        window.fData.set(jobNumber, {
-          periods: {},
-          wgs: {},
-          comments: {}
-        });
-      }
-
-      const job = window.fData.get(jobNumber);
-
-      // Ensure workgroup exists
-      if (!job.wgs[workGroup]) {
-        job.wgs[workGroup] = {};
-      }
-
-      // Update volumes
-      Object.assign(job.wgs[workGroup], volumes);
-
-      // Update comment
-      if (!job.comments) job.comments = {};
-      job.comments[workGroup] = comment;
+    // Ensure job exists in fData
+    if (!window.fData.has(jobNumber)) {
+      window.fData.set(jobNumber, {
+        periods: {},
+        wgs: {},
+        comments: {}
+      });
     }
+
+    const job = window.fData.get(jobNumber);
+
+    // Ensure workgroup exists
+    if (!job.wgs[workGroup]) {
+      job.wgs[workGroup] = {};
+    }
+
+    // Update volumes
+    Object.assign(job.wgs[workGroup], volumes);
+
+    // Update comment
+    if (!job.comments) job.comments = {};
+    job.comments[workGroup] = comment;
+
+    // Recalculate period totals for this job
+    const totals = {};
+    Object.values(job.wgs || {}).forEach(wgData => {
+      window.FORECAST_PERIODS.forEach(period => {
+        totals[period] = (totals[period] || 0) + (Number(wgData?.[period]) || 0);
+      });
+    });
+    job.periods = totals;
   });
 }
 

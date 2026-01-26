@@ -1484,14 +1484,6 @@
       const forecastSnapshot = getForecastSnapshot(year, planVersion);
       const forecastData = forecastSnapshot?.data || new Map();
 
-      // Debug: Log what we got
-        planVersion,
-        forecastSnapshot,
-        forecastDataSize: forecastData.size,
-        forecastDataKeys: Array.from(forecastData.keys()).slice(0, 5), // First 5 job numbers
-        sampleJob: forecastData.size > 0 ? forecastData.values().next().value : null
-      });
-
       // Get all standard jobs
       if (!window.STANDARD_JOBS || !window.STANDARD_JOBS.length) {
         alert('Standard jobs data not loaded.');
