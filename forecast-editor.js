@@ -170,9 +170,8 @@ async function initializeForecastEditor() {
 function renderForecastEditorSelectors() {
   const yearSelect = document.getElementById('forecastEditorYear');
   const planSelect = document.getElementById('forecastEditorPlan');
-  const workGroupSelect = document.getElementById('forecastEditorWorkGroup');
 
-  if (!yearSelect || !planSelect || !workGroupSelect) return;
+  if (!yearSelect || !planSelect) return;
 
   // Year selector
   const yearOptions = getFinancialYearOptions();
@@ -193,19 +192,10 @@ function renderForecastEditorSelectors() {
     : (window.currentPlanVersion || 'v0');
   planSelect.value = window.forecastEditorState.planVersion;
 
-  // Work group selector with indicators for groups that have data
-  const workGroupOptions = getAllWorkGroupSetNames();
-  workGroupSelect.innerHTML = workGroupOptions
-    .map(name => {
-      const hasData = workGroupHasForecastData(name);
-      const indicator = hasData ? '✓ ' : '';
-      return `<option value="${escapeHtml(name)}">${indicator}${escapeHtml(name)}</option>`;
-    })
-    .join('');
-  window.forecastEditorState.workGroup = workGroupOptions.includes(window.forecastEditorState.workGroup)
-    ? window.forecastEditorState.workGroup
-    : (workGroupOptions[0] || '');
-  workGroupSelect.value = window.forecastEditorState.workGroup;
+  // Render grouped work group selector
+  renderWorkGroupSelector();
+  updateCoverageSummary();
+  updateCurrentWorkGroupDisplay();
 
   // Load rows for current context
   loadForecastEditorRows();
@@ -213,41 +203,174 @@ function renderForecastEditorSelectors() {
 }
 
 /**
- * Check if a work group has any forecast data in current context
+ * Render the grouped work group selector list
  */
-function workGroupHasForecastData(workGroupName) {
-  if (!workGroupName) return false;
+function renderWorkGroupSelector(filter = 'all', searchText = '') {
+  const container = document.getElementById('workGroupSelectorList');
+  if (!container) return;
 
-  const year = window.forecastEditorState.year;
-  const planVersion = window.forecastEditorState.planVersion;
+  const statuses = getWorkGroupStatuses(
+    window.fData,
+    window.forecastEditorState.planVersion,
+    window.forecastEditorState.year
+  );
 
-  // For v1, check both v1 and inherited v0 data
-  if (planVersion === 'v1') {
-    const v0Snapshot = getForecastSnapshot(year, 'v0');
-    const v1Overrides = loadV1Overrides(year);
+  const disciplines = getSortedDisciplines();
+  const normalizedSearch = searchText.toLowerCase().trim();
 
-    // Check v0 for non-overridden jobs
-    if (v0Snapshot && v0Snapshot.data) {
-      let hasV0Data = false;
-      v0Snapshot.data.forEach((job, jobNumber) => {
-        if (!v1Overrides.has(jobNumber) && job?.wgs?.[workGroupName]) {
-          hasV0Data = true;
-        }
-      });
-      if (hasV0Data) return true;
-    }
-  }
+  let html = '';
 
-  // Check current fData (v0 or v1 explicit edits)
-  if (!window.fData) return false;
-  let hasData = false;
-  window.fData.forEach((job) => {
-    if (job?.wgs?.[workGroupName]) {
-      hasData = true;
-    }
+  disciplines.forEach(discipline => {
+    // Filter work groups by status and search
+    const filteredWorkGroups = discipline.workGroups.filter(wg => {
+      const status = statuses.get(wg.code);
+      const hasData = status?.hasData || false;
+
+      // Apply status filter
+      if (filter === 'with-data' && !hasData) return false;
+      if (filter === 'without-data' && hasData) return false;
+
+      // Apply search filter
+      if (normalizedSearch) {
+        const searchable = `${wg.code} ${wg.description} ${wg.shortName}`.toLowerCase();
+        if (!searchable.includes(normalizedSearch)) return false;
+      }
+
+      return true;
+    });
+
+    if (filteredWorkGroups.length === 0) return;
+
+    // Count stats for this discipline
+    const disciplineStats = filteredWorkGroups.reduce((acc, wg) => {
+      const status = statuses.get(wg.code);
+      if (status?.hasData) acc.done++;
+      else acc.todo++;
+      return acc;
+    }, { done: 0, todo: 0 });
+
+    html += `
+      <div class="wg-discipline-group" data-discipline="${escapeHtml(discipline.name)}">
+        <div class="wg-discipline-header">
+          <span class="wg-discipline-name">${escapeHtml(discipline.name)}</span>
+          <span class="wg-discipline-stats">
+            <span class="wg-disc-done">${disciplineStats.done}</span>/<span class="wg-disc-total">${filteredWorkGroups.length}</span>
+          </span>
+        </div>
+        <div class="wg-discipline-items">
+          ${filteredWorkGroups.map(wg => {
+            const status = statuses.get(wg.code);
+            const hasData = status?.hasData || false;
+            const isSelected = wg.code === window.forecastEditorState.workGroup;
+            return `
+              <button type="button"
+                      class="wg-item ${hasData ? 'wg-item--done' : 'wg-item--todo'} ${isSelected ? 'wg-item--selected' : ''}"
+                      data-wg-code="${escapeHtml(wg.code)}"
+                      title="${escapeHtml(wg.description)}${status?.jobCount ? ` (${status.jobCount} jobs)` : ''}">
+                <span class="wg-item-indicator"></span>
+                <span class="wg-item-name">${escapeHtml(wg.shortName)}</span>
+                ${status?.jobCount ? `<span class="wg-item-count">${status.jobCount}</span>` : ''}
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
   });
 
-  return hasData;
+  if (!html) {
+    html = '<div class="wg-empty">No work groups match your filter</div>';
+  }
+
+  container.innerHTML = html;
+
+  // Attach click handlers
+  container.querySelectorAll('.wg-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const wgCode = item.dataset.wgCode;
+      selectWorkGroup(wgCode);
+    });
+  });
+}
+
+/**
+ * Select a work group and load its data
+ */
+async function selectWorkGroup(wgCode) {
+  if (!wgCode) return;
+
+  // Sync current state first
+  syncForecastEditorTableState();
+
+  // Update state
+  window.forecastEditorState.workGroup = wgCode;
+
+  // Update UI
+  renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
+  updateCurrentWorkGroupDisplay();
+
+  // Load rows for new work group
+  loadForecastEditorRows();
+  renderForecastEditorTable();
+  updateForecastEditorSummary();
+}
+
+/**
+ * Update the coverage summary display
+ */
+function updateCoverageSummary() {
+  const summary = getForecastCoverageSummary(
+    window.fData,
+    window.forecastEditorState.planVersion,
+    window.forecastEditorState.year
+  );
+
+  const barFill = document.getElementById('coverageBarFill');
+  const withData = document.getElementById('coverageWithData');
+  const withoutData = document.getElementById('coverageWithoutData');
+
+  if (barFill) barFill.style.width = `${summary.percentage}%`;
+  if (withData) withData.textContent = summary.withData;
+  if (withoutData) withoutData.textContent = summary.withoutData;
+}
+
+/**
+ * Update the current work group display
+ */
+function updateCurrentWorkGroupDisplay() {
+  const container = document.getElementById('currentWorkGroupDisplay');
+  if (!container) return;
+
+  const wgCode = window.forecastEditorState.workGroup;
+  if (!wgCode) {
+    container.innerHTML = '<span class="current-wg-none">No work group selected</span>';
+    return;
+  }
+
+  const description = window.workGroupSets?.get(wgCode) || wgCode;
+  const { discipline } = extractDiscipline(description);
+
+  container.innerHTML = `
+    <span class="current-wg-code">${escapeHtml(wgCode)}</span>
+    <span class="current-wg-desc">${escapeHtml(description)}</span>
+    <span class="current-wg-discipline">${escapeHtml(discipline)}</span>
+  `;
+}
+
+/**
+ * Get current work group filter selection
+ */
+function getCurrentWorkGroupFilter() {
+  const activeTab = document.querySelector('.wg-filter-tab.active');
+  return activeTab?.dataset.filter || 'all';
+}
+
+/**
+ * Get current work group search text
+ */
+function getWorkGroupSearchText() {
+  const searchInput = document.getElementById('workGroupSearch');
+  return searchInput?.value || '';
 }
 
 /**
@@ -877,18 +1000,15 @@ async function handleForecastEditorContextChange() {
 
   const yearSelect = document.getElementById('forecastEditorYear');
   const planSelect = document.getElementById('forecastEditorPlan');
-  const workGroupSelect = document.getElementById('forecastEditorWorkGroup');
 
   const newYear = yearSelect?.value || window.forecastEditorState.year;
   const newPlan = planSelect?.value || window.forecastEditorState.planVersion;
-  const newWorkGroup = workGroupSelect?.value || window.forecastEditorState.workGroup;
 
   // Check if context changed
   const contextChanged = newYear !== window.forecastEditorState.year || newPlan !== window.forecastEditorState.planVersion;
 
   window.forecastEditorState.year = newYear;
   window.forecastEditorState.planVersion = newPlan;
-  window.forecastEditorState.workGroup = newWorkGroup;
 
   // Reload forecast data if year/plan changed (checks API if enabled)
   if (contextChanged) {
@@ -898,6 +1018,10 @@ async function handleForecastEditorContextChange() {
     } else {
       window.fData = null;
     }
+
+    // Re-render work group selector with updated statuses
+    renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
+    updateCoverageSummary();
   }
 
   // Reload rows and re-render
@@ -2297,15 +2421,31 @@ document.addEventListener('DOMContentLoaded', () => {
     forecastForm.addEventListener('submit', handleForecastEditorSubmit);
   }
 
-  // Context selector changes
+  // Context selector changes (year and plan only - work group uses click handlers)
   const yearSelect = document.getElementById('forecastEditorYear');
   const planSelect = document.getElementById('forecastEditorPlan');
-  const workGroupSelect = document.getElementById('forecastEditorWorkGroup');
   if (yearSelect) yearSelect.addEventListener('change', handleForecastEditorContextChange);
   if (planSelect) planSelect.addEventListener('change', handleForecastEditorContextChange);
-  if (workGroupSelect) workGroupSelect.addEventListener('change', handleForecastEditorContextChange);
 
-  // Search/filter with debouncing
+  // Work group filter tabs
+  document.querySelectorAll('.wg-filter-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.wg-filter-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      renderWorkGroupSelector(tab.dataset.filter, getWorkGroupSearchText());
+    });
+  });
+
+  // Work group search with debouncing
+  const wgSearchInput = document.getElementById('workGroupSearch');
+  if (wgSearchInput) {
+    const debouncedWgSearch = window.debounce(() => {
+      renderWorkGroupSelector(getCurrentWorkGroupFilter(), wgSearchInput.value);
+    }, 200);
+    wgSearchInput.addEventListener('input', debouncedWgSearch);
+  }
+
+  // Forecast table search/filter with debouncing
   const searchInput = document.getElementById('forecastEditorSearch');
   if (searchInput) {
     const debouncedFilter = window.debounce(filterForecastEditorTable, 300);
