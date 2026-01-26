@@ -2151,6 +2151,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (planSelect) planSelect.addEventListener('change', handleForecastEditorContextChange);
   if (workGroupSelect) workGroupSelect.addEventListener('change', handleForecastEditorContextChange);
 
+  // Search/filter with debouncing
+  const searchInput = document.getElementById('forecastEditorSearch');
+  if (searchInput) {
+    const debouncedFilter = window.debounce(filterForecastEditorTable, 300);
+    searchInput.addEventListener('input', debouncedFilter);
+  }
+
   // Table interactions (delegated)
   const forecastTable = document.getElementById('forecastEditorTable');
   if (forecastTable) {

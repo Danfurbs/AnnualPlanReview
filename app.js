@@ -801,15 +801,17 @@
       if (compareChangedOnly) {
         compareChangedOnly.addEventListener('change', renderForecastComparison);
       }
-      if (compareSearch) {
-        compareSearch.addEventListener('input', renderForecastComparison);
+      if (compareSearch && window.debounce) {
+        const debouncedCompare = window.debounce(renderForecastComparison, 300);
+        compareSearch.addEventListener('input', debouncedCompare);
       }
       const groupJobSearch = document.getElementById('groupJobSearch');
       const groupRollupInput = document.getElementById('groupRollup');
-      if (groupJobSearch) {
-        groupJobSearch.addEventListener('input', () => {
+      if (groupJobSearch && window.debounce) {
+        const debouncedRender = window.debounce(() => {
           renderGroupJobTable({ filterText: groupJobSearch.value });
-        });
+        }, 300);
+        groupJobSearch.addEventListener('input', debouncedRender);
       }
       if (groupRollupInput) groupRollupInput.addEventListener('change', updateGroupRollupHelp);
     }

@@ -327,7 +327,7 @@
             <p class="forecast-editor-meta" id="forecastEditorSummary"></p>
           </div>
           <div class="forecast-toolbar">
-            <input type="search" id="forecastEditorSearch" placeholder="Search job number..." oninput="filterForecastEditorTable()">
+            <input type="search" id="forecastEditorSearch" placeholder="Search job number...">
           </div>
         </div>
         <form id="forecastEditorForm" class="forecast-editor-form">
@@ -406,7 +406,7 @@
             <p class="helper-text">Set total prior submission values for each Standard Job</p>
           </div>
           <div class="forecast-toolbar">
-            <input type="search" id="baselineSearch" placeholder="Search job number or description..." oninput="filterBaselineTable()">
+            <input type="search" id="baselineSearch" placeholder="Search job number or description...">
           </div>
         </div>
         <div class="baseline-table-wrapper">
@@ -738,6 +738,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+  <!-- Utilities -->
+  <script src="utils.js"></script>
+  <script src="ui-feedback.js"></script>
+  <!-- Data -->
   <script src="work-group-sets-data.js"></script>
   <script src="standard-jobs-data.js"></script>
   <script src="forecast-library.js"></script>

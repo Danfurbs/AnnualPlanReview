@@ -365,4 +365,12 @@ function initializeBaselineTableListeners() {
     // Add paste listener
     tableBody.addEventListener('paste', handleBaselineTablePaste);
   }
+
+  // Search/filter with debouncing
+  const searchInput = document.getElementById('baselineSearch');
+  if (searchInput && window.debounce) {
+    const debouncedFilter = window.debounce(filterBaselineTable, 300);
+    searchInput.removeEventListener('input', debouncedFilter); // Clean up if re-initializing
+    searchInput.addEventListener('input', debouncedFilter);
+  }
 }
