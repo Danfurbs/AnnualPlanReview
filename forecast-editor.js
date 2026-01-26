@@ -341,119 +341,102 @@ function renderForecastEditorTable() {
   const baselineMap = getForecastEditorBaselineMap();
   const workGroup = window.forecastEditorState.workGroup;
 
-  // Build forecast data lookup for quick access
-  const forecastLookup = {};
-  window.forecastEditorState.rows.forEach(row => {
-    if (row.jobNumber) {
-      forecastLookup[row.jobNumber] = row;
-    }
-  });
-
-  // Group standard jobs by discipline
-  const jobsByDiscipline = {};
-  window.STANDARD_JOBS.forEach(job => {
-    const discipline = job.discipline || 'Other';
-    if (!jobsByDiscipline[discipline]) {
-      jobsByDiscipline[discipline] = [];
-    }
-    jobsByDiscipline[discipline].push(job);
-  });
-
-  // Sort disciplines alphabetically
-  const disciplines = Object.keys(jobsByDiscipline).sort();
+  // Get all rows from state (including empty rows for user input)
+  const forecastRows = window.forecastEditorState.rows;
 
   // Header
   const header = `
     <thead>
       <tr>
-        <th>Standard job</th>
+        <th>Standard Job</th>
         <th>Description</th>
         <th>Unit</th>
         ${window.FORECAST_PERIODS.map(period => `<th>${period}</th>`).join('')}
         <th>Total</th>
         <th>Comment</th>
-        <th></th>
+        <th>Actions</th>
       </tr>
     </thead>
   `;
 
-  // Body with discipline groups
-  const body = `
-    <tbody>
-      ${disciplines.map(discipline => {
-        const jobs = jobsByDiscipline[discipline];
-        const disciplineJobsWithData = jobs.filter(job => forecastLookup[job.standardJobNo]);
-        const totalJobs = jobs.length;
-        const jobsWithData = disciplineJobsWithData.length;
+  // Body with only forecasted jobs
+  let body = '';
+  if (forecastRows.length === 0) {
+    body = `
+      <tbody>
+        <tr class="forecast-empty-row">
+          <td colspan="${3 + window.FORECAST_PERIODS.length + 3}" style="text-align: center; padding: 40px; color: #64748b;">
+            <div style="margin-bottom: 12px;">No forecast entries yet for this work group.</div>
+            <div style="font-size: 12px;">Click "+ Add Row" to add a new forecast entry, or paste data from Excel.</div>
+          </td>
+        </tr>
+      </tbody>
+    `;
+  } else {
+    body = `
+      <tbody>
+        ${forecastRows.map((row, index) => {
+          const jobNumber = row.jobNumber;
+          const jobMeta = getJobMetadataByNumber(jobNumber);
+          const rowTotal = getForecastEditorRowTotal(row);
+          const comment = row.comment || '';
+          const hasData = hasRowData(row);
 
-        return `
-          <!-- Discipline Header Row -->
-          <tr class="discipline-header-row" data-discipline="${escapeHtml(discipline)}">
-            <td colspan="3" class="discipline-header-cell">
-              <button type="button" class="discipline-toggle" data-discipline="${escapeHtml(discipline)}">
-                <span class="discipline-toggle-icon">▼</span>
-                <span class="discipline-name">${escapeHtml(discipline)}</span>
-                <span class="discipline-stats">${jobsWithData}/${totalJobs} jobs</span>
-              </button>
-            </td>
-            <td colspan="${window.FORECAST_PERIODS.length + 3}" class="discipline-header-spacer"></td>
-          </tr>
-
-          <!-- Jobs in this discipline -->
-          ${jobs.map(job => {
-            const jobNumber = job.standardJobNo;
-            const forecastRow = forecastLookup[jobNumber];
-            const hasData = !!forecastRow;
-            const rowTotal = hasData ? getForecastEditorRowTotal(forecastRow) : 0;
-            const comment = forecastRow?.comment || '';
-
-            return `
-              <tr class="discipline-job-row ${hasData ? 'has-forecast-data' : ''}"
-                  data-discipline="${escapeHtml(discipline)}"
-                  data-job="${escapeHtml(jobNumber)}">
-                <td class="forecast-job-cell">
-                  <span class="forecast-job-indicator ${hasData ? 'has-data' : ''}"></span>
-                  <span class="forecast-job-number">${escapeHtml(jobNumber)}</span>
-                </td>
-                <td class="forecast-desc-cell">${escapeHtml(job.standardJobDescription || '')}</td>
-                <td class="forecast-unit-cell">${escapeHtml(job.unitOfMeasure || '')}</td>
-                ${window.FORECAST_PERIODS.map(period => {
-                  const value = forecastRow ? Number(forecastRow.volumes?.[period] || 0) : 0;
-                  const baselineValue = getBaselineValue(baselineMap, jobNumber, workGroup, period);
-                  const isChanged = baselineMap && jobNumber && value !== Number(baselineValue || 0);
-                  return `
-                    <td>
-                      <input
-                        type="number"
-                        step="0.01"
-                        class="forecast-period-input${isChanged ? ' is-changed' : ''}${value !== 0 ? ' has-value' : ''}"
-                        data-job="${escapeHtml(jobNumber)}"
-                        data-period="${period}"
-                        value="${value !== 0 ? value : ''}"
-                        placeholder="0"
-                      >
-                    </td>
-                  `;
-                }).join('')}
-                <td class="forecast-total-cell" data-role="row-total" data-job="${escapeHtml(jobNumber)}">${formatForecastNumber(rowTotal)}</td>
-                <td class="forecast-comment-cell">
-                  <textarea
-                    class="forecast-comment-input${comment ? ' has-value' : ''}"
-                    data-job="${escapeHtml(jobNumber)}"
-                    placeholder="Comment..."
-                    rows="1"
-                  >${escapeHtml(comment)}</textarea>
-                </td>
-                <td class="forecast-action-cell">
-                  ${hasData ? '<span class="forecast-status-icon">✓</span>' : ''}
-                </td>
-              </tr>
-            `;
-          }).join('')}
-        `;
-      }).join('')}
-    </tbody>
-  `;
+          return `
+            <tr class="discipline-job-row ${hasData ? 'has-forecast-data' : ''}"
+                data-job="${escapeHtml(jobNumber)}"
+                data-row-index="${index}">
+              <td class="forecast-job-cell">
+                <span class="forecast-job-indicator ${hasData ? 'has-data' : ''}"></span>
+                <input
+                  type="text"
+                  class="forecast-job-input"
+                  data-row-index="${index}"
+                  value="${escapeHtml(jobNumber)}"
+                  placeholder="Job number..."
+                  list="forecastEditorJobOptions"
+                >
+              </td>
+              <td class="forecast-desc-cell">${escapeHtml(jobMeta?.desc || row.description || '')}</td>
+              <td class="forecast-unit-cell">${escapeHtml(jobMeta?.unit || row.unit || '')}</td>
+              ${window.FORECAST_PERIODS.map(period => {
+                const value = Number(row.volumes?.[period] || 0);
+                const baselineValue = getBaselineValue(baselineMap, jobNumber, workGroup, period);
+                const isChanged = baselineMap && jobNumber && value !== Number(baselineValue || 0);
+                return `
+                  <td>
+                    <input
+                      type="number"
+                      step="0.01"
+                      class="forecast-period-input${isChanged ? ' is-changed' : ''}${value !== 0 ? ' has-value' : ''}"
+                      data-job="${escapeHtml(jobNumber)}"
+                      data-period="${period}"
+                      data-row-index="${index}"
+                      value="${value !== 0 ? value : ''}"
+                      placeholder="0"
+                    >
+                  </td>
+                `;
+              }).join('')}
+              <td class="forecast-total-cell" data-role="row-total" data-job="${escapeHtml(jobNumber)}">${formatForecastNumber(rowTotal)}</td>
+              <td class="forecast-comment-cell">
+                <textarea
+                  class="forecast-comment-input${comment ? ' has-value' : ''}"
+                  data-job="${escapeHtml(jobNumber)}"
+                  data-row-index="${index}"
+                  placeholder="Comment..."
+                  rows="1"
+                >${escapeHtml(comment)}</textarea>
+              </td>
+              <td class="forecast-action-cell">
+                <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}" title="Remove row">×</button>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    `;
+  }
 
   // Footer (totals)
   const totals = getForecastEditorTotals();
@@ -473,79 +456,124 @@ function renderForecastEditorTable() {
 
   table.innerHTML = `${header}${body}${footer}`;
 
-  // Attach discipline toggle handlers
-  attachDisciplineToggleHandlers();
+  // Attach event handlers
+  attachForecastTableHandlers();
 
   // Filter table if needed
   filterForecastEditorTable();
 }
 
 /**
- * Attach discipline toggle handlers
+ * Check if a row has any data (non-zero values or comment)
  */
-function attachDisciplineToggleHandlers() {
-  const toggleButtons = document.querySelectorAll('.discipline-toggle');
+function hasRowData(row) {
+  if (!row) return false;
 
-  toggleButtons.forEach(button => {
-    button.addEventListener('click', (e) => {
-      e.preventDefault();
-      const discipline = button.dataset.discipline;
-      toggleDiscipline(discipline);
-    });
-  });
-}
-
-/**
- * Toggle discipline group visibility
- */
-function toggleDiscipline(discipline) {
-  const jobRows = document.querySelectorAll(`.discipline-job-row[data-discipline="${discipline}"]`);
-  const toggleButton = document.querySelector(`.discipline-toggle[data-discipline="${discipline}"]`);
-  const icon = toggleButton?.querySelector('.discipline-toggle-icon');
-
-  if (!jobRows.length) return;
-
-  const isCollapsed = jobRows[0].classList.contains('collapsed');
-
-  jobRows.forEach(row => {
-    if (isCollapsed) {
-      row.classList.remove('collapsed');
-    } else {
-      row.classList.add('collapsed');
+  // Check for any non-zero period values
+  for (const period of window.FORECAST_PERIODS) {
+    if (Number(row.volumes?.[period] || 0) !== 0) {
+      return true;
     }
-  });
-
-  if (icon) {
-    icon.textContent = isCollapsed ? '▼' : '▶';
   }
+
+  // Check for comment
+  if (row.comment && row.comment.trim().length > 0) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
- * Collapse all disciplines
+ * Get job metadata by job number
  */
-function collapseAllDisciplines() {
-  const disciplines = Array.from(document.querySelectorAll('.discipline-toggle')).map(btn => btn.dataset.discipline);
-  disciplines.forEach(discipline => {
-    const jobRows = document.querySelectorAll(`.discipline-job-row[data-discipline="${discipline}"]`);
-    const icon = document.querySelector(`.discipline-toggle[data-discipline="${discipline}"] .discipline-toggle-icon`);
+function getJobMetadataByNumber(jobNumber) {
+  if (!jobNumber) return null;
 
-    jobRows.forEach(row => row.classList.add('collapsed'));
-    if (icon) icon.textContent = '▶';
-  });
+  // Try standard jobs map first
+  if (window.stdJobs && window.stdJobs.has(jobNumber)) {
+    return window.stdJobs.get(jobNumber);
+  }
+
+  // Try STANDARD_JOBS array
+  if (window.STANDARD_JOBS) {
+    const job = window.STANDARD_JOBS.find(j => j.standardJobNo === jobNumber);
+    if (job) {
+      return {
+        desc: job.standardJobDescription || '',
+        unit: job.unitOfMeasure || '',
+        disc: job.discipline || ''
+      };
+    }
+  }
+
+  return null;
 }
 
 /**
- * Expand all disciplines
+ * Attach event handlers to forecast table
  */
-function expandAllDisciplines() {
-  const disciplines = Array.from(document.querySelectorAll('.discipline-toggle')).map(btn => btn.dataset.discipline);
-  disciplines.forEach(discipline => {
-    const jobRows = document.querySelectorAll(`.discipline-job-row[data-discipline="${discipline}"]`);
-    const icon = document.querySelector(`.discipline-toggle[data-discipline="${discipline}"] .discipline-toggle-icon`);
+function attachForecastTableHandlers() {
+  const table = document.getElementById('forecastEditorTable');
+  if (!table) return;
 
-    jobRows.forEach(row => row.classList.remove('collapsed'));
-    if (icon) icon.textContent = '▼';
+  // Job number input change handlers
+  table.querySelectorAll('.forecast-job-input').forEach(input => {
+    input.addEventListener('change', handleJobNumberChange);
+    input.addEventListener('blur', handleJobNumberChange);
   });
+
+  // Note: Delete button handlers are handled via event delegation in the main event listener
+  // (handleForecastEditorDeleteRow listens for [data-action="delete-row"] clicks)
+}
+
+/**
+ * Handle job number input change
+ */
+function handleJobNumberChange(event) {
+  const input = event.target;
+  const rowIndex = parseInt(input.dataset.rowIndex, 10);
+  const newJobNumber = input.value.trim();
+
+  if (isNaN(rowIndex) || rowIndex < 0 || rowIndex >= window.forecastEditorState.rows.length) {
+    return;
+  }
+
+  const row = window.forecastEditorState.rows[rowIndex];
+  if (!row) return;
+
+  // Update job number in state
+  row.jobNumber = newJobNumber;
+
+  // Auto-fill description and unit from job metadata
+  const jobMeta = getJobMetadataByNumber(newJobNumber);
+  if (jobMeta) {
+    row.desc = jobMeta.desc || '';
+    row.unit = jobMeta.unit || '';
+  }
+
+  // Update the row display (description and unit cells)
+  const tableRow = document.querySelector(`tr[data-row-index="${rowIndex}"]`);
+  if (tableRow) {
+    const descCell = tableRow.querySelector('.forecast-desc-cell');
+    const unitCell = tableRow.querySelector('.forecast-unit-cell');
+    if (descCell) descCell.textContent = row.desc;
+    if (unitCell) unitCell.textContent = row.unit;
+
+    // Update data-job attribute on all inputs in the row
+    tableRow.dataset.job = newJobNumber;
+    tableRow.querySelectorAll('input[data-job], textarea[data-job]').forEach(el => {
+      el.dataset.job = newJobNumber;
+    });
+
+    // Update has-forecast-data class
+    if (hasRowData(row)) {
+      tableRow.classList.add('has-forecast-data');
+      tableRow.querySelector('.forecast-job-indicator')?.classList.add('has-data');
+    }
+  }
+
+  updateForecastEditorSummary();
 }
 
 /**
@@ -967,31 +995,60 @@ async function handleForecastEditorSubmit(event) {
 
 /**
  * Sync DOM table state to fData
- * Performance optimized: only syncs rows with data
+ * Syncs ALL rows that have any input values (not just rows marked with has-forecast-data class)
  */
 function syncForecastEditorTableState() {
   const workGroup = window.forecastEditorState.workGroup;
   if (!workGroup) return;
 
-  // Only sync rows that have forecast data (much faster than all 600+ rows)
-  const rowsWithData = document.querySelectorAll('#forecastEditorTable tbody tr.discipline-job-row.has-forecast-data');
+  // Ensure fData exists
+  if (!window.fData) {
+    window.fData = new Map();
+  }
 
-  rowsWithData.forEach((rowEl) => {
+  // Sync ALL job rows - check each row for actual input values
+  const allJobRows = document.querySelectorAll('#forecastEditorTable tbody tr.discipline-job-row');
+
+  allJobRows.forEach((rowEl) => {
     const jobNumber = rowEl.dataset.job;
     if (!jobNumber) return;
 
     // Collect volumes from input fields
     const volumes = {};
+    let hasAnyValue = false;
     rowEl.querySelectorAll('input[data-period]').forEach(input => {
       const period = input.dataset.period;
       const value = parseFloat(input.value);
       const numericValue = Number.isFinite(value) ? value : 0;
       volumes[period] = numericValue;
+      if (numericValue !== 0) {
+        hasAnyValue = true;
+      }
     });
 
     // Get comment
     const commentInput = rowEl.querySelector('.forecast-comment-input');
     const comment = String(commentInput?.value || '').trim();
+    if (comment.length > 0) {
+      hasAnyValue = true;
+    }
+
+    // Only process rows that have actual data
+    if (!hasAnyValue) {
+      // If this job existed in fData for this workgroup but now has no data, remove it
+      if (window.fData.has(jobNumber)) {
+        const job = window.fData.get(jobNumber);
+        if (job.wgs && job.wgs[workGroup]) {
+          delete job.wgs[workGroup];
+        }
+        if (job.comments && job.comments[workGroup]) {
+          delete job.comments[workGroup];
+        }
+      }
+      // Update visual state
+      rowEl.classList.remove('has-forecast-data');
+      return;
+    }
 
     // Ensure job exists in fData
     if (!window.fData.has(jobNumber)) {
@@ -1024,6 +1081,9 @@ function syncForecastEditorTableState() {
       });
     });
     job.periods = totals;
+
+    // Update visual state
+    rowEl.classList.add('has-forecast-data');
   });
 }
 
@@ -1042,8 +1102,7 @@ function handleForecastEditorTableInput(event) {
   if (!rowEl) return;
 
   const jobNumber = rowEl.dataset.job;
-  if (!jobNumber) return;
-
+  const rowIndex = parseInt(rowEl.dataset.rowIndex, 10);
   const workGroup = window.forecastEditorState.workGroup;
 
   // Handle period input
@@ -1052,34 +1111,57 @@ function handleForecastEditorTableInput(event) {
     const value = parseFloat(event.target.value);
     const numericValue = Number.isFinite(value) ? value : 0;
 
-    // Ensure job exists in fData
-    if (!window.fData.has(jobNumber)) {
-      window.fData.set(jobNumber, {
-        periods: {},
-        wgs: {},
-        comments: {}
-      });
+    // Update state rows first (used for rendering)
+    if (!isNaN(rowIndex) && rowIndex >= 0 && rowIndex < window.forecastEditorState.rows.length) {
+      const stateRow = window.forecastEditorState.rows[rowIndex];
+      if (stateRow && stateRow.volumes) {
+        stateRow.volumes[period] = numericValue;
+      }
     }
 
-    const job = window.fData.get(jobNumber);
+    // Also update fData if we have a valid job number
+    if (jobNumber) {
+      if (!window.fData) {
+        window.fData = new Map();
+      }
+      if (!window.fData.has(jobNumber)) {
+        window.fData.set(jobNumber, {
+          periods: {},
+          wgs: {},
+          comments: {}
+        });
+      }
 
-    // Ensure workgroup exists
-    if (!job.wgs[workGroup]) {
-      job.wgs[workGroup] = {};
+      const job = window.fData.get(jobNumber);
+
+      // Ensure workgroup exists
+      if (!job.wgs[workGroup]) {
+        job.wgs[workGroup] = {};
+      }
+
+      // Update value
+      job.wgs[workGroup][period] = numericValue;
     }
-
-    // Update value
-    job.wgs[workGroup][period] = numericValue;
 
     // Update visual indicators
     event.target.classList.toggle('has-value', numericValue !== 0);
-    rowEl.classList.toggle('has-forecast-data', hasAnyForecastData(jobNumber, workGroup));
+
+    // Check if row has any data
+    const hasData = jobNumber ? hasAnyForecastData(jobNumber, workGroup) : false;
+    rowEl.classList.toggle('has-forecast-data', hasData);
+
+    // Update indicator
+    const indicator = rowEl.querySelector('.forecast-job-indicator');
+    if (indicator) {
+      indicator.classList.toggle('has-data', hasData);
+    }
 
     // Update cell highlighting for baseline comparison
-    updateCellHighlight(jobNumber, period, event.target);
-
-    // Update row total
-    updateRowTotal(jobNumber);
+    if (jobNumber) {
+      updateCellHighlight(jobNumber, period, event.target);
+      // Update row total
+      updateRowTotal(jobNumber);
+    }
 
     // Update summary
     updateForecastEditorSummary();
@@ -1095,24 +1177,39 @@ function handleForecastEditorTableInput(event) {
   if (event.target.matches('textarea.forecast-comment-input')) {
     const comment = event.target.value.trim();
 
-    // Ensure job exists in fData
-    if (!window.fData.has(jobNumber)) {
-      window.fData.set(jobNumber, {
-        periods: {},
-        wgs: {},
-        comments: {}
-      });
+    // Update state rows first
+    if (!isNaN(rowIndex) && rowIndex >= 0 && rowIndex < window.forecastEditorState.rows.length) {
+      const stateRow = window.forecastEditorState.rows[rowIndex];
+      if (stateRow) {
+        stateRow.comment = comment;
+      }
     }
 
-    const job = window.fData.get(jobNumber);
+    // Also update fData if we have a valid job number
+    if (jobNumber) {
+      if (!window.fData) {
+        window.fData = new Map();
+      }
+      if (!window.fData.has(jobNumber)) {
+        window.fData.set(jobNumber, {
+          periods: {},
+          wgs: {},
+          comments: {}
+        });
+      }
 
-    // Update comment
-    if (!job.comments) job.comments = {};
-    job.comments[workGroup] = comment;
+      const job = window.fData.get(jobNumber);
+
+      // Update comment
+      if (!job.comments) job.comments = {};
+      job.comments[workGroup] = comment;
+    }
 
     // Update visual indicator
     event.target.classList.toggle('has-value', comment.length > 0);
-    rowEl.classList.toggle('has-forecast-data', hasAnyForecastData(jobNumber, workGroup));
+
+    const hasData = jobNumber ? hasAnyForecastData(jobNumber, workGroup) : (comment.length > 0);
+    rowEl.classList.toggle('has-forecast-data', hasData);
 
     // Save undo state after user stops typing (debounced)
     if (debouncedSaveUndoState) {

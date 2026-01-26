@@ -313,21 +313,26 @@
     .forecast-table tbody tr:nth-child(even) { background: #f8fafc; }
     .forecast-table tbody tr:hover { background: #edf2f7; }
 
-    /* Sticky columns for horizontal scrolling */
+    /* Sticky columns for horizontal scrolling - FIXED z-index layering */
     .forecast-table thead th:nth-child(1),
     .forecast-table tbody td:nth-child(1),
-    .forecast-table tfoot td:nth-child(1) { position: sticky; left: 0; z-index: 5; background: #f1f5f9; }
+    .forecast-table tfoot td:nth-child(1) { position: sticky; left: 0; z-index: 2; background: #f1f5f9; }
     .forecast-table thead th:nth-child(2),
     .forecast-table tbody td:nth-child(2),
-    .forecast-table tfoot td:nth-child(2) { position: sticky; left: 140px; z-index: 5; background: #f1f5f9; box-shadow: 2px 0 4px rgba(0,0,0,0.05); }
+    .forecast-table tfoot td:nth-child(2) { position: sticky; left: 140px; z-index: 2; background: #f1f5f9; box-shadow: 2px 0 4px rgba(0,0,0,0.05); }
     .forecast-table tbody tr:nth-child(even) td:nth-child(1),
     .forecast-table tbody tr:nth-child(even) td:nth-child(2) { background: #f8fafc; }
     .forecast-table tbody tr:hover td:nth-child(1),
     .forecast-table tbody tr:hover td:nth-child(2) { background: #edf2f7; }
+    /* Header cells need highest z-index for both vertical and horizontal sticky */
     .forecast-table thead th:nth-child(1),
-    .forecast-table thead th:nth-child(2) { z-index: 15; }
+    .forecast-table thead th:nth-child(2) { z-index: 20; }
+    /* Regular header cells (not sticky columns) still need z-index above body */
+    .forecast-table thead th { z-index: 10; }
     .forecast-table tfoot td:nth-child(1),
-    .forecast-table tfoot td:nth-child(2) { background: #f1f5f9; }
+    .forecast-table tfoot td:nth-child(2) { background: #f1f5f9; z-index: 2; }
+    /* Footer sticky at bottom */
+    .forecast-table tfoot td { position: sticky; bottom: 0; z-index: 5; }
     .forecast-table .forecast-job-input { width: 120px; }
     .forecast-table .forecast-period-input { width: 90px; text-align: right; }
     .forecast-table .forecast-period-input.is-changed { background: #dbeafe; border-color: #60a5fa; color: #1d4ed8; font-weight: 700; }
@@ -1041,12 +1046,35 @@
   background: #f0fdf4;
 }
 
+/* Sticky columns need explicit background for has-forecast-data rows */
+.discipline-job-row.has-forecast-data td:nth-child(1),
+.discipline-job-row.has-forecast-data td:nth-child(2) {
+  background: #f0fdf4;
+}
+
 .discipline-job-row:hover {
+  background: #fafafa;
+}
+
+.discipline-job-row:hover td:nth-child(1),
+.discipline-job-row:hover td:nth-child(2) {
   background: #fafafa;
 }
 
 .discipline-job-row.has-forecast-data:hover {
   background: #dcfce7;
+}
+
+.discipline-job-row.has-forecast-data:hover td:nth-child(1),
+.discipline-job-row.has-forecast-data:hover td:nth-child(2) {
+  background: #dcfce7;
+}
+
+/* Discipline header row sticky columns */
+.discipline-header-row td:nth-child(1),
+.discipline-header-row td:nth-child(2),
+.discipline-header-row td:nth-child(3) {
+  background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
 }
 
 /* Job Indicator */
