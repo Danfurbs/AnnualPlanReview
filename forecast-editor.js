@@ -800,6 +800,11 @@ async function clearForecastEditorTable() {
     return;
   }
 
+  // Save undo state before clearing
+  if (window.saveUndoState) {
+    window.saveUndoState(`Clear ${window.forecastEditorState.workGroup} forecast`);
+  }
+
   // Clear rows
   window.forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
 
@@ -995,6 +1000,13 @@ function syncForecastEditorTableState() {
 /**
  * Handle table input changes
  */
+// Debounced undo state saver (saves after user stops typing for 1 second)
+const debouncedSaveUndoState = window.debounce ? window.debounce(() => {
+  if (window.saveUndoState) {
+    window.saveUndoState();
+  }
+}, 1000) : null;
+
 function handleForecastEditorTableInput(event) {
   const rowEl = event.target.closest('tr');
   if (!rowEl) return;
@@ -1042,6 +1054,11 @@ function handleForecastEditorTableInput(event) {
     // Update summary
     updateForecastEditorSummary();
     updateForecastEditorTotalsDisplay();
+
+    // Save undo state after user stops typing (debounced)
+    if (debouncedSaveUndoState) {
+      debouncedSaveUndoState();
+    }
   }
 
   // Handle comment input
@@ -1066,6 +1083,11 @@ function handleForecastEditorTableInput(event) {
     // Update visual indicator
     event.target.classList.toggle('has-value', comment.length > 0);
     rowEl.classList.toggle('has-forecast-data', hasAnyForecastData(jobNumber, workGroup));
+
+    // Save undo state after user stops typing (debounced)
+    if (debouncedSaveUndoState) {
+      debouncedSaveUndoState();
+    }
   }
 }
 
@@ -1178,6 +1200,11 @@ function handleForecastEditorTablePaste(event) {
   if (!rows.length) return;
 
   const parsed = rows.map(row => row.split('\t'));
+
+  // Save undo state before pasting data
+  if (window.saveUndoState && parsed.length > 1) {
+    window.saveUndoState('Paste data');
+  }
 
   // Special handling for comment column - allow single value paste to preserve default textarea behavior
   if (target.matches('.forecast-comment-input') && parsed.length === 1 && parsed[0].length === 1) {
