@@ -282,6 +282,65 @@
     .forecast-action-list { display: flex; flex-direction: column; gap: 8px; }
     .forecast-action-list button { width: 100%; font-size: 12px; }
     .forecast-tips { list-style: none; display: flex; flex-direction: column; gap: 6px; color: #64748b; font-size: 12px; }
+    .forecast-card--collapsed { padding: 12px; }
+    .forecast-card--collapsed h4 { margin-bottom: 4px; }
+    .forecast-card--workgroups { padding: 12px; flex: 1; min-height: 200px; max-height: 400px; overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Control row for side-by-side selects */
+    .control-row { display: flex; gap: 10px; }
+    .control-group--half { flex: 1; }
+
+    /* Coverage summary */
+    .coverage-summary { display: flex; flex-direction: column; gap: 8px; }
+    .coverage-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+    .coverage-bar-fill { height: 100%; background: linear-gradient(90deg, #22c55e, #4ade80); border-radius: 4px; transition: width 0.3s ease; }
+    .coverage-stats { display: flex; justify-content: space-between; font-size: 12px; }
+    .coverage-stat { display: flex; align-items: center; gap: 4px; }
+    .coverage-stat--done { color: #16a34a; font-weight: 600; }
+    .coverage-stat--remaining { color: #64748b; }
+
+    /* Work Group Selector */
+    .wg-selector-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .wg-selector-header h4 { margin: 0; }
+    .wg-filter-tabs { display: flex; gap: 2px; background: #f1f5f9; border-radius: 6px; padding: 2px; }
+    .wg-filter-tab { padding: 4px 8px; font-size: 10px; font-weight: 600; background: transparent; border: none; border-radius: 4px; color: #64748b; cursor: pointer; transition: all 0.2s; }
+    .wg-filter-tab:hover { color: #1e293b; }
+    .wg-filter-tab.active { background: white; color: #1e293b; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .wg-search { width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; margin-bottom: 8px; }
+    .wg-search:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); }
+    .wg-selector-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .wg-empty { padding: 20px; text-align: center; color: #94a3b8; font-size: 12px; }
+
+    /* Discipline Groups */
+    .wg-discipline-group { display: flex; flex-direction: column; gap: 4px; }
+    .wg-discipline-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: #f8fafc; border-radius: 6px; }
+    .wg-discipline-name { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; }
+    .wg-discipline-stats { font-size: 10px; color: #94a3b8; }
+    .wg-disc-done { color: #16a34a; font-weight: 600; }
+    .wg-discipline-items { display: flex; flex-direction: column; gap: 2px; padding-left: 4px; }
+
+    /* Work Group Items */
+    .wg-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: pointer; transition: all 0.15s; text-align: left; width: 100%; }
+    .wg-item:hover { background: #f8fafc; border-color: #e2e8f0; }
+    .wg-item--selected { background: #eff6ff; border-color: #3b82f6; }
+    .wg-item--done .wg-item-indicator { background: #22c55e; }
+    .wg-item--todo .wg-item-indicator { background: #e2e8f0; }
+    .wg-item-indicator { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .wg-item-name { flex: 1; font-size: 12px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .wg-item-count { font-size: 10px; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
+    .wg-item--selected .wg-item-name { font-weight: 600; color: #1d4ed8; }
+
+    /* Current Work Group Display */
+    .current-wg-display { display: flex; flex-direction: column; gap: 2px; padding: 8px; background: #f8fafc; border-radius: 6px; }
+    .current-wg-none { color: #94a3b8; font-size: 12px; font-style: italic; }
+    .current-wg-code { font-family: 'Monaco', 'Menlo', monospace; font-size: 11px; color: #64748b; }
+    .current-wg-desc { font-size: 13px; font-weight: 600; color: #1e293b; }
+    .current-wg-discipline { font-size: 11px; color: #3b82f6; font-weight: 500; }
+    .wg-stats { display: flex; gap: 16px; margin-top: 8px; }
+    .wg-stat { display: flex; flex-direction: column; align-items: center; }
+    .wg-stat-value { font-size: 18px; font-weight: 700; color: #1e293b; }
+    .wg-stat-label { font-size: 10px; color: #64748b; text-transform: uppercase; }
+
     .forecast-main { background: white; border-radius: 12px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 16px; }
     .forecast-main-header { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
     .forecast-main-header h3 { font-size: 16px; font-weight: 700; }
