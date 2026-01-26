@@ -1152,8 +1152,6 @@
         }
         const row = parseInt(document.getElementById('fRow').value) - 1;
         const rows = XLSX.utils.sheet_to_json(wb.Sheets['Results'], {range:row});
-        console.log('Forecast:', rows.length, 'rows');
-        console.log('Columns:', Object.keys(rows[0]||{}));
         
         const selectedYear = document.getElementById('forecastYearSelect')?.value || currentFinancialYear;
         if (!selectedYear) {
@@ -1220,8 +1218,6 @@
         }
         const row = parseInt(document.getElementById('wRow').value) - 1;
         const rows = XLSX.utils.sheet_to_json(wb.Sheets['Detail'], {range:row});
-        console.log('Work done:', rows.length, 'rows');
-        console.log('Columns:', Object.keys(rows[0]||{}));
         
         window.wData = new Map();
         let matched = 0;
@@ -1308,12 +1304,6 @@
           job.workOrders.push(workOrder);
         });
         
-        console.log('Sample work done rows:');
-        sampleUnmatched.forEach(s => {
-          console.log('  Job:', s.raw, '→', s.extracted);
-          console.log('  Period:', s.periodRaw, '→', s.periodNormalized, 'Units:', s.units);
-        });
-        console.log('✓ Matched:', matched, 'of', rows.length);
         updateWorkGroupFilterOptions();
         render();
         closeModal();
@@ -1493,8 +1483,6 @@
       const forecastData = forecastSnapshot?.data || new Map();
 
       // Debug: Log what we got
-      console.log('Export Debug:', {
-        year,
         planVersion,
         forecastSnapshot,
         forecastDataSize: forecastData.size,
@@ -1512,7 +1500,6 @@
 
       // Debug: Check first few job numbers
       const firstFewStdJobs = window.STANDARD_JOBS.slice(0, 5).map(j => j.standardJobNo);
-      console.log('First 5 standard job numbers:', firstFewStdJobs);
 
       // Process each standard job
       let foundCount = 0;
@@ -1576,7 +1563,6 @@
         rows.push(row);
       });
 
-      console.log('Export matching results:', { foundCount, notFoundCount, totalStandardJobs: window.STANDARD_JOBS.length });
 
       if (!rows.length) {
         alert('No standard jobs data to export.');

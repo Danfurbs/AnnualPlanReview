@@ -598,3 +598,519 @@
 .data-action-group .secondary-button:last-child {
   margin-right: 0;
 }
+
+/* ============================
+   UI FEEDBACK SYSTEM
+   ============================ */
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.3s ease;
+}
+
+.loading-overlay.hidden {
+  display: none;
+  opacity: 0;
+}
+
+.loading-content {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  min-width: 280px;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-message {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.loading-details {
+  font-size: 14px;
+  color: #64748b;
+  margin-top: 8px;
+}
+
+/* Message Modal */
+.message-modal-content {
+  max-width: 560px;
+  border-radius: 16px;
+}
+
+.message-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.message-modal-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.message-modal-success .message-modal-icon {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.message-modal-error .message-modal-icon {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.message-modal-warning .message-modal-icon {
+  background: #fef3c7;
+  color: #f59e0b;
+}
+
+.message-modal-info .message-modal-icon {
+  background: #dbeafe;
+  color: #3b82f6;
+}
+
+.message-modal-title {
+  flex: 1;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.message-modal-header .close {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s;
+}
+
+.message-modal-header .close:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.message-modal-body {
+  padding: 24px;
+}
+
+.message-modal-text {
+  font-size: 16px;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.message-modal-details {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.message-modal-details.hidden .message-details-content {
+  display: none;
+}
+
+.message-details-toggle {
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  width: 100%;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.message-details-toggle:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.message-details-content {
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 8px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  color: #334155;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.message-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 16px 24px 24px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.message-modal-actions button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+  pointer-events: none;
+}
+
+.toast {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 320px;
+  pointer-events: auto;
+  transition: all 0.3s ease;
+  border-left: 4px solid;
+}
+
+.toast-enter {
+  opacity: 0;
+  transform: translateX(100px);
+}
+
+.toast-exit {
+  opacity: 0;
+  transform: translateX(100px);
+}
+
+.toast-success {
+  border-left-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.toast-error {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+
+.toast-warning {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.toast-info {
+  border-left-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.toast-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.toast-success .toast-icon {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.toast-error .toast-icon {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.toast-warning .toast-icon {
+  background: #fef3c7;
+  color: #f59e0b;
+}
+
+.toast-info .toast-icon {
+  background: #dbeafe;
+  color: #3b82f6;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.toast-close {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.toast-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1e293b;
+}
+
+/* Inline Loaders */
+.inline-loader {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.inline-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.inline-loader-small .inline-spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+.inline-loader-medium .inline-spinner {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
+}
+
+.inline-loader-large .inline-spinner {
+  width: 24px;
+  height: 24px;
+  border-width: 3px;
+}
+
+/* ============================
+   FORECAST TABLE - DISCIPLINE GROUPS
+   ============================ */
+
+/* Discipline Header Row */
+.discipline-header-row {
+  background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
+  border-top: 2px solid #bae6fd;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.discipline-header-cell {
+  padding: 0 !important;
+}
+
+.discipline-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  color: #0c4a6e;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.discipline-toggle:hover {
+  background: rgba(14, 165, 233, 0.08);
+}
+
+.discipline-toggle-icon {
+  font-size: 12px;
+  transition: transform 0.2s;
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.discipline-name {
+  flex: 1;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.discipline-stats {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  background: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.discipline-header-spacer {
+  background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
+}
+
+/* Discipline Job Rows */
+.discipline-job-row {
+  transition: all 0.2s;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.discipline-job-row.collapsed {
+  display: none;
+}
+
+.discipline-job-row.has-forecast-data {
+  background: #f0fdf4;
+}
+
+.discipline-job-row:hover {
+  background: #fafafa;
+}
+
+.discipline-job-row.has-forecast-data:hover {
+  background: #dcfce7;
+}
+
+/* Job Indicator */
+.forecast-job-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.forecast-job-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #e2e8f0;
+  transition: all 0.2s;
+}
+
+.forecast-job-indicator.has-data {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+}
+
+.forecast-job-number {
+  font-weight: 600;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.forecast-desc-cell,
+.forecast-unit-cell {
+  font-size: 13px;
+  color: #475569;
+}
+
+/* Period Inputs with Visual Indicators */
+.forecast-period-input.has-value {
+  background: #f0fdf4;
+  border-color: #86efac;
+  font-weight: 600;
+}
+
+.forecast-period-input.has-value:focus {
+  background: white;
+  border-color: #22c55e;
+}
+
+/* Comment Textarea with Visual Indicator */
+.forecast-comment-input.has-value {
+  background: #fffbeb;
+  border-color: #fde047;
+}
+
+.forecast-comment-input.has-value:focus {
+  background: white;
+  border-color: #f59e0b;
+}
+
+/* Status Icon */
+.forecast-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 14px;
+  font-weight: 700;
+}

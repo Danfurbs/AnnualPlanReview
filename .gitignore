@@ -30,3 +30,17 @@ Thumbs.db
 # Build outputs
 dist/
 build/
+
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Local config overrides
+config.local.js
+*.local.json
