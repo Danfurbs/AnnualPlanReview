@@ -642,6 +642,119 @@ function cleanForecastData(forecastData) {
   return forecastData;
 }
 
+/**
+ * Migrate and deduplicate all stored forecast data
+ * This fixes duplicate work groups caused by case differences (e.g., "Appleby ENG" vs "APPLEBY ENG")
+ */
+function migrateAndDeduplicateForecasts() {
+  const migrationKey = 'forecastMigrationV2_workGroupNormalization';
+
+  // Check if migration already done
+  if (localStorage.getItem(migrationKey)) {
+    return { migrated: false, reason: 'already_done' };
+  }
+
+  console.log('Starting forecast data migration: normalizing work group codes...');
+
+  let totalMigrated = 0;
+  const errors = [];
+
+  // Find all forecast storage keys
+  const forecastKeys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(FORECAST_STORAGE_KEY + ':')) {
+      forecastKeys.push(key);
+    }
+  }
+
+  forecastKeys.forEach(key => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.data) return;
+
+      let hasChanges = false;
+
+      // Normalize each job's work groups
+      Object.entries(parsed.data).forEach(([jobNumber, job]) => {
+        if (!job) return;
+
+        // Check for duplicate work groups (different cases)
+        if (job.wgs) {
+          const normalizedWgs = {};
+          const seenCodes = new Map(); // normalized -> original
+
+          Object.entries(job.wgs).forEach(([wgCode, data]) => {
+            const normalized = normalizeWorkGroupCode(wgCode);
+
+            if (seenCodes.has(normalized) && normalized !== wgCode) {
+              // Found a duplicate with different case - merge the data
+              hasChanges = true;
+              console.log(`  Merging duplicate work group: "${wgCode}" -> "${normalized}" in job ${jobNumber}`);
+
+              // Merge volumes (keep non-zero values)
+              Object.entries(data || {}).forEach(([period, value]) => {
+                const existing = Number(normalizedWgs[normalized]?.[period] || 0);
+                const newValue = Number(value || 0);
+                if (newValue !== 0) {
+                  if (!normalizedWgs[normalized]) normalizedWgs[normalized] = {};
+                  normalizedWgs[normalized][period] = existing + newValue;
+                }
+              });
+            } else {
+              seenCodes.set(normalized, wgCode);
+              normalizedWgs[normalized] = { ...data };
+              if (normalized !== wgCode) {
+                hasChanges = true;
+              }
+            }
+          });
+
+          job.wgs = normalizedWgs;
+        }
+
+        // Normalize comment keys
+        if (job.comments) {
+          const normalizedComments = {};
+          Object.entries(job.comments).forEach(([wgCode, comment]) => {
+            const normalized = normalizeWorkGroupCode(wgCode);
+            if (normalized !== wgCode) hasChanges = true;
+            // Keep first non-empty comment for each normalized code
+            if (comment && !normalizedComments[normalized]) {
+              normalizedComments[normalized] = comment;
+            }
+          });
+          job.comments = normalizedComments;
+        }
+      });
+
+      if (hasChanges) {
+        // Save the normalized data back
+        localStorage.setItem(key, JSON.stringify(parsed));
+        totalMigrated++;
+        console.log(`  Migrated: ${key}`);
+      }
+    } catch (err) {
+      console.error(`Error migrating ${key}:`, err);
+      errors.push({ key, error: err.message });
+    }
+  });
+
+  // Mark migration as complete
+  localStorage.setItem(migrationKey, new Date().toISOString());
+
+  console.log(`Migration complete: ${totalMigrated} forecast(s) updated`);
+
+  return {
+    migrated: true,
+    count: totalMigrated,
+    errors: errors.length > 0 ? errors : null
+  };
+}
+
 // Expose functions globally for cross-module access
 window.getForecastStorageKey = getForecastStorageKey;
 window.serializeForecastData = serializeForecastData;
@@ -673,4 +786,15 @@ window.removeFromV1Overrides = removeFromV1Overrides;
 window.checkV0ConflictsWithV1 = checkV0ConflictsWithV1;
 window.normalizeWorkGroupCode = normalizeWorkGroupCode;
 window.normalizeJobWorkGroups = normalizeJobWorkGroups;
+window.migrateAndDeduplicateForecasts = migrateAndDeduplicateForecasts;
+
+// Run migration on load to fix existing duplicate work groups
+try {
+  const migrationResult = migrateAndDeduplicateForecasts();
+  if (migrationResult.migrated && migrationResult.count > 0) {
+    console.log(`✓ Migrated ${migrationResult.count} forecast(s) - duplicate work groups merged`);
+  }
+} catch (err) {
+  console.error('Migration error:', err);
+}
 

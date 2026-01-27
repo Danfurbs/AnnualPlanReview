@@ -447,8 +447,12 @@ function loadForecastEditorRows() {
   }
 
   if (dataToUse && workGroup) {
+    // Normalize work group code for consistent lookups
+    const normalizedWg = workGroup.trim().toUpperCase();
+
     dataToUse.forEach((job, jobNumber) => {
-      const wgData = job?.wgs?.[workGroup];
+      // Try both exact and normalized lookups for backwards compatibility
+      const wgData = job?.wgs?.[normalizedWg] || job?.wgs?.[workGroup];
       if (!wgData) return;
 
       const meta = getJobMetadata(jobNumber);
@@ -457,7 +461,8 @@ function loadForecastEditorRows() {
         volumes[period] = Number(wgData[period] || 0);
       });
 
-      const comment = job?.comments?.[workGroup] || '';
+      // Try both exact and normalized lookups for comments too
+      const comment = job?.comments?.[normalizedWg] || job?.comments?.[workGroup] || '';
 
       rows.push({
         jobNumber,
