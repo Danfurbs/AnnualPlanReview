@@ -208,14 +208,17 @@ async function saveV1OverridesToApi(year, overridesSet) {
   if (!isApiEnabled()) return false;
 
   try {
-    const promises = Array.from(overridesSet).map(jobNumber =>
-      apiRequest(`/forecasts/v1-overrides/${year}/${jobNumber}`, {
-        method: 'POST'
-      })
-    );
+    const jobNumbers = Array.from(overridesSet);
 
-    await Promise.all(promises);
-    return true;
+    if (jobNumbers.length === 0) return true;
+
+    // Use batch endpoint instead of individual requests
+    const response = await apiRequest(`/forecasts/v1-overrides/${year}/batch`, {
+      method: 'POST',
+      body: { jobNumbers }
+    });
+
+    return response.success === true;
   } catch (err) {
     console.error('Failed to save v1 overrides to API:', err);
     return false;

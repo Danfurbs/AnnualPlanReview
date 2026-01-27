@@ -355,6 +355,127 @@ class DatabaseServicePG {
     }
   }
 
+  /**
+   * Bulk save all forecasts in a single transaction with batch inserts
+   * @param {Object} data - { jobNumber: { periods, wgs, comments }, ... }
+   * @param {string} fiscalYear
+   * @param {string} planVersion
+   */
+  async saveAllForecasts(data, fiscalYear, planVersion) {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // Collect all job numbers for bulk delete
+      const jobNumbers = Object.keys(data);
+
+      if (jobNumbers.length > 0) {
+        // Bulk delete existing forecasts for all jobs
+        await client.query(
+          'DELETE FROM forecasts WHERE job_number = ANY($1) AND fiscal_year = $2 AND plan_version = $3',
+          [jobNumbers, fiscalYear, planVersion]
+        );
+
+        // Bulk delete existing comments for all jobs
+        await client.query(
+          'DELETE FROM forecast_comments WHERE job_number = ANY($1) AND fiscal_year = $2 AND plan_version = $3',
+          [jobNumbers, fiscalYear, planVersion]
+        );
+      }
+
+      // Collect all forecast values and comments for batch insert
+      const forecastValues = [];
+      const commentValues = [];
+
+      for (const [jobNumber, jobData] of Object.entries(data)) {
+        const { wgs, comments } = jobData;
+
+        for (const [workGroup, periods] of Object.entries(wgs || {})) {
+          for (const [period, value] of Object.entries(periods)) {
+            forecastValues.push([jobNumber, workGroup, fiscalYear, planVersion, period, value]);
+          }
+
+          if (comments && comments[workGroup]) {
+            commentValues.push([jobNumber, workGroup, fiscalYear, planVersion, comments[workGroup]]);
+          }
+        }
+      }
+
+      // Batch insert forecasts using unnest for maximum performance
+      if (forecastValues.length > 0) {
+        const jobNums = forecastValues.map(v => v[0]);
+        const workGroups = forecastValues.map(v => v[1]);
+        const fiscalYears = forecastValues.map(v => v[2]);
+        const planVersions = forecastValues.map(v => v[3]);
+        const periods = forecastValues.map(v => v[4]);
+        const values = forecastValues.map(v => v[5]);
+
+        await client.query(
+          `INSERT INTO forecasts (job_number, work_group, fiscal_year, plan_version, period, value, updated_at)
+           SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::numeric[],
+                                (SELECT array_agg(CURRENT_TIMESTAMP) FROM generate_series(1, $7)))`,
+          [jobNums, workGroups, fiscalYears, planVersions, periods, values, forecastValues.length]
+        );
+      }
+
+      // Batch insert comments using unnest
+      if (commentValues.length > 0) {
+        const jobNums = commentValues.map(v => v[0]);
+        const workGroups = commentValues.map(v => v[1]);
+        const fiscalYears = commentValues.map(v => v[2]);
+        const planVersions = commentValues.map(v => v[3]);
+        const comments = commentValues.map(v => v[4]);
+
+        await client.query(
+          `INSERT INTO forecast_comments (job_number, work_group, fiscal_year, plan_version, comment, updated_at)
+           SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
+                                (SELECT array_agg(CURRENT_TIMESTAMP) FROM generate_series(1, $6)))`,
+          [jobNums, workGroups, fiscalYears, planVersions, comments, commentValues.length]
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Bulk save v1 overrides in a single transaction
+   * @param {Array<string>} jobNumbers - Array of job numbers
+   * @param {string} fiscalYear
+   */
+  async saveAllV1Overrides(jobNumbers, fiscalYear) {
+    if (jobNumbers.length === 0) return;
+
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // Use unnest for batch insert with ON CONFLICT
+      const fiscalYears = jobNumbers.map(() => fiscalYear);
+
+      await client.query(
+        `INSERT INTO v1_overrides (job_number, fiscal_year)
+         SELECT * FROM unnest($1::text[], $2::text[])
+         ON CONFLICT (job_number, fiscal_year) DO NOTHING`,
+        [jobNumbers, fiscalYears]
+      );
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   // ========== V1 Override Operations ==========
 
   /**

@@ -69,10 +69,8 @@ module.exports = (db) => {
         });
       }
 
-      // Save each job's forecast data
-      for (const [jobNumber, forecastData] of Object.entries(data)) {
-        await db.saveForecast(jobNumber, fiscalYear, planVersion, forecastData);
-      }
+      // Use bulk save for all forecasts in a single transaction
+      await db.saveAllForecasts(data, fiscalYear, planVersion);
 
       res.json({
         success: true,
@@ -116,6 +114,39 @@ module.exports = (db) => {
       res.status(500).json({
         success: false,
         error: 'Failed to save forecast'
+      });
+    }
+  });
+
+  /**
+   * POST /api/forecasts/v1-overrides/:fiscalYear/batch
+   * Batch save v1 overrides for multiple jobs
+   * Body: { jobNumbers: ["job1", "job2", ...] }
+   */
+  router.post('/v1-overrides/:fiscalYear/batch', async (req, res) => {
+    try {
+      const { fiscalYear } = req.params;
+      const { jobNumbers } = req.body;
+
+      if (!Array.isArray(jobNumbers)) {
+        return res.status(400).json({
+          success: false,
+          error: 'jobNumbers must be an array'
+        });
+      }
+
+      // Use bulk save for all v1 overrides
+      await db.saveAllV1Overrides(jobNumbers, fiscalYear);
+
+      res.json({
+        success: true,
+        message: `${jobNumbers.length} v1 overrides saved successfully`
+      });
+    } catch (error) {
+      console.error('Error saving v1 overrides batch:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to save v1 overrides'
       });
     }
   });
