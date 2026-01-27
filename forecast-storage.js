@@ -27,66 +27,13 @@ function serializeForecastData(forecastMap) {
 }
 
 /**
- * Normalize work group code (uppercase, trimmed)
- */
-function normalizeWorkGroupCode(code) {
-  if (!code || typeof code !== 'string') return code;
-  return code.trim().toUpperCase();
-}
-
-/**
- * Normalize work group codes in a job's wgs and comments objects
- */
-function normalizeJobWorkGroups(job) {
-  if (!job) return job;
-
-  // Normalize wgs keys
-  if (job.wgs) {
-    const normalizedWgs = {};
-    Object.entries(job.wgs).forEach(([wgCode, data]) => {
-      const normalizedCode = normalizeWorkGroupCode(wgCode);
-      // If we already have data for this normalized code, merge it
-      if (normalizedWgs[normalizedCode]) {
-        Object.entries(data || {}).forEach(([period, value]) => {
-          const existing = Number(normalizedWgs[normalizedCode][period] || 0);
-          const newValue = Number(value || 0);
-          // Keep the non-zero value, or sum if both non-zero
-          if (newValue !== 0 && existing === 0) {
-            normalizedWgs[normalizedCode][period] = newValue;
-          }
-        });
-      } else {
-        normalizedWgs[normalizedCode] = { ...data };
-      }
-    });
-    job.wgs = normalizedWgs;
-  }
-
-  // Normalize comments keys
-  if (job.comments) {
-    const normalizedComments = {};
-    Object.entries(job.comments).forEach(([wgCode, comment]) => {
-      const normalizedCode = normalizeWorkGroupCode(wgCode);
-      // Keep existing comment or use new one if not empty
-      if (!normalizedComments[normalizedCode] && comment) {
-        normalizedComments[normalizedCode] = comment;
-      }
-    });
-    job.comments = normalizedComments;
-  }
-
-  return job;
-}
-
-/**
- * Hydrate stored object back to Map (with work group normalization)
+ * Hydrate stored object back to Map
  */
 function hydrateForecastData(rawData) {
   const output = new Map();
   Object.entries(rawData || {}).forEach(([key, value]) => {
     if (value && typeof value === 'object') {
-      // Normalize work group codes when hydrating
-      output.set(key, normalizeJobWorkGroups({ ...value }));
+      output.set(key, { ...value });
     }
   });
   return output;
@@ -643,114 +590,47 @@ function cleanForecastData(forecastData) {
 }
 
 /**
- * Migrate and deduplicate all stored forecast data
- * This fixes duplicate work groups caused by case differences (e.g., "Appleby ENG" vs "APPLEBY ENG")
+ * Clear all forecast data for a specific year and version
+ * @param {string} year - Financial year (e.g., "FY2024")
+ * @param {string} version - Plan version ("v0", "v1", or "both")
+ * @returns {Object} - Result with success status and details
  */
-function migrateAndDeduplicateForecasts() {
-  const migrationKey = 'forecastMigrationV2_workGroupNormalization';
-
-  // Check if migration already done
-  if (localStorage.getItem(migrationKey)) {
-    return { migrated: false, reason: 'already_done' };
+function clearAllForecastDataForYear(year, version) {
+  if (!year || !version) {
+    return { success: false, error: 'Year and version are required' };
   }
 
-  console.log('Starting forecast data migration: normalizing work group codes...');
-
-  let totalMigrated = 0;
+  const cleared = [];
   const errors = [];
 
-  // Find all forecast storage keys
-  const forecastKeys = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith(FORECAST_STORAGE_KEY + ':')) {
-      forecastKeys.push(key);
-    }
-  }
+  const versionsToDelete = version === 'both' ? ['v0', 'v1'] : [version];
 
-  forecastKeys.forEach(key => {
+  versionsToDelete.forEach(ver => {
     try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return;
+      // Clear forecast data
+      const forecastKey = getForecastStorageKey(year, ver);
+      localStorage.removeItem(forecastKey);
+      cleared.push(forecastKey);
 
-      const parsed = JSON.parse(raw);
-      if (!parsed || !parsed.data) return;
-
-      let hasChanges = false;
-
-      // Normalize each job's work groups
-      Object.entries(parsed.data).forEach(([jobNumber, job]) => {
-        if (!job) return;
-
-        // Check for duplicate work groups (different cases)
-        if (job.wgs) {
-          const normalizedWgs = {};
-          const seenCodes = new Map(); // normalized -> original
-
-          Object.entries(job.wgs).forEach(([wgCode, data]) => {
-            const normalized = normalizeWorkGroupCode(wgCode);
-
-            if (seenCodes.has(normalized) && normalized !== wgCode) {
-              // Found a duplicate with different case - merge the data
-              hasChanges = true;
-              console.log(`  Merging duplicate work group: "${wgCode}" -> "${normalized}" in job ${jobNumber}`);
-
-              // Merge volumes (keep non-zero values)
-              Object.entries(data || {}).forEach(([period, value]) => {
-                const existing = Number(normalizedWgs[normalized]?.[period] || 0);
-                const newValue = Number(value || 0);
-                if (newValue !== 0) {
-                  if (!normalizedWgs[normalized]) normalizedWgs[normalized] = {};
-                  normalizedWgs[normalized][period] = existing + newValue;
-                }
-              });
-            } else {
-              seenCodes.set(normalized, wgCode);
-              normalizedWgs[normalized] = { ...data };
-              if (normalized !== wgCode) {
-                hasChanges = true;
-              }
-            }
-          });
-
-          job.wgs = normalizedWgs;
-        }
-
-        // Normalize comment keys
-        if (job.comments) {
-          const normalizedComments = {};
-          Object.entries(job.comments).forEach(([wgCode, comment]) => {
-            const normalized = normalizeWorkGroupCode(wgCode);
-            if (normalized !== wgCode) hasChanges = true;
-            // Keep first non-empty comment for each normalized code
-            if (comment && !normalizedComments[normalized]) {
-              normalizedComments[normalized] = comment;
-            }
-          });
-          job.comments = normalizedComments;
-        }
-      });
-
-      if (hasChanges) {
-        // Save the normalized data back
-        localStorage.setItem(key, JSON.stringify(parsed));
-        totalMigrated++;
-        console.log(`  Migrated: ${key}`);
+      // Clear v1 overrides if deleting v1
+      if (ver === 'v1') {
+        const overridesKey = getV1OverridesKey(year);
+        localStorage.removeItem(overridesKey);
+        cleared.push(overridesKey);
       }
     } catch (err) {
-      console.error(`Error migrating ${key}:`, err);
-      errors.push({ key, error: err.message });
+      errors.push({ version: ver, error: err.message });
     }
   });
 
-  // Mark migration as complete
-  localStorage.setItem(migrationKey, new Date().toISOString());
+  // Also clear the migration flag so data starts fresh
+  localStorage.removeItem('forecastMigrationV2_workGroupNormalization');
 
-  console.log(`Migration complete: ${totalMigrated} forecast(s) updated`);
+  console.log(`Cleared forecast data for ${year} ${version}:`, cleared);
 
   return {
-    migrated: true,
-    count: totalMigrated,
+    success: errors.length === 0,
+    cleared,
     errors: errors.length > 0 ? errors : null
   };
 }
@@ -784,17 +664,4 @@ window.saveV1OverridesAsync = saveV1OverridesAsync;
 window.addToV1Overrides = addToV1Overrides;
 window.removeFromV1Overrides = removeFromV1Overrides;
 window.checkV0ConflictsWithV1 = checkV0ConflictsWithV1;
-window.normalizeWorkGroupCode = normalizeWorkGroupCode;
-window.normalizeJobWorkGroups = normalizeJobWorkGroups;
-window.migrateAndDeduplicateForecasts = migrateAndDeduplicateForecasts;
-
-// Run migration on load to fix existing duplicate work groups
-try {
-  const migrationResult = migrateAndDeduplicateForecasts();
-  if (migrationResult.migrated && migrationResult.count > 0) {
-    console.log(`✓ Migrated ${migrationResult.count} forecast(s) - duplicate work groups merged`);
-  }
-} catch (err) {
-  console.error('Migration error:', err);
-}
-
+window.clearAllForecastDataForYear = clearAllForecastDataForYear;
