@@ -194,7 +194,6 @@ function renderForecastEditorSelectors() {
 
   // Render grouped work group selector
   renderWorkGroupSelector();
-  updateCoverageSummary();
   updateCurrentWorkGroupDisplay();
 
   // Load rows for current context
@@ -313,25 +312,6 @@ async function selectWorkGroup(wgCode) {
   loadForecastEditorRows();
   renderForecastEditorTable();
   updateForecastEditorSummary();
-}
-
-/**
- * Update the coverage summary display
- */
-function updateCoverageSummary() {
-  const summary = getForecastCoverageSummary(
-    window.fData,
-    window.forecastEditorState.planVersion,
-    window.forecastEditorState.year
-  );
-
-  const barFill = document.getElementById('coverageBarFill');
-  const withData = document.getElementById('coverageWithData');
-  const withoutData = document.getElementById('coverageWithoutData');
-
-  if (barFill) barFill.style.width = `${summary.percentage}%`;
-  if (withData) withData.textContent = summary.withData;
-  if (withoutData) withoutData.textContent = summary.withoutData;
 }
 
 /**
@@ -1021,7 +1001,6 @@ async function handleForecastEditorContextChange() {
 
     // Re-render work group selector with updated statuses
     renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
-    updateCoverageSummary();
   }
 
   // Reload rows and re-render
@@ -1085,8 +1064,9 @@ async function handleForecastEditorSubmit(event) {
         addToV1Overrides(year, jobNumbers);
       }
 
-      // Refresh work group selector to update checkmarks
-      renderForecastEditorSelectors();
+      // Refresh only the work group selector (not full selectors) for better performance
+      renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
+      updateCurrentWorkGroupDisplay();
 
       if (statusEl) {
         const message = jobCount

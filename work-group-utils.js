@@ -63,36 +63,71 @@ function parseWorkGroupCode(code) {
 
 /**
  * Get all work groups organized by discipline
+ * Includes both predefined work groups AND any found in forecast data
  * Returns: { discipline: { name, code, order, workGroups: [...] } }
  */
 function getWorkGroupsByDiscipline() {
   const grouped = new Map();
+  const seenCodes = new Set();
 
-  if (!window.workGroupSets) return grouped;
+  // First, add all predefined work groups
+  if (window.workGroupSets) {
+    window.workGroupSets.forEach((description, code) => {
+      // Skip retired entries
+      if (description.includes('RETIRED') || description.includes('DO NOT USE')) {
+        return;
+      }
 
-  window.workGroupSets.forEach((description, code) => {
-    // Skip retired entries
-    if (description.includes('RETIRED') || description.includes('DO NOT USE')) {
-      return;
-    }
+      seenCodes.add(code);
+      const { discipline, code: discCode, order } = extractDiscipline(description);
 
-    const { discipline, code: discCode, order } = extractDiscipline(description);
+      if (!grouped.has(discipline)) {
+        grouped.set(discipline, {
+          name: discipline,
+          code: discCode,
+          order: order,
+          workGroups: []
+        });
+      }
 
-    if (!grouped.has(discipline)) {
-      grouped.set(discipline, {
-        name: discipline,
-        code: discCode,
-        order: order,
-        workGroups: []
+      grouped.get(discipline).workGroups.push({
+        code: code,
+        description: description,
+        shortName: description.replace(/\s*\([^)]+\)\s*$/, '').trim()
       });
-    }
-
-    grouped.get(discipline).workGroups.push({
-      code: code,
-      description: description,
-      shortName: description.replace(/\s*\([^)]+\)\s*$/, '').trim()
     });
-  });
+  }
+
+  // Also add work groups from fData that might not be in the predefined list
+  if (window.fData) {
+    window.fData.forEach(job => {
+      if (job && job.wgs) {
+        Object.keys(job.wgs).forEach(wgCode => {
+          if (!wgCode || seenCodes.has(wgCode)) return;
+          seenCodes.add(wgCode);
+
+          // Try to find description from workGroupSets or use the code as description
+          const description = window.workGroupSets?.get(wgCode) || wgCode;
+          const { discipline, code: discCode, order } = extractDiscipline(description);
+
+          if (!grouped.has(discipline)) {
+            grouped.set(discipline, {
+              name: discipline,
+              code: discCode,
+              order: order,
+              workGroups: []
+            });
+          }
+
+          grouped.get(discipline).workGroups.push({
+            code: wgCode,
+            description: description,
+            shortName: description.replace(/\s*\([^)]+\)\s*$/, '').trim()
+          });
+        });
+      }
+    });
+  }
 
   // Sort work groups within each discipline
   grouped.forEach(group => {
@@ -178,36 +213,6 @@ function getWorkGroupStatuses(fData, planVersion, year) {
 }
 
 /**
- * Get summary statistics for forecast coverage
- */
-function getForecastCoverageSummary(fData, planVersion, year) {
-  const statuses = getWorkGroupStatuses(fData, planVersion, year);
-
-  let total = 0;
-  let withData = 0;
-  let totalJobs = 0;
-  let totalVolume = 0;
-
-  statuses.forEach(status => {
-    total++;
-    if (status.hasData) {
-      withData++;
-      totalJobs += status.jobCount;
-      totalVolume += status.totalVolume;
-    }
-  });
-
-  return {
-    total,
-    withData,
-    withoutData: total - withData,
-    percentage: total > 0 ? Math.round((withData / total) * 100) : 0,
-    totalJobs,
-    totalVolume
-  };
-}
-
-/**
  * Filter work groups by status
  */
 function filterWorkGroupsByStatus(filter = 'all') {
@@ -236,5 +241,4 @@ window.parseWorkGroupCode = parseWorkGroupCode;
 window.getWorkGroupsByDiscipline = getWorkGroupsByDiscipline;
 window.getSortedDisciplines = getSortedDisciplines;
 window.getWorkGroupStatuses = getWorkGroupStatuses;
-window.getForecastCoverageSummary = getForecastCoverageSummary;
 window.filterWorkGroupsByStatus = filterWorkGroupsByStatus;
