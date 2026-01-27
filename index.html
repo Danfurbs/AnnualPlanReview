@@ -285,34 +285,6 @@
         </div>
 
         <div class="forecast-card">
-          <h4>Coverage</h4>
-          <div class="coverage-summary" id="coverageSummary">
-            <div class="coverage-bar">
-              <div class="coverage-bar-fill" id="coverageBarFill" style="width: 0%"></div>
-            </div>
-            <div class="coverage-stats">
-              <span class="coverage-stat coverage-stat--done"><span id="coverageWithData">0</span> done</span>
-              <span class="coverage-stat coverage-stat--remaining"><span id="coverageWithoutData">0</span> remaining</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="forecast-card forecast-card--workgroups">
-          <div class="wg-selector-header">
-            <h4>Work Groups</h4>
-            <div class="wg-filter-tabs">
-              <button type="button" class="wg-filter-tab active" data-filter="all">All</button>
-              <button type="button" class="wg-filter-tab" data-filter="without-data">Todo</button>
-              <button type="button" class="wg-filter-tab" data-filter="with-data">Done</button>
-            </div>
-          </div>
-          <input type="search" id="workGroupSearch" class="wg-search" placeholder="Search work groups...">
-          <div class="wg-selector-list" id="workGroupSelectorList">
-            <!-- Populated by JS -->
-          </div>
-        </div>
-
-        <div class="forecast-card">
           <h4>Current Work Group</h4>
           <div class="current-wg-display" id="currentWorkGroupDisplay">
             <span class="current-wg-none">No work group selected</span>
@@ -329,6 +301,21 @@
           </div>
         </div>
 
+        <div class="forecast-card forecast-card--workgroups-large">
+          <div class="wg-selector-header">
+            <h4>Work Groups</h4>
+            <div class="wg-filter-tabs">
+              <button type="button" class="wg-filter-tab active" data-filter="all">All</button>
+              <button type="button" class="wg-filter-tab" data-filter="without-data">Todo</button>
+              <button type="button" class="wg-filter-tab" data-filter="with-data">Done</button>
+            </div>
+          </div>
+          <input type="search" id="workGroupSearch" class="wg-search" placeholder="Search work groups...">
+          <div class="wg-selector-list" id="workGroupSelectorList">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
         <div class="forecast-card">
           <h4>Actions</h4>
           <div class="forecast-action-list">
@@ -337,15 +324,6 @@
             <button type="button" class="primary-button" onclick="initializeV1FromV0Explicit()" id="initV1Btn" title="Copy all jobs from Plan v0 to Plan v1">Init v1 from v0</button>
             <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear</button>
           </div>
-        </div>
-
-        <div class="forecast-card forecast-card--collapsed">
-          <h4>Tips</h4>
-          <ul class="forecast-tips">
-            <li>Click a work group to edit its forecast</li>
-            <li>Green = has forecast data</li>
-            <li>Paste from Excel directly into the table</li>
-          </ul>
         </div>
       </aside>
       <main class="forecast-main">
