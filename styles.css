@@ -70,9 +70,7 @@
     .job-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
     .job-status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
     .job-status-badge.status-critical { background: #fee2e2; color: #991b1b; }
-    .job-status-badge.status-critical.status-over { background: #dbeafe; color: #1e40af; }
     .job-status-badge.status-warning { background: #fef3c7; color: #92400e; }
-    .job-status-badge.status-warning.status-over { background: #e0e7ff; color: #3730a3; }
     .job-status-badge.status-good { background: #dcfce7; color: #166534; }
     .job-rag-indicator { width: 11px; height: 11px; border-radius: 50%; }
     .job-rag-indicator.rag-red { background: #ef4444; }
@@ -150,9 +148,7 @@
     .job-card:hover { transform: translateY(-2px); box-shadow: 0 10px 16px rgba(15, 23, 42, 0.08); }
     .job-card.good { border-left: 4px solid #22c55e; }
     .job-card.warning { border-left: 4px solid #f59e0b; }
-    .job-card.warning.over { border-left: 4px solid #6366f1; }
     .job-card.bad { border-left: 4px solid #ef4444; }
-    .job-card.bad.over { border-left: 4px solid #3b82f6; }
     .job-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .job-pill-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .job-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }

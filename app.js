@@ -2150,8 +2150,11 @@
           // Calculate health status for non-rollup jobs
           const healthStatus = !isGroupRollup ? getJobHealthStatus(pd) : null;
 
-          // Get work order count
-          const workOrderCount = !isGroupRollup ? (j.wgs && Object.keys(j.wgs).length) || 0 : 0;
+          // Get work group count (work groups with volume forecast)
+          const workGroupCount = !isGroupRollup ? (j.wgs && Object.keys(j.wgs).length) || 0 : 0;
+
+          // Get actual work orders count from Work Done data
+          const actualWorkOrderCount = !isGroupRollup ? (window.wData?.get(j.jn)?.workOrders?.length || 0) : 0;
 
           // Calculate period progress for progress bar
           let periodsPlanned = 0;
@@ -2165,23 +2168,13 @@
           }
 
           const card = document.createElement('div');
-          const isOverdelivering = pd.v > 0;
-          card.className = `job-card ${stat}${isOverdelivering && stat !== 'good' ? ' over' : ''}`;
+          card.className = `job-card ${stat}`;
           card.onclick = () => showBreakdown(j);
-
-          // Choose appropriate emoji based on status and direction
-          const getStatusEmoji = (healthStatus) => {
-            if (healthStatus.status === 'good') return '🟢';
-            if (healthStatus.isOverdelivering) {
-              return healthStatus.status === 'critical' ? '🔵' : '📈';
-            }
-            return healthStatus.status === 'critical' ? '🔴' : '📉';
-          };
 
           card.innerHTML = `
             ${!isGroupRollup && healthStatus ? `
-              <div class="job-status-badge status-${healthStatus.status}${healthStatus.isOverdelivering && healthStatus.status !== 'good' ? ' status-over' : ''}">
-                ${getStatusEmoji(healthStatus)} ${healthStatus.label}
+              <div class="job-status-badge status-${healthStatus.status}">
+                ${healthStatus.status === 'critical' ? '🔴' : healthStatus.status === 'warning' ? '🟡' : '🟢'} ${healthStatus.label}
               </div>
             ` : ''}
 
@@ -2232,7 +2225,7 @@
                 ${!isGroupRollup ? `
                   <div class="job-info-row">
                     <div class="job-rag-indicator rag-${healthStatus?.status === 'critical' ? 'red' : healthStatus?.status === 'warning' ? 'amber' : 'green'}"></div>
-                    <span class="job-info-text">${commentCount} comment${commentCount === 1 ? '' : 's'} • ${workOrderCount} work group${workOrderCount === 1 ? '' : 's'} with volume forecast • ${isReviewed ? 'Reviewed' : 'Needs review'}</span>
+                    <span class="job-info-text">${commentCount} comment${commentCount === 1 ? '' : 's'} • ${actualWorkOrderCount} work order${actualWorkOrderCount === 1 ? '' : 's'} • ${workGroupCount} work group${workGroupCount === 1 ? '' : 's'} with forecast • ${isReviewed ? 'Reviewed' : 'Needs review'}</span>
                   </div>
                 ` : ''}
               </div>
