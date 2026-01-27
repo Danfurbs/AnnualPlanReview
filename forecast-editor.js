@@ -447,8 +447,12 @@ function loadForecastEditorRows() {
   }
 
   if (dataToUse && workGroup) {
+    // Normalize work group code for consistent lookups
+    const normalizedWg = workGroup.trim().toUpperCase();
+
     dataToUse.forEach((job, jobNumber) => {
-      const wgData = job?.wgs?.[workGroup];
+      // Try both exact and normalized lookups for backwards compatibility
+      const wgData = job?.wgs?.[normalizedWg] || job?.wgs?.[workGroup];
       if (!wgData) return;
 
       const meta = getJobMetadata(jobNumber);
@@ -457,7 +461,8 @@ function loadForecastEditorRows() {
         volumes[period] = Number(wgData[period] || 0);
       });
 
-      const comment = job?.comments?.[workGroup] || '';
+      // Try both exact and normalized lookups for comments too
+      const comment = job?.comments?.[normalizedWg] || job?.comments?.[workGroup] || '';
 
       rows.push({
         jobNumber,
@@ -1585,9 +1590,13 @@ function handleForecastEditorTablePaste(event) {
 /**
  * Handle delete row
  */
-async function handleForecastEditorDeleteRow(event) {
-  const button = event.target;
-  if (!button || !button.matches('[data-action="delete-row"]')) return;
+function handleForecastEditorDeleteRow(event) {
+  // Use closest() to handle clicks on child elements (like the × text)
+  const button = event.target.closest('[data-action="delete-row"]');
+  if (!button) return;
+
+  // Prevent event from bubbling and causing double-triggers
+  event.stopPropagation();
 
   const rowIndex = Number(button.dataset.row);
   if (!Number.isFinite(rowIndex)) return;
@@ -1596,16 +1605,19 @@ async function handleForecastEditorDeleteRow(event) {
   const row = window.forecastEditorState.rows[rowIndex];
   const jobNumber = row?.jobNumber || '';
 
-  // Confirm deletion
-  const confirmMessage = jobNumber
-    ? `Delete job ${jobNumber} from this forecast?`
-    : 'Delete this empty row?';
+  // Only confirm if there's actual data (non-empty job)
+  if (jobNumber) {
+    const hasData = window.FORECAST_PERIODS.some(period => {
+      const val = row.volumes?.[period];
+      return val && Number(val) !== 0;
+    });
 
-  if (!confirm(confirmMessage)) {
-    return;
+    if (hasData && !confirm(`Delete job ${jobNumber} from this forecast?`)) {
+      return;
+    }
   }
 
-  // Remove the row from state
+  // Remove the row from state IMMEDIATELY for responsive UI
   window.forecastEditorState.rows.splice(rowIndex, 1);
 
   // Ensure at least 1 empty row
@@ -1613,51 +1625,66 @@ async function handleForecastEditorDeleteRow(event) {
     window.forecastEditorState.rows.push(createForecastEditorRow());
   }
 
-  // Save the changes to persist the deletion
-  const rowsToSave = window.forecastEditorState.rows.filter(row => {
-    if (!row.jobNumber) return false;
-    // Keep row if it has non-zero volumes OR has a comment
-    const hasVolume = window.FORECAST_PERIODS.some(period => {
-      const val = row.volumes?.[period];
-      return val !== undefined && val !== null && val !== '';
-    });
-    const hasComment = row.comment && row.comment.trim().length > 0;
-    return hasVolume || hasComment;
-  });
-
-  // If the deleted job had a job number, explicitly remove its work group data
-  if (jobNumber && window.fData.has(jobNumber)) {
-    const job = window.fData.get(jobNumber);
-    if (job.wgs && job.wgs[window.forecastEditorState.workGroup]) {
-      delete job.wgs[window.forecastEditorState.workGroup];
-    }
-    if (job.comments && job.comments[window.forecastEditorState.workGroup]) {
-      delete job.comments[window.forecastEditorState.workGroup];
-    }
-  }
-
-  window.fData = updateForecastWorkGroup(window.fData, rowsToSave, window.forecastEditorState.workGroup);
-  window.fData = cleanForecastData(window.fData);
-  await saveForecastToStorageAsync(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
-
-  // If deleting from v1 and job had a number, mark it as explicitly deleted (override)
-  // This prevents it from being inherited from v0
-  if (window.forecastEditorState.planVersion === 'v1' && jobNumber) {
-    addToV1Overrides(window.forecastEditorState.year, [jobNumber]);
-  }
-
-  // Re-render and refresh selectors to update checkmarks
-  renderForecastEditorSelectors();
+  // Re-render table IMMEDIATELY (before async operations)
   renderForecastEditorTable();
   updateForecastEditorSummary();
 
-  // Update status
+  // Update status immediately
   const statusEl = document.getElementById('forecastEditorStatus');
   if (statusEl) {
     statusEl.textContent = jobNumber
-      ? `✓ Deleted job ${jobNumber} at ${new Date().toLocaleTimeString()}`
-      : `✓ Deleted row at ${new Date().toLocaleTimeString()}`;
+      ? `✓ Deleted job ${jobNumber}`
+      : `✓ Deleted row`;
   }
+
+  // Do the heavy lifting asynchronously (save, update selectors)
+  (async () => {
+    try {
+      // If the deleted job had a job number, explicitly remove its work group data
+      const workGroup = window.forecastEditorState.workGroup;
+      const normalizedWg = workGroup ? workGroup.trim().toUpperCase() : '';
+
+      if (jobNumber && window.fData && window.fData.has(jobNumber)) {
+        const job = window.fData.get(jobNumber);
+        if (job.wgs) {
+          delete job.wgs[normalizedWg];
+          delete job.wgs[workGroup]; // Also try original case
+        }
+        if (job.comments) {
+          delete job.comments[normalizedWg];
+          delete job.comments[workGroup];
+        }
+      }
+
+      // Save the changes to persist the deletion
+      const rowsToSave = window.forecastEditorState.rows.filter(r => {
+        if (!r.jobNumber) return false;
+        const hasVolume = window.FORECAST_PERIODS.some(period => {
+          const val = r.volumes?.[period];
+          return val !== undefined && val !== null && val !== '' && Number(val) !== 0;
+        });
+        const hasComment = r.comment && r.comment.trim().length > 0;
+        return hasVolume || hasComment;
+      });
+
+      window.fData = updateForecastWorkGroup(window.fData, rowsToSave, workGroup);
+      window.fData = cleanForecastData(window.fData);
+
+      // Save asynchronously
+      await saveForecastToStorageAsync(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
+
+      // If deleting from v1 and job had a number, mark it as explicitly deleted
+      if (window.forecastEditorState.planVersion === 'v1' && jobNumber) {
+        addToV1Overrides(window.forecastEditorState.year, [jobNumber]);
+      }
+
+      // Update work group selector to refresh checkmarks (lighter than full re-render)
+      renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
+
+    } catch (err) {
+      console.error('Error saving after delete:', err);
+    }
+  })();
 }
 
 /**
