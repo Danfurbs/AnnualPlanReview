@@ -373,6 +373,56 @@ class DatabaseService {
     saveTransaction(baselines);
   }
 
+  /**
+   * Bulk save all forecasts in a single transaction
+   * @param {Object} data - { jobNumber: { periods, wgs, comments }, ... }
+   * @param {string} fiscalYear
+   * @param {string} planVersion
+   */
+  saveAllForecasts(data, fiscalYear, planVersion) {
+    const saveTransaction = this.db.transaction((forecastData) => {
+      for (const [jobNumber, jobData] of Object.entries(forecastData)) {
+        const { wgs, comments } = jobData;
+
+        // Delete existing forecast data for this job
+        this.stmts.deleteForecastsByJob.run(jobNumber, fiscalYear, planVersion);
+
+        // Insert forecast values for each work group and period
+        for (const [workGroup, periods] of Object.entries(wgs || {})) {
+          for (const [period, value] of Object.entries(periods)) {
+            this.stmts.insertForecast.run(
+              jobNumber, workGroup, fiscalYear, planVersion, period, value
+            );
+          }
+
+          // Save comment for this work group if exists
+          if (comments && comments[workGroup]) {
+            this.stmts.insertForecastComment.run(
+              jobNumber, workGroup, fiscalYear, planVersion, comments[workGroup]
+            );
+          }
+        }
+      }
+    });
+
+    saveTransaction(data);
+  }
+
+  /**
+   * Bulk save v1 overrides in a single transaction
+   * @param {Array<string>} jobNumbers - Array of job numbers
+   * @param {string} fiscalYear
+   */
+  saveAllV1Overrides(jobNumbers, fiscalYear) {
+    const saveTransaction = this.db.transaction((jobs) => {
+      for (const jobNumber of jobs) {
+        this.stmts.insertV1Override.run(jobNumber, fiscalYear);
+      }
+    });
+
+    saveTransaction(jobNumbers);
+  }
+
   // ========== V1 Override Operations ==========
 
   /**
