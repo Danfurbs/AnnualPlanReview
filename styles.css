@@ -314,11 +314,15 @@
 
     /* Discipline Groups */
     .wg-discipline-group { display: flex; flex-direction: column; gap: 4px; }
-    .wg-discipline-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: #f8fafc; border-radius: 6px; }
+    .wg-discipline-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: #f8fafc; border-radius: 6px; cursor: pointer; user-select: none; transition: background 0.15s; }
+    .wg-discipline-header:hover { background: #f1f5f9; }
+    .wg-discipline-toggle { font-size: 10px; color: #94a3b8; transition: transform 0.2s; margin-right: 6px; }
+    .wg-discipline-group.collapsed .wg-discipline-toggle { transform: rotate(-90deg); }
     .wg-discipline-name { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; }
     .wg-discipline-stats { font-size: 10px; color: #94a3b8; }
     .wg-disc-done { color: #16a34a; font-weight: 600; }
-    .wg-discipline-items { display: flex; flex-direction: column; gap: 2px; padding-left: 4px; }
+    .wg-discipline-items { display: flex; flex-direction: column; gap: 2px; padding-left: 4px; overflow: hidden; transition: max-height 0.2s ease-out; }
+    .wg-discipline-group.collapsed .wg-discipline-items { max-height: 0 !important; padding: 0; margin: 0; }
 
     /* Work Group Items */
     .wg-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: pointer; transition: all 0.15s; text-align: left; width: 100%; }

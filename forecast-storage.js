@@ -27,13 +27,66 @@ function serializeForecastData(forecastMap) {
 }
 
 /**
- * Hydrate stored object back to Map
+ * Normalize work group code (uppercase, trimmed)
+ */
+function normalizeWorkGroupCode(code) {
+  if (!code || typeof code !== 'string') return code;
+  return code.trim().toUpperCase();
+}
+
+/**
+ * Normalize work group codes in a job's wgs and comments objects
+ */
+function normalizeJobWorkGroups(job) {
+  if (!job) return job;
+
+  // Normalize wgs keys
+  if (job.wgs) {
+    const normalizedWgs = {};
+    Object.entries(job.wgs).forEach(([wgCode, data]) => {
+      const normalizedCode = normalizeWorkGroupCode(wgCode);
+      // If we already have data for this normalized code, merge it
+      if (normalizedWgs[normalizedCode]) {
+        Object.entries(data || {}).forEach(([period, value]) => {
+          const existing = Number(normalizedWgs[normalizedCode][period] || 0);
+          const newValue = Number(value || 0);
+          // Keep the non-zero value, or sum if both non-zero
+          if (newValue !== 0 && existing === 0) {
+            normalizedWgs[normalizedCode][period] = newValue;
+          }
+        });
+      } else {
+        normalizedWgs[normalizedCode] = { ...data };
+      }
+    });
+    job.wgs = normalizedWgs;
+  }
+
+  // Normalize comments keys
+  if (job.comments) {
+    const normalizedComments = {};
+    Object.entries(job.comments).forEach(([wgCode, comment]) => {
+      const normalizedCode = normalizeWorkGroupCode(wgCode);
+      // Keep existing comment or use new one if not empty
+      if (!normalizedComments[normalizedCode] && comment) {
+        normalizedComments[normalizedCode] = comment;
+      }
+    });
+    job.comments = normalizedComments;
+  }
+
+  return job;
+}
+
+/**
+ * Hydrate stored object back to Map (with work group normalization)
  */
 function hydrateForecastData(rawData) {
   const output = new Map();
   Object.entries(rawData || {}).forEach(([key, value]) => {
     if (value && typeof value === 'object') {
-      output.set(key, value);
+      // Normalize work group codes when hydrating
+      output.set(key, normalizeJobWorkGroups({ ...value }));
     }
   });
   return output;
@@ -618,4 +671,6 @@ window.saveV1OverridesAsync = saveV1OverridesAsync;
 window.addToV1Overrides = addToV1Overrides;
 window.removeFromV1Overrides = removeFromV1Overrides;
 window.checkV0ConflictsWithV1 = checkV0ConflictsWithV1;
+window.normalizeWorkGroupCode = normalizeWorkGroupCode;
+window.normalizeJobWorkGroups = normalizeJobWorkGroups;
 
