@@ -834,9 +834,11 @@
       const upperText = text.toUpperCase();
       if (window.workGroupSets.has(upperText)) return window.workGroupSets.get(upperText);
       // Try matching against description values (for Work Done files that have descriptions instead of codes)
-      const normalizedInput = text.toLowerCase().replace(/\s+/g, ' ');
+      // Normalize: lowercase, collapse whitespace, remove spaces before parentheses
+      const normalizeForMatch = (s) => s.toLowerCase().replace(/\s+/g, ' ').replace(/\s*\(/g, '(').trim();
+      const normalizedInput = normalizeForMatch(text);
       for (const [wgCode, description] of window.workGroupSets) {
-        if (description.toLowerCase().replace(/\s+/g, ' ') === normalizedInput) {
+        if (normalizeForMatch(description) === normalizedInput) {
           return description; // Return canonical description
         }
       }
