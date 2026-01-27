@@ -1515,7 +1515,7 @@ function handleForecastEditorTablePaste(event) {
 
   event.preventDefault();
 
-  const startRowIndex = Number(target.dataset.row);
+  const startRowIndex = Number(target.dataset.rowIndex);
   if (!Number.isFinite(startRowIndex)) return;
 
   // Determine starting column
