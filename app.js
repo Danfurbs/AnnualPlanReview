@@ -827,9 +827,19 @@
       if (!raw) return 'Unspecified';
       const text = String(raw).trim();
       if (!text) return 'Unspecified';
-      const code = text.split(/\s+/)[0];
+      const code = text.split(/\s+/)[0].toUpperCase();
+      // Try lookup by code
       if (window.workGroupSets.has(code)) return window.workGroupSets.get(code);
-      if (window.workGroupSets.has(text)) return window.workGroupSets.get(text);
+      // Try lookup by full text as code
+      const upperText = text.toUpperCase();
+      if (window.workGroupSets.has(upperText)) return window.workGroupSets.get(upperText);
+      // Try matching against description values (for Work Done files that have descriptions instead of codes)
+      const normalizedInput = text.toLowerCase().replace(/\s+/g, ' ');
+      for (const [wgCode, description] of window.workGroupSets) {
+        if (description.toLowerCase().replace(/\s+/g, ' ') === normalizedInput) {
+          return description; // Return canonical description
+        }
+      }
       return text;
     }
 
