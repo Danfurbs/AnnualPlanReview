@@ -202,6 +202,32 @@ function renderForecastEditorSelectors() {
 }
 
 /**
+ * Get collapsed disciplines from localStorage
+ */
+function getCollapsedDisciplines() {
+  try {
+    const stored = localStorage.getItem('forecastCollapsedDisciplines');
+    if (stored) {
+      return new Set(JSON.parse(stored));
+    }
+  } catch (e) {
+    console.warn('Failed to load collapsed disciplines:', e);
+  }
+  return new Set();
+}
+
+/**
+ * Save collapsed disciplines to localStorage
+ */
+function saveCollapsedDisciplines(disciplines) {
+  try {
+    localStorage.setItem('forecastCollapsedDisciplines', JSON.stringify(Array.from(disciplines)));
+  } catch (e) {
+    console.warn('Failed to save collapsed disciplines:', e);
+  }
+}
+
+/**
  * Render the grouped work group selector list
  */
 function renderWorkGroupSelector(filter = 'all', searchText = '') {
@@ -248,9 +274,14 @@ function renderWorkGroupSelector(filter = 'all', searchText = '') {
       return acc;
     }, { done: 0, todo: 0 });
 
+    // Check if this discipline should be collapsed (persisted state)
+    const collapsedDisciplines = getCollapsedDisciplines();
+    const isCollapsed = collapsedDisciplines.has(discipline.name);
+
     html += `
-      <div class="wg-discipline-group" data-discipline="${escapeHtml(discipline.name)}">
-        <div class="wg-discipline-header">
+      <div class="wg-discipline-group${isCollapsed ? ' collapsed' : ''}" data-discipline="${escapeHtml(discipline.name)}">
+        <div class="wg-discipline-header" data-toggle-discipline="${escapeHtml(discipline.name)}">
+          <span class="wg-discipline-toggle">&#9660;</span>
           <span class="wg-discipline-name">${escapeHtml(discipline.name)}</span>
           <span class="wg-discipline-stats">
             <span class="wg-disc-done">${disciplineStats.done}</span>/<span class="wg-disc-total">${filteredWorkGroups.length}</span>
@@ -283,11 +314,37 @@ function renderWorkGroupSelector(filter = 'all', searchText = '') {
 
   container.innerHTML = html;
 
-  // Attach click handlers
+  // Attach click handlers for work group items
   container.querySelectorAll('.wg-item').forEach(item => {
     item.addEventListener('click', () => {
       const wgCode = item.dataset.wgCode;
       selectWorkGroup(wgCode);
+    });
+  });
+
+  // Attach click handlers for discipline headers (collapse/expand)
+  container.querySelectorAll('.wg-discipline-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+      // Don't toggle if clicking on a work group item
+      if (e.target.closest('.wg-item')) return;
+
+      const disciplineName = header.dataset.toggleDiscipline;
+      if (!disciplineName) return;
+
+      const group = header.closest('.wg-discipline-group');
+      if (!group) return;
+
+      // Toggle collapsed class
+      group.classList.toggle('collapsed');
+
+      // Persist collapsed state
+      const collapsedDisciplines = getCollapsedDisciplines();
+      if (group.classList.contains('collapsed')) {
+        collapsedDisciplines.add(disciplineName);
+      } else {
+        collapsedDisciplines.delete(disciplineName);
+      }
+      saveCollapsedDisciplines(collapsedDisciplines);
     });
   });
 }
@@ -962,8 +1019,10 @@ async function clearForecastEditorTable() {
     await saveForecastToStorageAsync(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
   }
 
-  // Refresh selectors to update checkmarks
-  renderForecastEditorSelectors();
+  // Refresh work group selector to update checkmarks (don't reload rows - we want them empty)
+  renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
+
+  // Render the table with empty rows (already set above)
   renderForecastEditorTable();
   updateForecastEditorSummary();
 
@@ -973,8 +1032,9 @@ async function clearForecastEditorTable() {
 
 /**
  * Handle context change (year, plan, work group)
+ * @param {boolean} forceReload - Force reload data even if context hasn't changed (e.g., after import)
  */
-async function handleForecastEditorContextChange() {
+async function handleForecastEditorContextChange(forceReload = false) {
   // CRITICAL: Sync current state before switching contexts to prevent data loss
   syncForecastEditorTableState();
 
@@ -990,8 +1050,8 @@ async function handleForecastEditorContextChange() {
   window.forecastEditorState.year = newYear;
   window.forecastEditorState.planVersion = newPlan;
 
-  // Reload forecast data if year/plan changed (checks API if enabled)
-  if (contextChanged) {
+  // Reload forecast data if year/plan changed OR force reload requested (e.g., after import)
+  if (contextChanged || forceReload) {
     const snapshot = await getForecastSnapshotAsync(window.forecastEditorState.year, window.forecastEditorState.planVersion);
     if (snapshot) {
       window.fData = snapshot.data;
@@ -1767,8 +1827,8 @@ function loadForecastFile(event) {
       // Overwrite mode - original behavior
       const result = importForecastFile(content);
       if (result.success) {
-        alert(`✓ Imported ${result.count} forecast(s). Refresh the editor to see changes.`);
-        handleForecastEditorContextChange();
+        alert(`✓ Imported ${result.count} forecast(s).`);
+        handleForecastEditorContextChange(true); // Force reload to show updated data
       } else {
         alert(`Failed to import forecast: ${result.error}`);
       }
@@ -1882,7 +1942,7 @@ function handleMergeForecastImport(fileContent) {
       // No conflicts - proceed with merge
       applyMergeImport(forecasts, []);
       alert('✓ Import completed successfully. No conflicts detected.');
-      handleForecastEditorContextChange();
+      handleForecastEditorContextChange(true); // Force reload to show updated data
     } else {
       // Show conflicts modal
       displayImportConflicts(conflicts);
@@ -1993,8 +2053,8 @@ async function applyImportConflictResolution() {
   // Close modal
   closeImportConflictsModal();
 
-  // Refresh editor
-  handleForecastEditorContextChange();
+  // Refresh editor (force reload to show updated data and green indicators)
+  handleForecastEditorContextChange(true);
 
   // Show success message
   alert(`✓ Import completed. Resolved ${conflicts.length} conflict(s).`);
