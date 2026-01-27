@@ -641,6 +641,39 @@
   border-color: #94a3b8;
 }
 
+/* Danger button style */
+.danger-button {
+  background: #dc2626;
+  color: white;
+  border: 1px solid #b91c1c;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.danger-button:hover {
+  background: #b91c1c;
+  border-color: #991b1b;
+}
+
+.danger-button:disabled {
+  background: #f87171;
+  border-color: #f87171;
+  cursor: not-allowed;
+}
+
+/* Clear All Controls */
+.clear-all-controls {
+  margin-top: 16px;
+}
+
+.clear-all-controls .file-input-group {
+  margin-bottom: 12px;
+}
+
 /* Data Management in Settings */
 .settings-data-actions {
   display: flex;

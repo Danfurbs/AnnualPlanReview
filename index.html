@@ -746,6 +746,36 @@
 
           <p class="helper-text" style="margin-top: 16px;"><strong>Tip:</strong> Export data as backup or to transfer between systems.</p>
         </div>
+
+        <div class="settings-section">
+          <h3>Clear All Forecast Data</h3>
+          <p class="helper-text">Permanently delete all forecast data for a specific financial year and plan version.</p>
+
+          <div class="clear-all-controls">
+            <div class="file-input-group">
+              <label for="clearAllFySelect">Financial Year</label>
+              <select id="clearAllFySelect" style="width: 100%;">
+                <option value="">Select FY...</option>
+              </select>
+            </div>
+
+            <div class="file-input-group">
+              <label for="clearAllVersionSelect">Plan Version</label>
+              <select id="clearAllVersionSelect" style="width: 100%;">
+                <option value="">Select Version...</option>
+                <option value="v0">v0 (Original)</option>
+                <option value="v1">v1 (Updated)</option>
+                <option value="both">Both v0 and v1</option>
+              </select>
+            </div>
+
+            <button class="danger-button" onclick="clearAllForecastData()" style="margin-top: 12px;">
+              Clear All Data
+            </button>
+          </div>
+
+          <p class="helper-text" style="margin-top: 12px; color: #c00;"><strong>Warning:</strong> This action cannot be undone. Make sure to export your data first if needed.</p>
+        </div>
       </div>
     </div>
   </div>

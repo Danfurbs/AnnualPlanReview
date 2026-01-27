@@ -68,10 +68,7 @@ function parseWorkGroupCode(code) {
  */
 function getWorkGroupsByDiscipline() {
   const grouped = new Map();
-  const seenCodes = new Set(); // Stores NORMALIZED (uppercase) codes to detect duplicates
-
-  // Helper to normalize work group code for comparison
-  const normalizeCode = (code) => code ? code.trim().toUpperCase() : '';
+  const seenCodes = new Set();
 
   // First, add all predefined work groups
   if (window.workGroupSets) {
@@ -81,8 +78,7 @@ function getWorkGroupsByDiscipline() {
         return;
       }
 
-      const normalizedCode = normalizeCode(code);
-      seenCodes.add(normalizedCode);
+      seenCodes.add(code);
       const { discipline, code: discCode, order } = extractDiscipline(description);
 
       if (!grouped.has(discipline)) {
@@ -95,7 +91,7 @@ function getWorkGroupsByDiscipline() {
       }
 
       grouped.get(discipline).workGroups.push({
-        code: normalizedCode, // Use normalized code
+        code: code,
         description: description,
         shortName: description.replace(/\s*\([^)]+\)\s*$/, '').trim()
       });
@@ -107,14 +103,11 @@ function getWorkGroupsByDiscipline() {
     window.fData.forEach(job => {
       if (job && job.wgs) {
         Object.keys(job.wgs).forEach(wgCode => {
-          const normalizedCode = normalizeCode(wgCode);
-          if (!normalizedCode || seenCodes.has(normalizedCode)) return;
-          seenCodes.add(normalizedCode);
+          if (!wgCode || seenCodes.has(wgCode)) return;
+          seenCodes.add(wgCode);
 
-          // Try to find description from workGroupSets (try both original and normalized)
-          let description = window.workGroupSets?.get(wgCode) ||
-                           window.workGroupSets?.get(normalizedCode) ||
-                           wgCode;
+          // Try to find description from workGroupSets
+          let description = window.workGroupSets?.get(wgCode) || wgCode;
           const { discipline, code: discCode, order } = extractDiscipline(description);
 
           if (!grouped.has(discipline)) {
@@ -127,7 +120,7 @@ function getWorkGroupsByDiscipline() {
           }
 
           grouped.get(discipline).workGroups.push({
-            code: normalizedCode, // Use normalized code
+            code: wgCode,
             description: description,
             shortName: description.replace(/\s*\([^)]+\)\s*$/, '').trim()
           });
@@ -155,22 +148,18 @@ function getSortedDisciplines() {
 /**
  * Get work group status for current context
  * Returns: Map<workGroupCode, { hasData, jobCount, totalVolume }>
- * Note: All work group codes are normalized (uppercase) for consistent lookups
  */
 function getWorkGroupStatuses(fData, planVersion, year) {
   const statuses = new Map();
 
   if (!window.workGroupSets) return statuses;
 
-  // Helper to normalize work group code
-  const normalizeCode = (code) => code ? code.trim().toUpperCase() : '';
-
-  // Initialize all work groups with empty status (using normalized codes)
+  // Initialize all work groups with empty status
   window.workGroupSets.forEach((description, code) => {
     if (description.includes('RETIRED') || description.includes('DO NOT USE')) {
       return;
     }
-    statuses.set(normalizeCode(code), { hasData: false, jobCount: 0, totalVolume: 0 });
+    statuses.set(code, { hasData: false, jobCount: 0, totalVolume: 0 });
   });
 
   // For v1, we need to check both v0 (inherited) and v1 (overrides)
@@ -186,12 +175,11 @@ function getWorkGroupStatuses(fData, planVersion, year) {
 
         if (job && job.wgs) {
           Object.entries(job.wgs).forEach(([wgCode, periods]) => {
-            const normalizedWgCode = normalizeCode(wgCode);
-            if (!statuses.has(normalizedWgCode)) return;
+            if (!statuses.has(wgCode)) return;
 
             const totalForWg = Object.values(periods || {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
             if (totalForWg > 0) {
-              const status = statuses.get(normalizedWgCode);
+              const status = statuses.get(wgCode);
               status.hasData = true;
               status.jobCount++;
               status.totalVolume += totalForWg;
@@ -207,12 +195,11 @@ function getWorkGroupStatuses(fData, planVersion, year) {
     dataToCheck.forEach((job) => {
       if (job && job.wgs) {
         Object.entries(job.wgs).forEach(([wgCode, periods]) => {
-          const normalizedWgCode = normalizeCode(wgCode);
-          if (!statuses.has(normalizedWgCode)) return;
+          if (!statuses.has(wgCode)) return;
 
           const totalForWg = Object.values(periods || {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
           if (totalForWg > 0) {
-            const status = statuses.get(normalizedWgCode);
+            const status = statuses.get(wgCode);
             status.hasData = true;
             status.jobCount++;
             status.totalVolume += totalForWg;

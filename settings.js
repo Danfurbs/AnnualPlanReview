@@ -20,6 +20,9 @@ function openSettings() {
   // Update status display
   updateSettingsStatus();
 
+  // Populate Clear All FY dropdown
+  populateClearAllFySelect();
+
   modal.style.display = 'block';
 }
 
@@ -257,6 +260,84 @@ window.addEventListener('click', (event) => {
   }
 });
 
+/**
+ * Populate the Clear All FY select dropdown
+ */
+function populateClearAllFySelect() {
+  const select = document.getElementById('clearAllFySelect');
+  if (!select) return;
+
+  // Get available FY options
+  const fyOptions = typeof getFinancialYearOptions === 'function'
+    ? getFinancialYearOptions()
+    : ['FY2025', 'FY2026'];
+
+  // Clear and repopulate
+  select.innerHTML = '<option value="">Select FY...</option>';
+  fyOptions.forEach(fy => {
+    const option = document.createElement('option');
+    option.value = fy;
+    option.textContent = fy;
+    select.appendChild(option);
+  });
+}
+
+/**
+ * Clear all forecast data for the selected FY and version
+ */
+function clearAllForecastData() {
+  const fySelect = document.getElementById('clearAllFySelect');
+  const versionSelect = document.getElementById('clearAllVersionSelect');
+
+  const year = fySelect?.value;
+  const version = versionSelect?.value;
+
+  if (!year) {
+    alert('Please select a Financial Year');
+    return;
+  }
+
+  if (!version) {
+    alert('Please select a Plan Version');
+    return;
+  }
+
+  const versionLabel = version === 'both' ? 'v0 and v1' : version;
+  const confirmMsg = `Are you sure you want to permanently delete ALL forecast data for ${year} ${versionLabel}?\n\nThis action CANNOT be undone.\n\nMake sure you have exported your data if needed.`;
+
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  // Double confirm for safety
+  const doubleConfirm = confirm(`FINAL WARNING: You are about to delete ALL forecast data for ${year} ${versionLabel}.\n\nClick OK to proceed with deletion.`);
+  if (!doubleConfirm) {
+    return;
+  }
+
+  try {
+    const result = window.clearAllForecastDataForYear(year, version);
+
+    if (result.success) {
+      alert(`Successfully cleared all forecast data for ${year} ${versionLabel}.\n\nCleared keys:\n${result.cleared.join('\n')}\n\nPlease refresh the page to see the changes.`);
+
+      // Reset the selects
+      fySelect.value = '';
+      versionSelect.value = '';
+
+      // Refresh the page to reload with cleared data
+      if (confirm('Would you like to refresh the page now?')) {
+        window.location.reload();
+      }
+    } else {
+      alert(`Error clearing data: ${result.errors?.map(e => e.error).join(', ')}`);
+    }
+  } catch (err) {
+    alert(`Error clearing data: ${err.message}`);
+    console.error('Clear all error:', err);
+  }
+}
+
 // Expose functions globally
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;
@@ -264,3 +345,5 @@ window.saveSettings = saveSettings;
 window.testApiConnection = testApiConnection;
 window.updateSettingsStatus = updateSettingsStatus;
 window.updateApiSyncIndicator = updateApiSyncIndicator;
+window.clearAllForecastData = clearAllForecastData;
+window.populateClearAllFySelect = populateClearAllFySelect;
