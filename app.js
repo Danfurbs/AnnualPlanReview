@@ -2561,7 +2561,8 @@
         wgEntries.forEach(([wg, data], idx) => {
           let rowTotal = 0;
           const summaryOpen = isFiltered;
-          tableHTML += `<tr class="wg-summary${summaryOpen ? ' is-open' : ''}" data-wg="${idx}"><td><strong>${wg} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
+          const wgDescription = window.workGroupSets?.get(wg) || wg;
+          tableHTML += `<tr class="wg-summary${summaryOpen ? ' is-open' : ''}" data-wg="${idx}"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
           for(let i=1; i<=13; i++) {
             const p = `P${i}`;
             const d = data.periods[p] || {v: 0};
@@ -2654,10 +2655,11 @@
           let commentsHTML = '<div class="forecast-comments-list">';
 
           comments.forEach(({ workGroup, plan, comment, v1Comment }) => {
+            const wgDescription = window.workGroupSets?.get(workGroup) || workGroup;
             commentsHTML += `
               <div class="forecast-comment-item">
                 <div class="forecast-comment-header">
-                  <strong>${escapeHtml(workGroup)}</strong>
+                  <strong>${escapeHtml(wgDescription)}</strong>
                   ${plan === 'v0' && !v1Comment ? '<span class="plan-badge plan-v0">Plan v0</span>' : ''}
                   ${plan === 'v1' && !v1Comment ? '<span class="plan-badge plan-v1">Plan v1</span>' : ''}
                 </div>`;
