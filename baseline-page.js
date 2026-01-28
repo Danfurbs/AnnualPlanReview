@@ -38,9 +38,10 @@ function closeBaselinePage() {
 /**
  * Initialize the baseline page
  */
-function initializeBaselinePage() {
-  // Load baseline data into temporary state
-  baselineEdits = new Map(loadBaselineData());
+async function initializeBaselinePage() {
+  // Load baseline data into temporary state (from API if enabled, otherwise localStorage)
+  const baselineData = await loadBaselineDataAsync();
+  baselineEdits = new Map(baselineData);
 
   // Render the table
   renderBaselineTable();
@@ -165,10 +166,11 @@ function updateBaselineStats() {
 /**
  * Save all baseline changes
  */
-function saveBaselineChanges() {
+async function saveBaselineChanges() {
   try {
-    saveBaselineData(baselineEdits);
-    alert('Baseline data saved successfully!');
+    await saveBaselineDataAsync(baselineEdits);
+    const apiStatus = window.isApiEnabled && window.isApiEnabled() ? ' (synced to server)' : ' (saved locally)';
+    alert('Baseline data saved successfully!' + apiStatus);
     updateBaselineStats();
   } catch (err) {
     console.error('Error saving baseline data:', err);
@@ -211,20 +213,26 @@ function triggerBaselineImport() {
  * Handle baseline file import
  * @param {Event} event - The file input change event
  */
-function handleBaselineImport(event) {
+async function handleBaselineImport(event) {
   const file = event.target.files[0];
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     const content = e.target.result;
-    const success = importBaselineData(content);
+    try {
+      const parsed = JSON.parse(content);
+      const baselineData = new Map(Object.entries(parsed));
 
-    if (success) {
-      alert('Baseline data imported successfully!');
+      // Save to localStorage and API
+      await saveBaselineDataAsync(baselineData);
+
+      const apiStatus = window.isApiEnabled && window.isApiEnabled() ? ' (synced to server)' : ' (saved locally)';
+      alert('Baseline data imported successfully!' + apiStatus);
       // Reload the page data
-      initializeBaselinePage();
-    } else {
+      await initializeBaselinePage();
+    } catch (err) {
+      console.error('Error importing baseline data:', err);
       alert('Failed to import baseline data. Please check the file format.');
     }
   };
@@ -237,12 +245,29 @@ function handleBaselineImport(event) {
 /**
  * Clear all baselines
  */
-function clearAllBaselines() {
-  const success = clearBaselineData();
-  if (success) {
+async function clearAllBaselines() {
+  if (!confirm('Are you sure you want to clear all baseline data? This cannot be undone.')) {
+    return;
+  }
+
+  try {
+    // Clear from localStorage
+    localStorage.removeItem('aprBaselineDataV1');
+
+    // Clear from API if enabled
+    if (window.isApiEnabled && window.isApiEnabled() && window.saveBaselinesToApi) {
+      await window.saveBaselinesToApi({});
+    }
+
     baselineEdits.clear();
     renderBaselineTable();
     updateBaselineStats();
+
+    const apiStatus = window.isApiEnabled && window.isApiEnabled() ? ' (synced to server)' : '';
+    alert('All baseline data cleared!' + apiStatus);
+  } catch (err) {
+    console.error('Error clearing baseline data:', err);
+    alert('Failed to clear baseline data. Please try again.');
   }
 }
 

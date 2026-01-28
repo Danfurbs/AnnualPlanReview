@@ -699,7 +699,7 @@
       });
     }
 
-    function addJobComment(jobNumber, category, value) {
+    async function addJobComment(jobNumber, category, value) {
       const trimmed = value.trim();
       if (!trimmed) return;
       if (!commentStore[jobNumber]) commentStore[jobNumber] = [];
@@ -714,29 +714,28 @@
       commentStore[jobNumber].unshift(newComment);
 
       // Save to both localStorage and API
-      saveCommentStore();
-      if (window.isApiEnabled && window.isApiEnabled() && window.saveCommentToApi) {
-        window.saveCommentToApi({ ...newComment, jobNumber }).catch(err => {
-          console.warn('Failed to save comment to API (saved locally):', err);
-        });
-      }
+      await saveCommentStoreAsync();
     }
 
-    function deleteJobComment(jobNumber, id) {
+    async function deleteJobComment(jobNumber, id) {
       if (!commentStore[jobNumber]) return;
       commentStore[jobNumber] = commentStore[jobNumber].filter(entry => entry.id !== id);
+
+      // Save to localStorage first
       saveCommentStore();
 
       // Delete from API if enabled
       if (window.isApiEnabled && window.isApiEnabled() && window.deleteCommentFromApi) {
-        window.deleteCommentFromApi(id).catch(err => {
+        try {
+          await window.deleteCommentFromApi(id);
+        } catch (err) {
           console.warn('Failed to delete comment from API (deleted locally):', err);
-        });
+        }
       }
     }
 
     async function init() {
-      loadCommentStore();
+      await loadCommentStoreAsync();
       loadReviewStore();
       initializeForecastContext();  // Load forecast context from localStorage
       loadWorkOrderAmendments();
@@ -1080,26 +1079,30 @@
       if (progressEl) progressEl.style.width = `${percent}%`;
       if (stageDisplay) stageDisplay.textContent = reviewStage;
 
-      // Update Forecast Coverage card
-      let jobsWithForecast = 0;
-      baseFiltered.forEach(job => {
-        const displayData = getJobDisplayData(job);
-        const pd = period === 'all' ? displayData.tot : displayData.periods[period];
-        const forecast = pd.f || 0;
-        const actual = pd.a || 0;
-        if (forecast !== 0 || actual !== 0) {
-          jobsWithForecast++;
-        }
-      });
-      const forecastCoverageCount = document.getElementById('forecastCoverageCount');
-      const forecastCoverageTotal = document.getElementById('forecastCoverageTotal');
-      const forecastCoverageMeta = document.getElementById('forecastCoverageMeta');
-      const forecastCoverageProgress = document.getElementById('forecastCoverageProgress');
-      const coveragePercent = baseFiltered.length > 0 ? Math.round((jobsWithForecast / baseFiltered.length) * 100) : 0;
-      if (forecastCoverageCount) forecastCoverageCount.textContent = jobsWithForecast;
-      if (forecastCoverageTotal) forecastCoverageTotal.textContent = baseFiltered.length;
-      if (forecastCoverageMeta) forecastCoverageMeta.textContent = `${coveragePercent}% jobs with forecast data`;
-      if (forecastCoverageProgress) forecastCoverageProgress.style.width = `${coveragePercent}%`;
+      // Update Work Order Activity card
+      let totalWorkOrders = 0;
+      let totalUnits = 0;
+      let flaggedCount = 0;
+      let amendedCount = 0;
+      if (window.wData) {
+        window.wData.forEach(jobData => {
+          const workOrders = jobData.workOrders || [];
+          totalWorkOrders += workOrders.length;
+          workOrders.forEach(wo => {
+            totalUnits += wo.units || 0;
+            if (wo.flags && wo.flags.length > 0) flaggedCount++;
+            if (wo.isAmended) amendedCount++;
+          });
+        });
+      }
+      const workOrderCountEl = document.getElementById('workOrderCount');
+      const workOrderMetaEl = document.getElementById('workOrderMeta');
+      const workOrderFlaggedEl = document.getElementById('workOrderFlagged');
+      const workOrderAmendedEl = document.getElementById('workOrderAmended');
+      if (workOrderCountEl) workOrderCountEl.textContent = totalWorkOrders.toLocaleString();
+      if (workOrderMetaEl) workOrderMetaEl.textContent = `${totalUnits.toLocaleString()} units complete`;
+      if (workOrderFlaggedEl) workOrderFlaggedEl.textContent = flaggedCount.toLocaleString();
+      if (workOrderAmendedEl) workOrderAmendedEl.textContent = amendedCount.toLocaleString();
 
       const { total: commentTotal, counts: commentCounts } = getCommentSummary();
       const commentTotalEl = document.getElementById('commentTotal');
@@ -1400,11 +1403,12 @@
           });
           added += 1;
         });
-        saveCommentStore();
+        await saveCommentStoreAsync();
         if (currentCommentJob) {
           renderCommentsTable(currentCommentJob);
         }
-        alert(`Imported ${added} comments.`);
+        const apiStatus = window.isApiEnabled && window.isApiEnabled() ? ' (synced to server)' : '';
+        alert(`Imported ${added} comments.${apiStatus}`);
       } catch (err) {
         console.error(err);
         alert('Error loading comments');
@@ -2097,7 +2101,21 @@
       updateTopBarStats({ jobs: baseJobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter });
       updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter });
 
-      Object.keys(byDisc).sort().forEach(disc => {
+      // Custom discipline order: ALL, P-Way, W&G, Off Track, S&T, E&P CS, E&P D, then groups/others
+      const disciplineOrder = ['ALL', 'P-Way', 'W&G', 'Off Track', 'S&T', 'E&P CS', 'E&P D'];
+      const sortedDisciplines = Object.keys(byDisc).sort((a, b) => {
+        const aIndex = disciplineOrder.indexOf(a);
+        const bIndex = disciplineOrder.indexOf(b);
+        // Both in order list - sort by order
+        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+        // Only a in order list - a comes first
+        if (aIndex !== -1) return -1;
+        // Only b in order list - b comes first
+        if (bIndex !== -1) return 1;
+        // Neither in list - sort alphabetically
+        return a.localeCompare(b);
+      });
+      sortedDisciplines.forEach(disc => {
         const sec = document.createElement('div');
         sec.className = 'discipline-section';
         sec.innerHTML = `

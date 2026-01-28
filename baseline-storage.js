@@ -221,12 +221,9 @@ function importBaselineData(jsonString) {
 }
 
 /**
- * Clear all baseline data
+ * Clear all baseline data (sync version - localStorage only)
  */
 function clearBaselineData() {
-  if (confirm('Are you sure you want to clear all baseline data? This cannot be undone.')) {
-    localStorage.removeItem(BASELINE_STORAGE_KEY);
-    return true;
-  }
-  return false;
+  localStorage.removeItem(BASELINE_STORAGE_KEY);
+  return true;
 }

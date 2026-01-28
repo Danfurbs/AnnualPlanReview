@@ -92,13 +92,16 @@
         <div class="progress-bar"><div class="progress-fill" id="reviewProgress"></div></div>
       </div>
       <div class="summary-card">
-        <div class="card-title">Forecast Coverage</div>
+        <div class="card-title">Work Order Activity</div>
         <div class="card-value">
-          <span id="forecastCoverageCount">0</span>
-          <span class="card-sub">/<span id="forecastCoverageTotal">0</span></span>
+          <span id="workOrderCount">0</span>
+          <span class="card-sub">work orders</span>
         </div>
-        <div class="card-meta" id="forecastCoverageMeta">0% jobs with forecast data</div>
-        <div class="progress-bar"><div class="progress-fill progress-fill-coverage" id="forecastCoverageProgress"></div></div>
+        <div class="card-meta" id="workOrderMeta">0 units complete</div>
+        <ul class="work-order-breakdown" id="workOrderBreakdown">
+          <li><span>Flagged</span><strong id="workOrderFlagged">0</strong></li>
+          <li><span>Amended</span><strong id="workOrderAmended">0</strong></li>
+        </ul>
       </div>
       <div class="summary-card">
         <div class="card-title">Comments</div>
