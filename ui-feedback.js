@@ -344,6 +344,37 @@ window.MessageModal = MessageModal;
 window.Toast = Toast;
 window.InlineLoader = InlineLoader;
 
+// ============================
+// FORECAST LOAD FAILURE HANDLER
+// ============================
+
+/**
+ * Listen for forecast load failures and show a user-visible warning
+ * This provides feedback when no forecast data is available from any source
+ */
+window.addEventListener('apr:forecast-load-failed', (event) => {
+  const { year, planVersion, stage, sourcesAttempted, reason } = event.detail;
+
+  // Build a user-friendly message
+  const contextParts = [];
+  if (year) contextParts.push(year);
+  if (planVersion) contextParts.push(planVersion);
+  if (stage) contextParts.push(stage);
+
+  const contextStr = contextParts.length > 0 ? contextParts.join(' / ') : 'current context';
+  const sourcesStr = sourcesAttempted.length > 0
+    ? ` (checked: ${sourcesAttempted.join(', ')})`
+    : '';
+
+  const message = `No forecast data available for ${contextStr}${sourcesStr}`;
+
+  // Show a non-blocking warning toast
+  Toast.warning(message, 6000);
+
+  // Log details for debugging
+  console.warn('Forecast load failed:', event.detail);
+});
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
   LoadingOverlay.init();
