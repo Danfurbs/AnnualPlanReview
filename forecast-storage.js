@@ -5,6 +5,35 @@
 
 const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
 
+// ========== V1 Overrides Lock Mechanism ==========
+// Prevents race conditions when concurrent async operations modify v1 overrides
+// Each year has its own operation queue to serialize read-modify-write cycles
+
+const v1OverridesOperationQueue = new Map(); // year -> Promise (tail of queue)
+
+/**
+ * Execute an operation on v1 overrides with serialized access
+ * Operations for the same year are queued to prevent race conditions
+ * @param {string} year - Fiscal year
+ * @param {Function} operation - Async function to execute
+ * @returns {Promise} - Result of the operation
+ */
+async function withV1OverridesLock(year, operation) {
+  // Get the current tail of the queue (or resolved promise if empty)
+  const previousOp = v1OverridesOperationQueue.get(year) || Promise.resolve();
+
+  // Create our operation that waits for previous, then runs
+  const ourOp = previousOp
+    .catch(() => {}) // Don't let previous errors block our operation
+    .then(() => operation());
+
+  // Update the queue tail to our operation (ignore errors for chaining)
+  v1OverridesOperationQueue.set(year, ourOp.catch(() => {}));
+
+  // Return our operation's result (will throw if operation throws)
+  return ourOp;
+}
+
 /**
  * Generate localStorage key for a forecast
  * Note: Storage is FY-wide (not per-RF stage), indexed by year and plan version only
@@ -181,6 +210,7 @@ async function saveV1OverridesAsync(year, overridesSet) {
 
 /**
  * Add job numbers to v1 overrides (marks them as explicitly edited in v1)
+ * Note: For use in async contexts, prefer addToV1OverridesAsync to avoid race conditions
  */
 function addToV1Overrides(year, jobNumbers) {
   const overrides = loadV1Overrides(year);
@@ -189,12 +219,57 @@ function addToV1Overrides(year, jobNumbers) {
 }
 
 /**
+ * Add job numbers to v1 overrides with serialized access (async version)
+ * Uses a per-year queue to prevent race conditions when called concurrently
+ * @param {string} year - Fiscal year
+ * @param {Array} jobNumbers - Job numbers to add
+ * @returns {Promise<void>}
+ */
+async function addToV1OverridesAsync(year, jobNumbers) {
+  if (!jobNumbers || jobNumbers.length === 0) return;
+
+  return withV1OverridesLock(year, async () => {
+    // Load current overrides (use async version for API support)
+    const overrides = await loadV1OverridesAsync(year);
+
+    // Add new job numbers
+    jobNumbers.forEach(jn => overrides.add(jn));
+
+    // Save atomically (to both localStorage and API if enabled)
+    await saveV1OverridesAsync(year, overrides);
+  });
+}
+
+/**
  * Remove job numbers from v1 overrides (allows them to inherit from v0 again)
+ * Note: For use in async contexts, prefer removeFromV1OverridesAsync to avoid race conditions
  */
 function removeFromV1Overrides(year, jobNumbers) {
   const overrides = loadV1Overrides(year);
   jobNumbers.forEach(jn => overrides.delete(jn));
   saveV1Overrides(year, overrides);
+}
+
+/**
+ * Remove job numbers from v1 overrides with serialized access (async version)
+ * Uses a per-year queue to prevent race conditions when called concurrently
+ * @param {string} year - Fiscal year
+ * @param {Array} jobNumbers - Job numbers to remove
+ * @returns {Promise<void>}
+ */
+async function removeFromV1OverridesAsync(year, jobNumbers) {
+  if (!jobNumbers || jobNumbers.length === 0) return;
+
+  return withV1OverridesLock(year, async () => {
+    // Load current overrides (use async version for API support)
+    const overrides = await loadV1OverridesAsync(year);
+
+    // Remove job numbers
+    jobNumbers.forEach(jn => overrides.delete(jn));
+
+    // Save atomically (to both localStorage and API if enabled)
+    await saveV1OverridesAsync(year, overrides);
+  });
 }
 
 /**
@@ -662,6 +737,8 @@ window.loadV1OverridesAsync = loadV1OverridesAsync;
 window.saveV1Overrides = saveV1Overrides;
 window.saveV1OverridesAsync = saveV1OverridesAsync;
 window.addToV1Overrides = addToV1Overrides;
+window.addToV1OverridesAsync = addToV1OverridesAsync;
 window.removeFromV1Overrides = removeFromV1Overrides;
+window.removeFromV1OverridesAsync = removeFromV1OverridesAsync;
 window.checkV0ConflictsWithV1 = checkV0ConflictsWithV1;
 window.clearAllForecastDataForYear = clearAllForecastDataForYear;
