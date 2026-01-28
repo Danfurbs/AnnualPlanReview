@@ -338,6 +338,79 @@ function clearAllForecastData() {
   }
 }
 
+/**
+ * Download comments as JSON file
+ */
+function downloadComments() {
+  const commentStore = JSON.parse(localStorage.getItem('aprJobCommentsV2') || '{}');
+  const jsonString = JSON.stringify(commentStore, null, 2);
+
+  const blob = new Blob([jsonString], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `comments-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Trigger comment file upload
+ */
+function triggerCommentFileUpload() {
+  const fileInput = document.getElementById('commentFileInput');
+  if (fileInput) {
+    fileInput.click();
+  }
+}
+
+/**
+ * Load comments from JSON file
+ */
+async function loadCommentFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const content = e.target.result;
+    try {
+      const parsed = JSON.parse(content);
+
+      // Validate structure
+      if (typeof parsed !== 'object') {
+        throw new Error('Invalid comment file format');
+      }
+
+      // Save to localStorage
+      localStorage.setItem('aprJobCommentsV2', JSON.stringify(parsed));
+
+      // Save to API if enabled
+      if (window.isApiEnabled && window.isApiEnabled() && window.saveCommentsToApi) {
+        await window.saveCommentsToApi(parsed);
+      }
+
+      const apiStatus = window.isApiEnabled && window.isApiEnabled() ? ' (synced to server)' : '';
+      alert('Comments imported successfully!' + apiStatus);
+
+      // Refresh the page to load new comments
+      if (confirm('Would you like to refresh the page to see the imported comments?')) {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Error importing comments:', err);
+      alert('Failed to import comments. Please check the file format.');
+    }
+  };
+  reader.readAsText(file);
+
+  // Reset file input
+  event.target.value = '';
+}
+
 // Expose functions globally
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;
@@ -347,3 +420,6 @@ window.updateSettingsStatus = updateSettingsStatus;
 window.updateApiSyncIndicator = updateApiSyncIndicator;
 window.clearAllForecastData = clearAllForecastData;
 window.populateClearAllFySelect = populateClearAllFySelect;
+window.downloadComments = downloadComments;
+window.triggerCommentFileUpload = triggerCommentFileUpload;
+window.loadCommentFile = loadCommentFile;
