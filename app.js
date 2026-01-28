@@ -713,8 +713,17 @@
       };
       commentStore[jobNumber].unshift(newComment);
 
-      // Save to both localStorage and API
-      await saveCommentStoreAsync();
+      // Save to localStorage
+      saveCommentStore();
+
+      // Save single comment to API if enabled
+      if (window.isApiEnabled && window.isApiEnabled() && window.saveCommentToApi) {
+        try {
+          await window.saveCommentToApi({ ...newComment, jobNumber });
+        } catch (err) {
+          console.warn('Failed to save comment to API (saved locally):', err);
+        }
+      }
     }
 
     async function deleteJobComment(jobNumber, id) {
