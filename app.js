@@ -1171,10 +1171,30 @@
       const options = getWorkGroupOptions();
       const optionHtml = [
         '<option value="all">All Work Group Sets</option>',
-        ...options.map(code => {
-        const description = window.workGroupSets?.get(code) || code;
-        return `<option value="${escapeHtml(code)}">${escapeHtml(description)}</option>`;
-      })
+        ...options.map(key => {
+          // key might be a code (like "DBAPPTRA") or already a description
+          let description = key;
+
+          // Try direct lookup (key is a code)
+          if (window.workGroupSets?.has(key)) {
+            description = window.workGroupSets.get(key);
+          } else {
+            // Try uppercase version (handles case mismatches)
+            const upperKey = String(key).trim().toUpperCase();
+            if (window.workGroupSets?.has(upperKey)) {
+              description = window.workGroupSets.get(upperKey);
+            } else {
+              // Try extracting first word as code (handles combined formats like "DBAPPTRA Appleby SM(TRACK)")
+              const extractedCode = String(key).trim().split(/\s+/)[0].toUpperCase();
+              if (extractedCode !== upperKey && window.workGroupSets?.has(extractedCode)) {
+                description = window.workGroupSets.get(extractedCode);
+              }
+              // If still not found, key might already be a description or unknown - use as-is
+            }
+          }
+
+          return `<option value="${escapeHtml(key)}">${escapeHtml(description)}</option>`;
+        })
       ].join('');
       select.innerHTML = optionHtml;
       select.value = options.includes(current) ? current : 'all';
