@@ -1171,7 +1171,10 @@
       const options = getWorkGroupOptions();
       const optionHtml = [
         '<option value="all">All Work Group Sets</option>',
-        ...options.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+        ...options.map(code => {
+        const description = window.workGroupSets?.get(code) || code;
+        return `<option value="${escapeHtml(code)}">${escapeHtml(description)}</option>`;
+      })
       ].join('');
       select.innerHTML = optionHtml;
       select.value = options.includes(current) ? current : 'all';
