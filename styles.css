@@ -13,29 +13,47 @@
 
     /* Forecast Health Indicator */
     .forecast-health { background: white; padding: 24px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-    .health-header h3 { font-size: 18px; color: #1e293b; margin-bottom: 16px; font-weight: 700; }
+    .health-header { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+    .health-header h3 { font-size: 18px; color: #1e293b; font-weight: 700; margin: 0; }
+    .health-explainer { font-size: 12px; color: #64748b; line-height: 1.4; margin: 0; }
     .health-content { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
     .health-main { display: flex; flex-direction: column; gap: 12px; }
     .health-label { font-size: 13px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
     .health-bar-container { display: flex; align-items: center; gap: 12px; }
     .health-bar { flex: 1; height: 24px; background: #f1f5f9; border-radius: 999px; overflow: hidden; position: relative; }
+    .health-bar-segmented { display: flex; }
+    .health-bar-segment { height: 100%; transition: width 0.5s ease; cursor: pointer; }
+    .health-bar-segment:hover { filter: brightness(1.1); }
+    .health-bar-segment.active { filter: brightness(0.9); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.3); }
+    .health-bar-green { background: #22c55e; }
+    .health-bar-amber { background: #f59e0b; }
+    .health-bar-red { background: #ef4444; }
+    .health-bar-grey { background: #94a3b8; }
     .health-bar-fill { height: 100%; background: linear-gradient(90deg, #22c55e 0%, #22c55e 90%, #f59e0b 90%, #f59e0b 70%, #ef4444 70%); transition: width 0.5s ease; border-radius: 999px; }
     .health-bar-fill.health-good { background: #22c55e; }
     .health-bar-fill.health-acceptable { background: #f59e0b; }
     .health-bar-fill.health-needs-attention { background: #ef4444; }
     .health-percentage { font-size: 20px; font-weight: 700; color: #1e293b; min-width: 60px; text-align: right; }
-    .health-legend { display: flex; gap: 16px; font-size: 11px; color: #64748b; }
+    .health-job-count { font-size: 16px; font-weight: 700; color: #1e293b; min-width: 80px; text-align: right; }
+    .health-legend { display: flex; gap: 16px; font-size: 11px; color: #64748b; flex-wrap: wrap; }
     .health-legend-item { display: flex; align-items: center; gap: 6px; }
+    .health-legend-clickable .health-legend-clickable-item { cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: all 0.2s; }
+    .health-legend-clickable .health-legend-clickable-item:hover { background: #f1f5f9; }
+    .health-legend-clickable .health-legend-clickable-item.active { background: #e0e7ff; color: #3730a3; font-weight: 600; }
     .health-dot { width: 10px; height: 10px; border-radius: 50%; }
     .health-dot.health-good { background: #22c55e; }
     .health-dot.health-acceptable { background: #f59e0b; }
     .health-dot.health-needs-attention { background: #ef4444; }
+    .health-dot.health-grey { background: #94a3b8; }
     .health-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .health-stats-clickable .health-stat { cursor: pointer; }
     .health-stat { background: #f8fafc; padding: 16px; border-radius: 10px; text-align: center; border: 2px solid transparent; transition: all 0.2s; }
     .health-stat:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .health-stat.active { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
     .health-stat-good { border-color: #22c55e; }
     .health-stat-warning { border-color: #f59e0b; }
     .health-stat-critical { border-color: #ef4444; }
+    .health-stat-grey { border-color: #94a3b8; }
     .health-stat-total { border-color: #3b82f6; }
     .health-stat-value { font-size: 32px; font-weight: 700; color: #1e293b; line-height: 1; }
     .health-stat-label { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 8px; }
@@ -45,6 +63,7 @@
     .health-issues-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
     .health-issues-list li { font-size: 13px; color: #475569; padding-left: 20px; position: relative; }
     .health-issues-list li::before { content: '•'; position: absolute; left: 8px; color: #f59e0b; font-weight: 700; }
+    .progress-fill-coverage { background: #6366f1; }
 
     /* Enhanced Job Cards */
     .job-card { position: relative; }

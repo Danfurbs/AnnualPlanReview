@@ -907,37 +907,45 @@
 
     function getJobHealthStatus(varianceData) {
       const forecast = Math.abs(varianceData.f || 0);
-      const variance = Math.abs(varianceData.v || 0);
-      const variancePercent = forecast > 0 ? (variance / forecast) * 100 : 0;
+      const rawVariance = varianceData.v || 0;
+      const absVariance = Math.abs(rawVariance);
+      const variancePercent = forecast > 0 ? (absVariance / forecast) * 100 : 0;
+      const isOverdelivering = rawVariance > 0;
 
       if (variancePercent >= 50) {
-        return { status: 'critical', label: 'CRITICAL VARIANCE', percent: variancePercent };
+        const label = isOverdelivering ? 'OVER DELIVERED' : 'UNDER DELIVERED';
+        return { status: 'critical', label, percent: variancePercent, isOverdelivering };
       } else if (variancePercent >= 10) {
-        return { status: 'warning', label: 'MINOR VARIANCE', percent: variancePercent };
+        const label = isOverdelivering ? 'AHEAD OF PLAN' : 'BEHIND PLAN';
+        return { status: 'warning', label, percent: variancePercent, isOverdelivering };
       } else {
-        return { status: 'good', label: 'ON TRACK', percent: variancePercent };
+        return { status: 'good', label: 'ON TRACK', percent: variancePercent, isOverdelivering };
       }
     }
 
-    function updateForecastHealth({ baseFiltered, period, getJobDisplayData }) {
+    function updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter }) {
       if (!baseFiltered || !baseFiltered.length) {
         // Hide or clear health indicator when no jobs
-        const healthBarFill = document.getElementById('healthBarFill');
-        const healthPercentage = document.getElementById('healthPercentage');
-        if (healthBarFill) {
-          healthBarFill.style.width = '0%';
-          healthBarFill.className = 'health-bar-fill';
-        }
-        if (healthPercentage) healthPercentage.textContent = '0%';
+        ['healthBarGreen', 'healthBarAmber', 'healthBarRed', 'healthBarGrey'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.style.width = '0%';
+        });
 
-        ['healthGoodCount', 'healthWarningCount', 'healthCriticalCount', 'healthTotalCount'].forEach(id => {
+        ['healthGoodCount', 'healthWarningCount', 'healthCriticalCount', 'healthNoForecastCount'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.textContent = '0';
         });
-        ['healthGoodPercent', 'healthWarningPercent', 'healthCriticalPercent'].forEach(id => {
+        ['healthGoodPercent', 'healthWarningPercent', 'healthCriticalPercent', 'healthNoForecastPercent'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.textContent = '0%';
         });
+        ['legendGoodCount', 'legendWarningCount', 'legendCriticalCount', 'legendNoForecastCount'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = '0';
+        });
+
+        const healthJobCount = document.getElementById('healthJobCount');
+        if (healthJobCount) healthJobCount.textContent = '0 jobs';
 
         const healthIssues = document.getElementById('healthIssues');
         if (healthIssues) healthIssues.innerHTML = '';
@@ -948,6 +956,7 @@
       let goodCount = 0;
       let warningCount = 0;
       let criticalCount = 0;
+      let noForecastCount = 0;
       const issues = [];
 
       baseFiltered.forEach(job => {
@@ -955,6 +964,13 @@
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
         const forecast = Math.abs(pd.f || 0);
         const variance = Math.abs(pd.v || 0);
+
+        // Check if job has no forecast
+        if (forecast === 0 && (pd.a || 0) === 0) {
+          noForecastCount++;
+          return;
+        }
+
         const variancePercent = forecast > 0 ? (variance / forecast) * 100 : 0;
 
         if (variancePercent < 10) {
@@ -964,57 +980,70 @@
         } else {
           criticalCount++;
           if (issues.length < 5) {  // Only show top 5 issues
-            issues.push(`${job.jn} has ${variancePercent.toFixed(0)}% variance`);
+            const rawVariance = pd.v || 0;
+            const direction = rawVariance > 0 ? 'over' : 'under';
+            issues.push(`${job.jn} is ${variancePercent.toFixed(0)}% ${direction} (${rawVariance > 0 ? '+' : ''}${rawVariance.toFixed(1)})`);
           }
         }
       });
 
       const totalJobs = baseFiltered.length;
+      const jobsWithForecast = goodCount + warningCount + criticalCount;
       const goodPercent = totalJobs > 0 ? Math.round((goodCount / totalJobs) * 100) : 0;
       const warningPercent = totalJobs > 0 ? Math.round((warningCount / totalJobs) * 100) : 0;
       const criticalPercent = totalJobs > 0 ? Math.round((criticalCount / totalJobs) * 100) : 0;
+      const noForecastPercent = totalJobs > 0 ? Math.round((noForecastCount / totalJobs) * 100) : 0;
 
-      // Calculate overall health percentage (inverse of critical jobs)
-      const healthPercent = totalJobs > 0 ? Math.round((goodCount / totalJobs) * 100) : 0;
+      // Update segmented health bar
+      const healthBarGreen = document.getElementById('healthBarGreen');
+      const healthBarAmber = document.getElementById('healthBarAmber');
+      const healthBarRed = document.getElementById('healthBarRed');
+      const healthBarGrey = document.getElementById('healthBarGrey');
 
-      // Update health bar
-      const healthBarFill = document.getElementById('healthBarFill');
-      const healthPercentage = document.getElementById('healthPercentage');
-      if (healthBarFill) {
-        healthBarFill.style.width = `${healthPercent}%`;
-        // Set color class based on health
-        healthBarFill.className = 'health-bar-fill';
-        if (healthPercent >= 90) {
-          healthBarFill.classList.add('health-good');
-        } else if (healthPercent >= 70) {
-          healthBarFill.classList.add('health-acceptable');
-        } else {
-          healthBarFill.classList.add('health-needs-attention');
-        }
-      }
-      if (healthPercentage) {
-        healthPercentage.textContent = `${healthPercent}%`;
-      }
+      if (healthBarGreen) healthBarGreen.style.width = `${goodPercent}%`;
+      if (healthBarAmber) healthBarAmber.style.width = `${warningPercent}%`;
+      if (healthBarRed) healthBarRed.style.width = `${criticalPercent}%`;
+      if (healthBarGrey) healthBarGrey.style.width = `${noForecastPercent}%`;
+
+      // Update job count display
+      const healthJobCount = document.getElementById('healthJobCount');
+      if (healthJobCount) healthJobCount.textContent = `${totalJobs} jobs`;
 
       // Update stat counts
-      const healthGoodCount = document.getElementById('healthGoodCount');
-      const healthWarningCount = document.getElementById('healthWarningCount');
-      const healthCriticalCount = document.getElementById('healthCriticalCount');
-      const healthTotalCount = document.getElementById('healthTotalCount');
+      const updateEl = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      };
 
-      if (healthGoodCount) healthGoodCount.textContent = goodCount;
-      if (healthWarningCount) healthWarningCount.textContent = warningCount;
-      if (healthCriticalCount) healthCriticalCount.textContent = criticalCount;
-      if (healthTotalCount) healthTotalCount.textContent = totalJobs;
+      updateEl('healthGoodCount', goodCount);
+      updateEl('healthWarningCount', warningCount);
+      updateEl('healthCriticalCount', criticalCount);
+      updateEl('healthNoForecastCount', noForecastCount);
 
-      // Update percentages
-      const healthGoodPercent = document.getElementById('healthGoodPercent');
-      const healthWarningPercent = document.getElementById('healthWarningPercent');
-      const healthCriticalPercent = document.getElementById('healthCriticalPercent');
+      updateEl('healthGoodPercent', `${goodPercent}%`);
+      updateEl('healthWarningPercent', `${warningPercent}%`);
+      updateEl('healthCriticalPercent', `${criticalPercent}%`);
+      updateEl('healthNoForecastPercent', `${noForecastPercent}%`);
 
-      if (healthGoodPercent) healthGoodPercent.textContent = `${goodPercent}%`;
-      if (healthWarningPercent) healthWarningPercent.textContent = `${warningPercent}%`;
-      if (healthCriticalPercent) healthCriticalPercent.textContent = `${criticalPercent}%`;
+      // Update legend counts
+      updateEl('legendGoodCount', goodCount);
+      updateEl('legendWarningCount', warningCount);
+      updateEl('legendCriticalCount', criticalCount);
+      updateEl('legendNoForecastCount', noForecastCount);
+
+      // Update active state for filter
+      document.querySelectorAll('.health-stat[data-filter]').forEach(stat => {
+        const filter = stat.dataset.filter;
+        stat.classList.toggle('active', filter && filter === varianceFilter);
+      });
+      document.querySelectorAll('.health-legend-clickable-item[data-filter]').forEach(item => {
+        const filter = item.dataset.filter;
+        item.classList.toggle('active', filter && filter === varianceFilter);
+      });
+      document.querySelectorAll('.health-bar-segment[data-filter]').forEach(segment => {
+        const filter = segment.dataset.filter;
+        segment.classList.toggle('active', filter && filter === varianceFilter);
+      });
 
       // Update issues list
       const healthIssues = document.getElementById('healthIssues');
@@ -1051,25 +1080,26 @@
       if (progressEl) progressEl.style.width = `${percent}%`;
       if (stageDisplay) stageDisplay.textContent = reviewStage;
 
-      const ragCounts = { red: 0, amber: 0, green: 0 };
+      // Update Forecast Coverage card
+      let jobsWithForecast = 0;
       baseFiltered.forEach(job => {
         const displayData = getJobDisplayData(job);
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
-        const { status } = getVarianceStatus(pd);
-        if (status === 'bad') ragCounts.red += 1;
-        else if (status === 'warning') ragCounts.amber += 1;
-        else ragCounts.green += 1;
+        const forecast = pd.f || 0;
+        const actual = pd.a || 0;
+        if (forecast !== 0 || actual !== 0) {
+          jobsWithForecast++;
+        }
       });
-      const ragRed = document.getElementById('ragRed');
-      const ragAmber = document.getElementById('ragAmber');
-      const ragGreen = document.getElementById('ragGreen');
-      if (ragRed) ragRed.textContent = ragCounts.red;
-      if (ragAmber) ragAmber.textContent = ragCounts.amber;
-      if (ragGreen) ragGreen.textContent = ragCounts.green;
-      document.querySelectorAll('.rag-pill').forEach(pill => {
-        const filter = pill.dataset.filter;
-        pill.classList.toggle('active', filter && filter === varianceFilter);
-      });
+      const forecastCoverageCount = document.getElementById('forecastCoverageCount');
+      const forecastCoverageTotal = document.getElementById('forecastCoverageTotal');
+      const forecastCoverageMeta = document.getElementById('forecastCoverageMeta');
+      const forecastCoverageProgress = document.getElementById('forecastCoverageProgress');
+      const coveragePercent = baseFiltered.length > 0 ? Math.round((jobsWithForecast / baseFiltered.length) * 100) : 0;
+      if (forecastCoverageCount) forecastCoverageCount.textContent = jobsWithForecast;
+      if (forecastCoverageTotal) forecastCoverageTotal.textContent = baseFiltered.length;
+      if (forecastCoverageMeta) forecastCoverageMeta.textContent = `${coveragePercent}% jobs with forecast data`;
+      if (forecastCoverageProgress) forecastCoverageProgress.style.width = `${coveragePercent}%`;
 
       const { total: commentTotal, counts: commentCounts } = getCommentSummary();
       const commentTotalEl = document.getElementById('commentTotal');
@@ -2026,8 +2056,14 @@
         const displayData = getJobDisplayData(job);
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
         const { status, hasVariance } = getVarianceStatus(pd);
+        const forecast = pd.f || 0;
+        const actual = pd.a || 0;
+        const hasNoForecast = forecast === 0 && actual === 0;
         if (varianceFilter === 'all') return true;
         if (varianceFilter === 'variance') return hasVariance;
+        if (varianceFilter === 'noforecast') return hasNoForecast;
+        // For good/warning/bad filters, exclude jobs with no forecast
+        if (hasNoForecast) return false;
         return status === varianceFilter;
       };
 
@@ -2059,7 +2095,7 @@
       cont.innerHTML = '';
       window.currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
       updateTopBarStats({ jobs: baseJobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter });
-      updateForecastHealth({ baseFiltered, period, getJobDisplayData });
+      updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter });
 
       Object.keys(byDisc).sort().forEach(disc => {
         const sec = document.createElement('div');
@@ -2114,8 +2150,11 @@
           // Calculate health status for non-rollup jobs
           const healthStatus = !isGroupRollup ? getJobHealthStatus(pd) : null;
 
-          // Get work order count
-          const workOrderCount = !isGroupRollup ? (j.wgs && Object.keys(j.wgs).length) || 0 : 0;
+          // Get work group count (work groups with volume forecast)
+          const workGroupCount = !isGroupRollup ? (j.wgs && Object.keys(j.wgs).length) || 0 : 0;
+
+          // Get actual work orders count from Work Done data
+          const actualWorkOrderCount = !isGroupRollup ? (window.wData?.get(j.jn)?.workOrders?.length || 0) : 0;
 
           // Calculate period progress for progress bar
           let periodsPlanned = 0;
@@ -2186,7 +2225,7 @@
                 ${!isGroupRollup ? `
                   <div class="job-info-row">
                     <div class="job-rag-indicator rag-${healthStatus?.status === 'critical' ? 'red' : healthStatus?.status === 'warning' ? 'amber' : 'green'}"></div>
-                    <span class="job-info-text">${commentCount} comment${commentCount === 1 ? '' : 's'} • ${workOrderCount} work order${workOrderCount === 1 ? '' : 's'} • ${isReviewed ? 'Reviewed' : 'Needs review'}</span>
+                    <span class="job-info-text">${commentCount} comment${commentCount === 1 ? '' : 's'} • ${actualWorkOrderCount} work order${actualWorkOrderCount === 1 ? '' : 's'} • ${workGroupCount} work group${workGroupCount === 1 ? '' : 's'} with forecast • ${isReviewed ? 'Reviewed' : 'Needs review'}</span>
                   </div>
                 ` : ''}
               </div>
@@ -2485,7 +2524,7 @@
 
       if (showV0 && v0Periods) {
         datasets.push({
-          label: 'Planned v0 (Cumulative)',
+          label: 'Forecast v0 (Original)',
           data: cumPlanV0,
           borderColor: '#60a5fa',
           backgroundColor: 'rgba(96, 165, 250, 0.12)',
@@ -2495,7 +2534,7 @@
       }
       if (showV1 && v1Periods) {
         datasets.push({
-          label: 'Planned v1 (Cumulative)',
+          label: 'Forecast v1 (Updated)',
           data: cumPlanV1,
           borderColor: '#6366f1',
           backgroundColor: 'rgba(99, 102, 241, 0.12)',
@@ -2504,7 +2543,7 @@
         });
       }
       datasets.push({
-        label: 'Actual (Cumulative)',
+        label: 'Work Done (Cumulative)',
         data: cumActual,
         borderColor: '#10b981',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -2835,11 +2874,12 @@
     document.getElementById('breakdown').onclick = e => { if (e.target.id==='breakdown') closeBreakdown(); };
     document.getElementById('forecastCompare').onclick = e => { if (e.target.id === 'forecastCompare') closeForecastComparison(); };
 
-    document.querySelectorAll('.rag-pill').forEach(pill => {
-      const filter = pill.dataset.filter;
+    // Health stats, legend items, and bar segments all act as filter buttons
+    document.querySelectorAll('.health-stat[data-filter], .health-legend-clickable-item[data-filter], .health-bar-segment[data-filter]').forEach(el => {
+      const filter = el.dataset.filter;
       if (!filter) return;
-      pill.addEventListener('click', () => applyRagFilter(filter));
-      pill.addEventListener('keydown', event => {
+      el.addEventListener('click', () => applyRagFilter(filter));
+      el.addEventListener('keydown', event => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           applyRagFilter(filter);
