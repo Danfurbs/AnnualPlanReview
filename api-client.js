@@ -74,12 +74,44 @@ function loadApiConfig() {
 loadApiConfig();
 
 /**
- * Generic API request handler with retry logic
+ * In-flight request tracking for deduplication
+ * Key: `${method}:${endpoint}:${bodyHash}` -> Promise
+ */
+const inFlightRequests = new Map();
+
+/**
+ * Generate a cache key for request deduplication
+ * @param {string} method - HTTP method
+ * @param {string} endpoint - API endpoint
+ * @param {string|undefined} body - Stringified request body
+ * @returns {string} - Cache key
+ */
+function getRequestCacheKey(method, endpoint, body) {
+  // Use body string directly for hashing (simple but effective for JSON)
+  const bodyKey = body || '';
+  return `${method}:${endpoint}:${bodyKey}`;
+}
+
+/**
+ * Calculate retry delay with jitter to avoid thundering herd
+ * @param {number} attempt - Current attempt number (0-indexed)
+ * @returns {number} - Delay in milliseconds with jitter applied
+ */
+function getRetryDelayWithJitter(attempt) {
+  const baseDelay = API_CONFIG.retryDelay * Math.pow(2, attempt);
+  // Add jitter: random value between -25% and +25% of base delay
+  const jitter = baseDelay * (Math.random() * 0.5 - 0.25);
+  return Math.max(0, Math.round(baseDelay + jitter));
+}
+
+/**
+ * Generic API request handler with retry logic and deduplication
  */
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_CONFIG.baseUrl}/api${endpoint}`;
+  const method = options.method || 'GET';
   const config = {
-    method: options.method || 'GET',
+    method,
     headers: {
       'Content-Type': 'application/json',
       ...options.headers
@@ -87,41 +119,165 @@ async function apiRequest(endpoint, options = {}) {
     ...options
   };
 
+  let bodyString;
   if (options.body && typeof options.body === 'object') {
-    config.body = JSON.stringify(options.body);
+    bodyString = JSON.stringify(options.body);
+    config.body = bodyString;
   }
 
-  let lastError;
-  for (let attempt = 0; attempt < API_CONFIG.retryAttempts; attempt++) {
+  // Request deduplication: check for identical in-flight request
+  const cacheKey = getRequestCacheKey(method, endpoint, bodyString);
+  const existingRequest = inFlightRequests.get(cacheKey);
+  if (existingRequest) {
+    // Return the same promise for duplicate in-flight requests
+    return existingRequest;
+  }
+
+  // Create the request promise and track it
+  const requestPromise = (async () => {
+    let lastError;
+    for (let attempt = 0; attempt < API_CONFIG.retryAttempts; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+
+        // Create a fresh config for each attempt with new signal
+        const attemptConfig = { ...config, signal: controller.signal };
+
+        const response = await fetch(url, attemptConfig);
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return await response.json();
+      } catch (err) {
+        lastError = err;
+        if (attempt < API_CONFIG.retryAttempts - 1) {
+          const delay = getRetryDelayWithJitter(attempt);
+          console.warn(`API request ${method} ${endpoint} failed, retrying in ${delay}ms...`, err.message);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    // Create descriptive error with endpoint and method, preserving original cause
+    const errorMessage = `API request failed: ${method} ${endpoint} - ${lastError.message}`;
+    console.error(`${errorMessage} (after ${API_CONFIG.retryAttempts} attempts)`);
+
+    // Use Error cause if supported (ES2022+), otherwise attach as property
+    let finalError;
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+      finalError = new Error(errorMessage, { cause: lastError });
+    } catch {
+      // Fallback for older environments that don't support cause option
+      finalError = new Error(errorMessage);
+      finalError.cause = lastError;
+    }
+    finalError.endpoint = endpoint;
+    finalError.method = method;
 
-      config.signal = controller.signal;
+    throw finalError;
+  })();
 
-      const response = await fetch(url, config);
-      clearTimeout(timeoutId);
+  // Track the in-flight request
+  inFlightRequests.set(cacheKey, requestPromise);
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  // Clean up tracking when request completes (success or failure)
+  requestPromise.finally(() => {
+    inFlightRequests.delete(cacheKey);
+  });
+
+  return requestPromise;
+}
+
+// ========== Forecast API Functions ==========
+
+/**
+ * Valid period keys for forecast data
+ */
+const VALID_PERIOD_KEYS = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11', 'P12', 'P13'];
+
+/**
+ * Validate serialized forecast data before sending to API
+ * @param {*} serialized - The serialized forecast data to validate
+ * @returns {{ valid: boolean, error?: string }} - Validation result
+ */
+function validateSerializedForecastData(serialized) {
+  // Check that serialized is a non-null object (not array)
+  if (!serialized || typeof serialized !== 'object' || Array.isArray(serialized)) {
+    return { valid: false, error: 'Serialized data must be a non-null object' };
+  }
+
+  const jobNumbers = Object.keys(serialized);
+
+  // Empty object is valid (no jobs to save)
+  if (jobNumbers.length === 0) {
+    return { valid: true };
+  }
+
+  for (const jobNumber of jobNumbers) {
+    // Job number must be a non-empty string
+    if (typeof jobNumber !== 'string' || jobNumber.trim() === '') {
+      return { valid: false, error: `Invalid job number: must be a non-empty string` };
+    }
+
+    const jobData = serialized[jobNumber];
+
+    // Job data must be a non-null object
+    if (!jobData || typeof jobData !== 'object' || Array.isArray(jobData)) {
+      return { valid: false, error: `Job ${jobNumber}: data must be a non-null object` };
+    }
+
+    // Validate 'wgs' (workgroups) - required field
+    if (!jobData.wgs || typeof jobData.wgs !== 'object' || Array.isArray(jobData.wgs)) {
+      return { valid: false, error: `Job ${jobNumber}: 'wgs' must be a non-null object` };
+    }
+
+    // Validate each workgroup's period values
+    for (const [wgName, wgData] of Object.entries(jobData.wgs)) {
+      if (!wgData || typeof wgData !== 'object' || Array.isArray(wgData)) {
+        return { valid: false, error: `Job ${jobNumber}, workgroup '${wgName}': period data must be a non-null object` };
       }
 
-      return await response.json();
-    } catch (err) {
-      lastError = err;
-      if (attempt < API_CONFIG.retryAttempts - 1) {
-        const delay = API_CONFIG.retryDelay * Math.pow(2, attempt);
-        console.warn(`API request failed, retrying in ${delay}ms...`, err.message);
-        await new Promise(resolve => setTimeout(resolve, delay));
+      // Check that period values are numbers
+      for (const [periodKey, periodValue] of Object.entries(wgData)) {
+        if (!VALID_PERIOD_KEYS.includes(periodKey)) {
+          return { valid: false, error: `Job ${jobNumber}, workgroup '${wgName}': invalid period key '${periodKey}'` };
+        }
+        if (typeof periodValue !== 'number' || !Number.isFinite(periodValue)) {
+          return { valid: false, error: `Job ${jobNumber}, workgroup '${wgName}': period ${periodKey} must be a finite number` };
+        }
+      }
+    }
+
+    // Validate 'periods' if present (aggregated totals) - optional but must be valid if present
+    if (jobData.periods !== undefined) {
+      if (!jobData.periods || typeof jobData.periods !== 'object' || Array.isArray(jobData.periods)) {
+        return { valid: false, error: `Job ${jobNumber}: 'periods' must be a non-null object if present` };
+      }
+
+      for (const [periodKey, periodValue] of Object.entries(jobData.periods)) {
+        if (!VALID_PERIOD_KEYS.includes(periodKey)) {
+          return { valid: false, error: `Job ${jobNumber}: invalid period key '${periodKey}' in periods` };
+        }
+        if (typeof periodValue !== 'number' || !Number.isFinite(periodValue)) {
+          return { valid: false, error: `Job ${jobNumber}: period ${periodKey} must be a finite number` };
+        }
+      }
+    }
+
+    // Validate 'comments' if present - optional but must be valid if present
+    if (jobData.comments !== undefined) {
+      if (!jobData.comments || typeof jobData.comments !== 'object' || Array.isArray(jobData.comments)) {
+        return { valid: false, error: `Job ${jobNumber}: 'comments' must be a non-null object if present` };
       }
     }
   }
 
-  console.error('API request failed after retries:', lastError);
-  throw lastError;
+  return { valid: true };
 }
-
-// ========== Forecast API Functions ==========
 
 /**
  * Load forecast from API
@@ -162,16 +318,33 @@ async function loadForecastFromApi(year, planVersion) {
 async function saveForecastToApi(forecastData, rowCount, year, planVersion) {
   if (!isApiEnabled()) return false;
 
+  const endpoint = `/forecasts/${year}/${planVersion}`;
+
   try {
     const serialized = window.serializeForecastData(forecastData);
-    const response = await apiRequest(`/forecasts/${year}/${planVersion}`, {
+
+    // Validate serialized data before sending to API
+    const validation = validateSerializedForecastData(serialized);
+    if (!validation.valid) {
+      const errorMsg = `Failed to save forecast: ${validation.error}`;
+      console.error(`Forecast validation failed for POST ${endpoint}:`, validation.error);
+
+      // Surface error to user via Toast (non-blocking)
+      if (window.Toast && typeof window.Toast.error === 'function') {
+        window.Toast.error(errorMsg);
+      }
+
+      return false;
+    }
+
+    const response = await apiRequest(endpoint, {
       method: 'POST',
       body: { data: serialized }
     });
 
     return response.success === true;
   } catch (err) {
-    console.error('Failed to save forecast to API:', err);
+    console.error(`Failed to save forecast to API (POST ${endpoint}):`, err);
     return false;
   }
 }
