@@ -28,6 +28,9 @@ function openSettings() {
   // Populate Clear All FY dropdown
   populateClearAllFySelect();
 
+  // Populate export selectors
+  populateExportSelectors();
+
   modal.style.display = 'block';
 }
 
@@ -438,6 +441,222 @@ async function loadCommentFile(event) {
   event.target.value = '';
 }
 
+/**
+ * Populate export selectors in settings modal
+ */
+function populateExportSelectors() {
+  const fySelect = document.getElementById('exportFySelect');
+  const workGroupSelect = document.getElementById('exportWorkGroupSelect');
+
+  if (!fySelect || !workGroupSelect) return;
+
+  // Populate FY dropdown
+  const fyOptions = typeof getFinancialYearOptions === 'function'
+    ? getFinancialYearOptions()
+    : ['FY27', 'FY28', 'FY29', 'FY30'];
+
+  fySelect.innerHTML = '<option value="">Select FY...</option>';
+  fyOptions.forEach(fy => {
+    const option = document.createElement('option');
+    option.value = fy;
+    option.textContent = fy;
+    fySelect.appendChild(option);
+  });
+
+  // Populate work group dropdown with descriptions
+  workGroupSelect.innerHTML = '<option value="">Select Work Group...</option>';
+
+  if (window.workGroupSets && window.workGroupSets.size > 0) {
+    // Sort work groups by description for easier selection
+    const sortedWorkGroups = [];
+    window.workGroupSets.forEach((description, code) => {
+      // Skip retired entries
+      if (description.includes('RETIRED') || description.includes('DO NOT USE')) {
+        return;
+      }
+      sortedWorkGroups.push({ code, description });
+    });
+
+    // Sort alphabetically by description
+    sortedWorkGroups.sort((a, b) => a.description.localeCompare(b.description));
+
+    sortedWorkGroups.forEach(wg => {
+      const option = document.createElement('option');
+      option.value = wg.description; // Use description as value (matches how forecast data stores it)
+      option.textContent = `${wg.description} (${wg.code})`;
+      workGroupSelect.appendChild(option);
+    });
+  }
+}
+
+/**
+ * Download forecast JSON export from settings (uses settings selectors)
+ */
+async function downloadSettingsForecastExport() {
+  const fySelect = document.getElementById('exportFySelect');
+  const planSelect = document.getElementById('exportPlanSelect');
+
+  const year = fySelect?.value;
+  const planVersion = planSelect?.value;
+
+  if (!year) {
+    alert('Please select a Financial Year');
+    return;
+  }
+
+  if (!planVersion) {
+    alert('Please select a Plan Version');
+    return;
+  }
+
+  // Load forecast data for the selected year and plan version
+  try {
+    const snapshot = await window.getForecastSnapshotAsync(year, planVersion);
+
+    if (!snapshot || !snapshot.data || !snapshot.data.size) {
+      alert(`No forecast data found for ${year} ${planVersion}`);
+      return;
+    }
+
+    // Export the forecast
+    window.exportForecastFile(year, planVersion, snapshot.data, snapshot.data.size);
+  } catch (err) {
+    console.error('Failed to export forecast:', err);
+    alert('Failed to export forecast: ' + err.message);
+  }
+}
+
+/**
+ * Download Excel template export from settings (uses settings selectors)
+ */
+async function downloadSettingsExcelExport() {
+  const fySelect = document.getElementById('exportFySelect');
+  const planSelect = document.getElementById('exportPlanSelect');
+  const workGroupSelect = document.getElementById('exportWorkGroupSelect');
+
+  const year = fySelect?.value;
+  const planVersion = planSelect?.value;
+  const workGroup = workGroupSelect?.value;
+
+  if (!year) {
+    alert('Please select a Financial Year');
+    return;
+  }
+
+  if (!planVersion) {
+    alert('Please select a Plan Version');
+    return;
+  }
+
+  if (!workGroup) {
+    alert('Please select a Work Group');
+    return;
+  }
+
+  // Load forecast data for the selected year and plan version
+  try {
+    const snapshot = await window.getForecastSnapshotAsync(year, planVersion);
+
+    if (!snapshot || !snapshot.data || !snapshot.data.size) {
+      alert(`No forecast data found for ${year} ${planVersion}`);
+      return;
+    }
+
+    // Convert FY27 -> 2027, FY26 -> 2026, etc.
+    const financialYear = year.startsWith('FY') ? '20' + year.substring(2) : year;
+
+    // Build CSV content
+    const headers = ['Strategic Route', 'WGST', 'Financial Year', 'Standard Job', 'SJN and Desc', 'Account Code',
+                     'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13', 'Comment'];
+
+    const rows = [];
+    const periods = window.FORECAST_PERIODS || ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11', 'P12', 'P13'];
+
+    snapshot.data.forEach((job, jobNumber) => {
+      const wgData = job?.wgs?.[workGroup];
+      if (!wgData) return;
+
+      // Check if this job has any data for the current work group
+      const hasData = periods.some(period => {
+        const val = wgData[period];
+        return val !== undefined && val !== null && val !== '';
+      });
+
+      if (!hasData) return;
+
+      // Get job description from stdJobs
+      const jobInfo = window.stdJobs?.get(jobNumber);
+      const jobDesc = jobInfo?.desc || '';
+      const sjnAndDesc = jobDesc ? `${jobNumber} - ${jobDesc}` : jobNumber;
+
+      const row = [
+        '', // Strategic Route (blank)
+        workGroup, // WGST
+        financialYear, // Financial Year (e.g., 2027)
+        jobNumber, // Standard Job
+        sjnAndDesc, // SJN and Desc (e.g., "006206 - T/C - TCAID - ACTIVATE")
+        'XXXX', // Account Code (always XXXX)
+      ];
+
+      // Add P01-P13 values
+      periods.forEach(period => {
+        const value = wgData[period];
+        // Export numeric values, including 0
+        row.push(value !== undefined && value !== null && value !== '' ? value : '');
+      });
+
+      // Add comment for this work group
+      const comment = job?.comments?.[workGroup] || '';
+      row.push(comment);
+
+      rows.push(row);
+    });
+
+    if (rows.length === 0) {
+      alert(`No data to export for ${workGroup} in ${year} ${planVersion}`);
+      return;
+    }
+
+    // Sort by job number
+    rows.sort((a, b) => a[3].localeCompare(b[3]));
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        // Escape cells that contain commas or quotes
+        const cellStr = String(cell);
+        if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+          return `"${cellStr.replace(/"/g, '""')}"`;
+        }
+        return cellStr;
+      }).join(','))
+    ].join('\n');
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    // Sanitize workGroup for filename
+    const safeWorkGroup = workGroup.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Forecast_${year}_${planVersion}_${safeWorkGroup}_Upload.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    console.log(`Exported ${rows.length} rows for ${workGroup} in ${year} ${planVersion}`);
+  } catch (err) {
+    console.error('Failed to export Excel template:', err);
+    alert('Failed to export Excel template: ' + err.message);
+  }
+}
+
 // Expose functions globally
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;
@@ -450,3 +669,6 @@ window.populateClearAllFySelect = populateClearAllFySelect;
 window.downloadComments = downloadComments;
 window.triggerCommentFileUpload = triggerCommentFileUpload;
 window.loadCommentFile = loadCommentFile;
+window.populateExportSelectors = populateExportSelectors;
+window.downloadSettingsForecastExport = downloadSettingsForecastExport;
+window.downloadSettingsExcelExport = downloadSettingsExcelExport;

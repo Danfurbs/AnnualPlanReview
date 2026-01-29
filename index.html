@@ -750,14 +750,42 @@
 
           <div class="settings-data-actions">
             <div class="data-action-group">
-              <h4>Forecast Data</h4>
-              <button class="secondary-button" onclick="downloadForecastEditorExport()">📥 Export Forecast JSON</button>
-              <button class="secondary-button" onclick="downloadExcelUploadFormat()">📊 Export Excel Template</button>
+              <h4>Forecast Export</h4>
+              <div class="export-selectors" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                <div class="file-input-group" style="flex: 1; min-width: 120px;">
+                  <label for="exportFySelect">Financial Year</label>
+                  <select id="exportFySelect" style="width: 100%;">
+                    <option value="">Select FY...</option>
+                  </select>
+                </div>
+                <div class="file-input-group" style="flex: 1; min-width: 100px;">
+                  <label for="exportPlanSelect">Plan Version</label>
+                  <select id="exportPlanSelect" style="width: 100%;">
+                    <option value="">Select...</option>
+                    <option value="v0">v0 (Original)</option>
+                    <option value="v1">v1 (Updated)</option>
+                  </select>
+                </div>
+                <div class="file-input-group" style="flex: 2; min-width: 200px;">
+                  <label for="exportWorkGroupSelect">Work Group</label>
+                  <select id="exportWorkGroupSelect" style="width: 100%;">
+                    <option value="">Select Work Group...</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="secondary-button" onclick="downloadSettingsForecastExport()">📥 Export Forecast JSON</button>
+                <button class="secondary-button" onclick="downloadSettingsExcelExport()">📊 Export Excel Template</button>
+              </div>
+            </div>
+
+            <div class="data-action-group" style="margin-top: 16px;">
+              <h4>Forecast Import</h4>
               <button class="secondary-button" onclick="triggerForecastFileUpload()">📤 Import Forecast</button>
               <input type="file" id="forecastFileInput" accept="application/json" class="is-hidden" onchange="loadForecastFile(event)">
             </div>
 
-            <div class="data-action-group">
+            <div class="data-action-group" style="margin-top: 16px;">
               <h4>Comments</h4>
               <button class="secondary-button" onclick="downloadComments()">📥 Export Comments</button>
               <button class="secondary-button" onclick="triggerCommentFileUpload()">📤 Import Comments</button>
