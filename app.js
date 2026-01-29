@@ -889,7 +889,7 @@
         if (!source) return;
         source.forEach(job => {
           Object.keys(job.wgs || {}).forEach(wg => {
-            if (wg) names.add(wg);
+            if (wg) names.add(normalizeWorkGroupSet(wg));
           });
         });
       });
@@ -2022,20 +2022,38 @@
           job.tot.v += av-fv;
         }
 
-        const wgNames = new Set([
-          ...Object.keys(f?.wgs || {}),
-          ...Object.keys(a?.wgs || {})
-        ]);
-        wgNames.forEach(wg => {
-          job.wgs[wg] = {periods: {}};
+        // Build mapping from normalized workgroup to actual keys in each source
+        // This prevents duplicate entries when the same workgroup has different key formats
+        const fWgKeys = Object.keys(f?.wgs || {});
+        const aWgKeys = Object.keys(a?.wgs || {});
+        const normalizedToActual = new Map();
+
+        fWgKeys.forEach(key => {
+          const normalized = normalizeWorkGroupSet(key);
+          if (!normalizedToActual.has(normalized)) {
+            normalizedToActual.set(normalized, {});
+          }
+          normalizedToActual.get(normalized).fKey = key;
+        });
+
+        aWgKeys.forEach(key => {
+          const normalized = normalizeWorkGroupSet(key);
+          if (!normalizedToActual.has(normalized)) {
+            normalizedToActual.set(normalized, {});
+          }
+          normalizedToActual.get(normalized).aKey = key;
+        });
+
+        normalizedToActual.forEach((keys, normalized) => {
+          job.wgs[normalized] = {periods: {}};
           for(let i=1; i<=13; i++) {
             const p = `P${i}`;
-            const fv = f?.wgs?.[wg]?.[p] || 0;
-            const avRaw = a?.wgs?.[wg]?.[p] || 0;
+            const fv = (keys.fKey ? f?.wgs?.[keys.fKey]?.[p] : 0) || 0;
+            const avRaw = (keys.aKey ? a?.wgs?.[keys.aKey]?.[p] : 0) || 0;
             // Always use forecast mode: periods after cutoff use forecast, before use actual
             const useForecast = i > maxWorkDonePeriod;
             const av = useForecast ? fv : avRaw;
-            job.wgs[wg].periods[p] = {f: fv, a: av, v: av - fv};
+            job.wgs[normalized].periods[p] = {f: fv, a: av, v: av - fv};
           }
         });
         baseJobs.push(job);
