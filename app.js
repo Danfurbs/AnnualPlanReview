@@ -2772,58 +2772,170 @@
       let tableHTML = '<thead><tr><th>Work Group</th>';
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
       tableHTML += '<th>Total</th></tr></thead><tbody>';
-      
+
       const isFiltered = wgFilter !== 'all';
       const wgEntries = Object.entries(job.wgs || {}).filter(([wg]) => !isFiltered || wg === wgFilter);
       const showForecast = wgDisplayMode === 'forecast';
+
       if (wgEntries.length === 0) {
         tableHTML += '<tr><td colspan="15"><em>No work group data available.</em></td></tr>';
       } else {
-        wgEntries.forEach(([wg, data], idx) => {
-          let rowTotal = 0;
-          const summaryOpen = isFiltered;
-          const wgDescription = window.workGroupSets?.get(wg) || wg;
-          tableHTML += `<tr class="wg-summary${summaryOpen ? ' is-open' : ''}" data-wg="${idx}"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
-          for(let i=1; i<=13; i++) {
-            const p = `P${i}`;
-            const d = data.periods[p] || {f: 0, v: 0};
-            const val = showForecast ? (d.f || 0) : (d.v || 0);
-            rowTotal += val;
-            // Only apply color coding for variance mode
-            const cl = showForecast ? '' : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
+        // Group work groups by engineer
+        const engineerGroups = new Map();
+        const ungrouped = [];
+
+        wgEntries.forEach(([wg, data]) => {
+          const engineer = window.getEngineerForWorkGroup ? window.getEngineerForWorkGroup(wg) : null;
+          if (engineer) {
+            if (!engineerGroups.has(engineer.id)) {
+              engineerGroups.set(engineer.id, { engineer, workGroups: [] });
+            }
+            engineerGroups.get(engineer.id).workGroups.push([wg, data]);
+          } else {
+            ungrouped.push([wg, data]);
+          }
+        });
+
+        let globalIdx = 0;
+
+        // Render grouped work groups by engineer
+        engineerGroups.forEach(({ engineer, workGroups }, engKey) => {
+          // Calculate engineer subtotals
+          const engSubtotals = Array(13).fill(0);
+          let engTotal = 0;
+          workGroups.forEach(([wg, data]) => {
+            for(let i=1; i<=13; i++) {
+              const p = `P${i}`;
+              const d = data.periods[p] || {f: 0, v: 0};
+              const val = showForecast ? (d.f || 0) : (d.v || 0);
+              engSubtotals[i-1] += val;
+              engTotal += val;
+            }
+          });
+
+          // Engineer header row
+          tableHTML += `<tr class="engineer-header" data-eng="${engineer.id}"><td colspan="15">${escapeHtml(engineer.name)} (${workGroups.length} work group${workGroups.length !== 1 ? 's' : ''})<span class="eng-toggle">Show</span></td></tr>`;
+
+          // Work group rows for this engineer
+          workGroups.forEach(([wg, data]) => {
+            const idx = globalIdx++;
+            let rowTotal = 0;
+            const summaryOpen = isFiltered;
+            const wgDescription = window.workGroupSets?.get(wg) || wg;
+            tableHTML += `<tr class="wg-summary engineer-row${summaryOpen ? ' is-open' : ''}" data-wg="${idx}" data-eng="${engineer.id}"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
+            for(let i=1; i<=13; i++) {
+              const p = `P${i}`;
+              const d = data.periods[p] || {f: 0, v: 0};
+              const val = showForecast ? (d.f || 0) : (d.v || 0);
+              rowTotal += val;
+              const cl = showForecast ? (val !== 0 ? 'forecast-nonzero' : '') : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
+              const prefix = showForecast ? '' : (val > 0 ? '+' : '');
+              tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
+            }
+            const tcl = showForecast ? (rowTotal !== 0 ? 'forecast-nonzero' : '') : (rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral');
+            const tprefix = showForecast ? '' : (rowTotal > 0 ? '+' : '');
+            tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
+
+            const detailRows = [
+              { label: 'Planned', key: 'f' },
+              { label: 'Actual', key: 'a' },
+              { label: 'Variance', key: 'v' }
+            ];
+            detailRows.forEach(({ label, key }) => {
+              let detailTotal = 0;
+              tableHTML += `<tr class="wg-detail engineer-row${summaryOpen ? ' open' : ''}" data-wg="${idx}" data-eng="${engineer.id}"><td>${label}</td>`;
+              for(let i=1; i<=13; i++) {
+                const p = `P${i}`;
+                const d = data.periods[p] || {f: 0, a: 0, v: 0};
+                const val = d[key] || 0;
+                detailTotal += val;
+                const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
+                tableHTML += `<td class="${cl}">${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}</td>`;
+              }
+              const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
+              tableHTML += `<td class="${tcl}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+            });
+          });
+
+          // Engineer subtotal row
+          tableHTML += `<tr class="engineer-subtotal engineer-row" data-eng="${engineer.id}"><td>Subtotal</td>`;
+          for(let i=0; i<13; i++) {
+            const val = engSubtotals[i];
+            const cl = showForecast ? (val !== 0 ? 'forecast-nonzero' : '') : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
             const prefix = showForecast ? '' : (val > 0 ? '+' : '');
             tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
           }
-          const tcl = showForecast ? '' : (rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral');
-          const tprefix = showForecast ? '' : (rowTotal > 0 ? '+' : '');
-          tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
+          const etcl = showForecast ? (engTotal !== 0 ? 'forecast-nonzero' : '') : (engTotal > 0 ? 'positive' : engTotal < 0 ? 'negative' : 'neutral');
+          const etprefix = showForecast ? '' : (engTotal > 0 ? '+' : '');
+          tableHTML += `<td class="${etcl}"><strong>${etprefix}${engTotal.toFixed(1)}</strong></td></tr>`;
+        });
 
-          const detailRows = [
-            { label: 'Planned', key: 'f' },
-            { label: 'Actual', key: 'a' },
-            { label: 'Variance', key: 'v' }
-          ];
-          detailRows.forEach(({ label, key }) => {
-            let detailTotal = 0;
-            tableHTML += `<tr class="wg-detail${summaryOpen ? ' open' : ''}" data-wg="${idx}"><td>${label}</td>`;
+        // Render ungrouped work groups (if any)
+        if (ungrouped.length > 0) {
+          if (engineerGroups.size > 0) {
+            tableHTML += `<tr class="engineer-header" data-eng="ungrouped"><td colspan="15">Other Work Groups (${ungrouped.length})<span class="eng-toggle">Show</span></td></tr>`;
+          }
+          ungrouped.forEach(([wg, data]) => {
+            const idx = globalIdx++;
+            let rowTotal = 0;
+            const summaryOpen = isFiltered;
+            const wgDescription = window.workGroupSets?.get(wg) || wg;
+            const engRowClass = engineerGroups.size > 0 ? ' engineer-row' : '';
+            tableHTML += `<tr class="wg-summary${engRowClass}${summaryOpen ? ' is-open' : ''}" data-wg="${idx}" data-eng="ungrouped"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
             for(let i=1; i<=13; i++) {
               const p = `P${i}`;
-              const d = data.periods[p] || {f: 0, a: 0, v: 0};
-              const val = d[key] || 0;
-              detailTotal += val;
-              const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
-              tableHTML += `<td class="${cl}">${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}</td>`;
+              const d = data.periods[p] || {f: 0, v: 0};
+              const val = showForecast ? (d.f || 0) : (d.v || 0);
+              rowTotal += val;
+              const cl = showForecast ? (val !== 0 ? 'forecast-nonzero' : '') : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
+              const prefix = showForecast ? '' : (val > 0 ? '+' : '');
+              tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
             }
-            const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
-            tableHTML += `<td class="${tcl}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+            const tcl = showForecast ? (rowTotal !== 0 ? 'forecast-nonzero' : '') : (rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral');
+            const tprefix = showForecast ? '' : (rowTotal > 0 ? '+' : '');
+            tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
+
+            const detailRows = [
+              { label: 'Planned', key: 'f' },
+              { label: 'Actual', key: 'a' },
+              { label: 'Variance', key: 'v' }
+            ];
+            detailRows.forEach(({ label, key }) => {
+              let detailTotal = 0;
+              tableHTML += `<tr class="wg-detail${engRowClass}${summaryOpen ? ' open' : ''}" data-wg="${idx}" data-eng="ungrouped"><td>${label}</td>`;
+              for(let i=1; i<=13; i++) {
+                const p = `P${i}`;
+                const d = data.periods[p] || {f: 0, a: 0, v: 0};
+                const val = d[key] || 0;
+                detailTotal += val;
+                const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
+                tableHTML += `<td class="${cl}">${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}</td>`;
+              }
+              const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
+              tableHTML += `<td class="${tcl}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+            });
           });
-        });
+        }
       }
       tableHTML += '</tbody>';
       wgTable.innerHTML = tableHTML;
 
-      wgTable.querySelectorAll('.wg-summary').forEach(row => {
+      // Engineer header click to expand/collapse
+      wgTable.querySelectorAll('.engineer-header').forEach(row => {
         row.addEventListener('click', () => {
+          const engId = row.dataset.eng;
+          const engRows = wgTable.querySelectorAll(`.engineer-row[data-eng="${engId}"]`);
+          const isOpen = row.classList.toggle('is-open');
+          engRows.forEach(r => r.classList.toggle('open', isOpen));
+          const toggle = row.querySelector('.eng-toggle');
+          if (toggle) toggle.textContent = isOpen ? 'Hide' : 'Show';
+        });
+      });
+
+      // Work group summary click to expand/collapse details
+      wgTable.querySelectorAll('.wg-summary').forEach(row => {
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
           const key = row.dataset.wg;
           const details = wgTable.querySelectorAll(`.wg-detail[data-wg="${key}"]`);
           const isOpen = row.classList.toggle('is-open');
