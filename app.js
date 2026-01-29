@@ -60,6 +60,35 @@
     // Expose globally for HTML onclick handler
     window.handleBreakdownPlanVersionChange = handleBreakdownPlanVersionChange;
 
+    // Work group table display mode preference (forecast vs variance)
+    const WG_DISPLAY_MODE_KEY = 'aprWgDisplayModeV1';
+    let wgDisplayMode = 'variance'; // Default to variance (current behavior)
+
+    function loadWgDisplayMode() {
+      const saved = localStorage.getItem(WG_DISPLAY_MODE_KEY);
+      if (saved && ['forecast', 'variance'].includes(saved)) {
+        wgDisplayMode = saved;
+      }
+    }
+
+    function saveWgDisplayMode(mode) {
+      wgDisplayMode = mode;
+      localStorage.setItem(WG_DISPLAY_MODE_KEY, mode);
+    }
+
+    function handleWgDisplayModeChange() {
+      const select = document.getElementById('wgDisplayMode');
+      if (!select) return;
+      saveWgDisplayMode(select.value);
+      // Re-render the current breakdown if it's open
+      if (currentCommentJob) {
+        const job = window.currentJobsMap.get(currentCommentJob);
+        if (job) showBreakdown(job);
+      }
+    }
+    // Expose globally for HTML onclick handler
+    window.handleWgDisplayModeChange = handleWgDisplayModeChange;
+
     async function handleDashboardPlanVersionChange() {
       const select = document.getElementById('dashboardPlanVersion');
       if (!select) return;
@@ -783,6 +812,7 @@
       loadWorkOrderAmendments();
       loadGroupStore();
       loadBreakdownPlanVersion();
+      loadWgDisplayMode();
       const stageDisplay = document.getElementById('reviewStageDisplay');
       if (stageDisplay && window.currentReviewStage) stageDisplay.textContent = window.currentReviewStage;
       const fyDisplay = document.getElementById('financialYearDisplay');
@@ -2621,6 +2651,12 @@
         breakdownPlanSelect.value = breakdownPlanVersion;
       }
 
+      // Set work group display mode selector
+      const wgDisplaySelect = document.getElementById('wgDisplayMode');
+      if (wgDisplaySelect) {
+        wgDisplaySelect.value = wgDisplayMode;
+      }
+
       // Build cumulative data
       const periods = [];
       let cumA = 0;
@@ -2739,6 +2775,7 @@
       
       const isFiltered = wgFilter !== 'all';
       const wgEntries = Object.entries(job.wgs || {}).filter(([wg]) => !isFiltered || wg === wgFilter);
+      const showForecast = wgDisplayMode === 'forecast';
       if (wgEntries.length === 0) {
         tableHTML += '<tr><td colspan="15"><em>No work group data available.</em></td></tr>';
       } else {
@@ -2749,14 +2786,17 @@
           tableHTML += `<tr class="wg-summary${summaryOpen ? ' is-open' : ''}" data-wg="${idx}"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
           for(let i=1; i<=13; i++) {
             const p = `P${i}`;
-            const d = data.periods[p] || {v: 0};
-            const v = d.v || 0;
-            rowTotal += v;
-            const cl = v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
-            tableHTML += `<td class="${cl}">${v > 0 ? '+' : ''}${v.toFixed(1)}</td>`;
+            const d = data.periods[p] || {f: 0, v: 0};
+            const val = showForecast ? (d.f || 0) : (d.v || 0);
+            rowTotal += val;
+            // Only apply color coding for variance mode
+            const cl = showForecast ? '' : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
+            const prefix = showForecast ? '' : (val > 0 ? '+' : '');
+            tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
           }
-          const tcl = rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral';
-          tableHTML += `<td class="${tcl}"><strong>${rowTotal > 0 ? '+' : ''}${rowTotal.toFixed(1)}</strong></td></tr>`;
+          const tcl = showForecast ? '' : (rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral');
+          const tprefix = showForecast ? '' : (rowTotal > 0 ? '+' : '');
+          tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
 
           const detailRows = [
             { label: 'Planned', key: 'f' },

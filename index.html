@@ -564,6 +564,11 @@
         <div class="discipline-header">
           <h3>Work Group Performance by Period</h3>
           <div class="header-actions">
+            <label style="font-size: 0.85rem; margin-right: 4px;">Display:</label>
+            <select id="wgDisplayMode" onchange="handleWgDisplayModeChange()" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 0.85rem; margin-right: 12px;">
+              <option value="variance">Variance</option>
+              <option value="forecast">Forecast</option>
+            </select>
             <button type="button" class="section-toggle" onclick="toggleBreakdownSection('wgTableContainer', this)">Collapse</button>
           </div>
         </div>
