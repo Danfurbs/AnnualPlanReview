@@ -482,7 +482,7 @@ function populateExportSelectors() {
 
     sortedWorkGroups.forEach(wg => {
       const option = document.createElement('option');
-      option.value = wg.description; // Use description as value (matches how forecast data stores it)
+      option.value = wg.code; // Use code as value (matches how forecast data stores it)
       option.textContent = `${wg.description} (${wg.code})`;
       workGroupSelect.appendChild(option);
     });
@@ -553,6 +553,9 @@ async function downloadSettingsExcelExport() {
     return;
   }
 
+  // Get work group description for display
+  const workGroupDescription = window.workGroupSets?.get(workGroup) || workGroup;
+
   // Load forecast data for the selected year and plan version
   try {
     const snapshot = await window.getForecastSnapshotAsync(year, planVersion);
@@ -591,7 +594,7 @@ async function downloadSettingsExcelExport() {
 
       const row = [
         '', // Strategic Route (blank)
-        workGroup, // WGST
+        workGroupDescription, // WGST (use description for readability)
         financialYear, // Financial Year (e.g., 2027)
         jobNumber, // Standard Job
         sjnAndDesc, // SJN and Desc (e.g., "006206 - T/C - TCAID - ACTIVATE")
@@ -613,7 +616,7 @@ async function downloadSettingsExcelExport() {
     });
 
     if (rows.length === 0) {
-      alert(`No data to export for ${workGroup} in ${year} ${planVersion}`);
+      alert(`No data to export for ${workGroupDescription} in ${year} ${planVersion}`);
       return;
     }
 
@@ -650,7 +653,7 @@ async function downloadSettingsExcelExport() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    console.log(`Exported ${rows.length} rows for ${workGroup} in ${year} ${planVersion}`);
+    console.log(`Exported ${rows.length} rows for ${workGroupDescription} (${workGroup}) in ${year} ${planVersion}`);
   } catch (err) {
     console.error('Failed to export Excel template:', err);
     alert('Failed to export Excel template: ' + err.message);
