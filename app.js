@@ -917,6 +917,16 @@
       return text;
     }
 
+    function getEngineerForWorkGroupNormalized(workGroupCode) {
+      if (!workGroupCode || !window.getEngineers) return null;
+      const normalizedWorkGroup = normalizeWorkGroupSet(workGroupCode);
+      return window.getEngineers().find(eng =>
+        eng.workGroupSets.some(setCode =>
+          normalizeWorkGroupSet(setCode) === normalizedWorkGroup
+        )
+      ) || null;
+    }
+
     function extractWorkOrderNumber(row) {
       const raw = row['Work Order'] ||
         row['Work Order Number'] ||
@@ -2785,7 +2795,7 @@
         const ungrouped = [];
 
         wgEntries.forEach(([wg, data]) => {
-          const engineer = window.getEngineerForWorkGroup ? window.getEngineerForWorkGroup(wg) : null;
+          const engineer = getEngineerForWorkGroupNormalized(wg);
           if (engineer) {
             if (!engineerGroups.has(engineer.id)) {
               engineerGroups.set(engineer.id, { engineer, workGroups: [] });
