@@ -11,7 +11,7 @@
 const ENGINEERS_DATA = [
   {
     id: 'carlisle',
-    name: 'Carlisle Engineer',
+    name: 'Carlisle Track',
     workGroupSets: [
      
       'DBCARTRA', // Carlisle SM(TRACK)
@@ -25,7 +25,7 @@ const ENGINEERS_DATA = [
   },
   {
     id: 'preston',
-    name: 'Preston Engineer',
+    name: 'Preston Track',
     workGroupSets: [
       
       'DBCANOFT', // Carnforth SM (OFFTRACK)
@@ -36,7 +36,7 @@ const ENGINEERS_DATA = [
   },
   {
     id: 'carnforth',
-    name: 'Carnforth Engineer',
+    name: 'Carnforth Track',
     workGroupSets: [
       'DBCANTRA', // Carnforth SM(TRACK)
       'DBCANTRE', // Carnforth ENG(TRACK)
@@ -167,7 +167,7 @@ const ENGINEERS_DATA = [
   },
   {
     id: 'blackburn',
-    name: 'Blackburn Engineer',
+    name: 'Blackburn Track',
     workGroupSets: [
       'DBBLATRA', // Blackburn SM(TRACK)
       'DBBLATRE', // Blackburn ENG(TRACK)
@@ -176,7 +176,7 @@ const ENGINEERS_DATA = [
   },
   {
     id: 'appleby',
-    name: 'Appleby Engineer',
+    name: 'Appleby Track',
     workGroupSets: [
       'DBAPPTRA', // Appleby SM(TRACK)
       'DBAPPTRE', // Appleby ENG(TRACK)
