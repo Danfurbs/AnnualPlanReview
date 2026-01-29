@@ -74,12 +74,44 @@ function loadApiConfig() {
 loadApiConfig();
 
 /**
- * Generic API request handler with retry logic
+ * In-flight request tracking for deduplication
+ * Key: `${method}:${endpoint}:${bodyHash}` -> Promise
+ */
+const inFlightRequests = new Map();
+
+/**
+ * Generate a cache key for request deduplication
+ * @param {string} method - HTTP method
+ * @param {string} endpoint - API endpoint
+ * @param {string|undefined} body - Stringified request body
+ * @returns {string} - Cache key
+ */
+function getRequestCacheKey(method, endpoint, body) {
+  // Use body string directly for hashing (simple but effective for JSON)
+  const bodyKey = body || '';
+  return `${method}:${endpoint}:${bodyKey}`;
+}
+
+/**
+ * Calculate retry delay with jitter to avoid thundering herd
+ * @param {number} attempt - Current attempt number (0-indexed)
+ * @returns {number} - Delay in milliseconds with jitter applied
+ */
+function getRetryDelayWithJitter(attempt) {
+  const baseDelay = API_CONFIG.retryDelay * Math.pow(2, attempt);
+  // Add jitter: random value between -25% and +25% of base delay
+  const jitter = baseDelay * (Math.random() * 0.5 - 0.25);
+  return Math.max(0, Math.round(baseDelay + jitter));
+}
+
+/**
+ * Generic API request handler with retry logic and deduplication
  */
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_CONFIG.baseUrl}/api${endpoint}`;
+  const method = options.method || 'GET';
   const config = {
-    method: options.method || 'GET',
+    method,
     headers: {
       'Content-Type': 'application/json',
       ...options.headers
@@ -87,38 +119,77 @@ async function apiRequest(endpoint, options = {}) {
     ...options
   };
 
+  let bodyString;
   if (options.body && typeof options.body === 'object') {
-    config.body = JSON.stringify(options.body);
+    bodyString = JSON.stringify(options.body);
+    config.body = bodyString;
   }
 
-  let lastError;
-  for (let attempt = 0; attempt < API_CONFIG.retryAttempts; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+  // Request deduplication: check for identical in-flight request
+  const cacheKey = getRequestCacheKey(method, endpoint, bodyString);
+  const existingRequest = inFlightRequests.get(cacheKey);
+  if (existingRequest) {
+    // Return the same promise for duplicate in-flight requests
+    return existingRequest;
+  }
 
-      config.signal = controller.signal;
+  // Create the request promise and track it
+  const requestPromise = (async () => {
+    let lastError;
+    for (let attempt = 0; attempt < API_CONFIG.retryAttempts; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
 
-      const response = await fetch(url, config);
-      clearTimeout(timeoutId);
+        // Create a fresh config for each attempt with new signal
+        const attemptConfig = { ...config, signal: controller.signal };
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+        const response = await fetch(url, attemptConfig);
+        clearTimeout(timeoutId);
 
-      return await response.json();
-    } catch (err) {
-      lastError = err;
-      if (attempt < API_CONFIG.retryAttempts - 1) {
-        const delay = API_CONFIG.retryDelay * Math.pow(2, attempt);
-        console.warn(`API request failed, retrying in ${delay}ms...`, err.message);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return await response.json();
+      } catch (err) {
+        lastError = err;
+        if (attempt < API_CONFIG.retryAttempts - 1) {
+          const delay = getRetryDelayWithJitter(attempt);
+          console.warn(`API request ${method} ${endpoint} failed, retrying in ${delay}ms...`, err.message);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
     }
-  }
 
-  console.error('API request failed after retries:', lastError);
-  throw lastError;
+    // Create descriptive error with endpoint and method, preserving original cause
+    const errorMessage = `API request failed: ${method} ${endpoint} - ${lastError.message}`;
+    console.error(`${errorMessage} (after ${API_CONFIG.retryAttempts} attempts)`);
+
+    // Use Error cause if supported (ES2022+), otherwise attach as property
+    let finalError;
+    try {
+      finalError = new Error(errorMessage, { cause: lastError });
+    } catch {
+      // Fallback for older environments that don't support cause option
+      finalError = new Error(errorMessage);
+      finalError.cause = lastError;
+    }
+    finalError.endpoint = endpoint;
+    finalError.method = method;
+
+    throw finalError;
+  })();
+
+  // Track the in-flight request
+  inFlightRequests.set(cacheKey, requestPromise);
+
+  // Clean up tracking when request completes (success or failure)
+  requestPromise.finally(() => {
+    inFlightRequests.delete(cacheKey);
+  });
+
+  return requestPromise;
 }
 
 // ========== Forecast API Functions ==========
