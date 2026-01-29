@@ -3,6 +3,11 @@
  * Handles configuration UI for backend API and other application settings
  */
 
+// Timing constants for status messages and polling
+const STATUS_MESSAGE_CLEAR_DELAY_MS = 3000;
+const CONNECTION_TEST_DELAY_MS = 500;
+const SYNC_INDICATOR_POLL_INTERVAL_MS = 30000;
+
 /**
  * Open settings modal
  */
@@ -74,12 +79,12 @@ async function saveSettings() {
   if (apiEnabled) {
     setTimeout(() => {
       testApiConnection();
-    }, 500);
+    }, CONNECTION_TEST_DELAY_MS);
   }
 
   setTimeout(() => {
     statusDiv.innerHTML = '';
-  }, 3000);
+  }, STATUS_MESSAGE_CLEAR_DELAY_MS);
 }
 
 /**
@@ -111,13 +116,27 @@ async function testApiConnection() {
       const response = await fetch(`${apiUrlInput}/api/health`);
       const data = await response.json();
 
-      statusDiv.innerHTML = `
-        <div class="status-success">
-          ✅ Connection successful!<br>
-          <small>Environment: ${data.environment || 'unknown'}</small><br>
-          <small>Database: ${data.database || 'unknown'}</small>
-        </div>
-      `;
+      // Build success message with DOM APIs (safe from XSS)
+      statusDiv.innerHTML = '';
+      const successDiv = document.createElement('div');
+      successDiv.className = 'status-success';
+
+      // "✅ Connection successful!" text
+      successDiv.appendChild(document.createTextNode('✅ Connection successful!'));
+      successDiv.appendChild(document.createElement('br'));
+
+      // Environment line - dynamic value uses textContent
+      const envSmall = document.createElement('small');
+      envSmall.textContent = 'Environment: ' + (data.environment || 'unknown');
+      successDiv.appendChild(envSmall);
+      successDiv.appendChild(document.createElement('br'));
+
+      // Database line - dynamic value uses textContent
+      const dbSmall = document.createElement('small');
+      dbSmall.textContent = 'Database: ' + (data.database || 'unknown');
+      successDiv.appendChild(dbSmall);
+
+      statusDiv.appendChild(successDiv);
 
       // Update status display
       updateSettingsStatus(data);
@@ -139,12 +158,20 @@ async function testApiConnection() {
       toggleApiMode(originalEnabled);
     }
   } catch (err) {
-    statusDiv.innerHTML = `
-      <div class="status-error">
-        ❌ Connection failed<br>
-        <small>${err.message}</small>
-      </div>
-    `;
+    // Build error message with DOM APIs (safe from XSS)
+    statusDiv.innerHTML = '';
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'status-error';
+
+    errorDiv.appendChild(document.createTextNode('❌ Connection failed'));
+    errorDiv.appendChild(document.createElement('br'));
+
+    // Error message - dynamic value uses textContent
+    const msgSmall = document.createElement('small');
+    msgSmall.textContent = err.message;
+    errorDiv.appendChild(msgSmall);
+
+    statusDiv.appendChild(errorDiv);
     console.error('API connection test failed:', err);
   }
 }
@@ -219,7 +246,7 @@ async function updateApiSyncIndicator() {
   const apiEnabled = isApiEnabled();
 
   if (!apiEnabled) {
-    indicator.innerHTML = '💾 Local';
+    indicator.textContent = '💾 Local';
     indicator.className = 'api-sync-indicator indicator-local';
     indicator.title = 'Using localStorage only (not synced across devices)';
     return;
@@ -229,16 +256,16 @@ async function updateApiSyncIndicator() {
   try {
     const healthy = await checkApiHealth();
     if (healthy) {
-      indicator.innerHTML = '☁️ Synced';
+      indicator.textContent = '☁️ Synced';
       indicator.className = 'api-sync-indicator indicator-synced';
       indicator.title = 'Connected to backend API (synced across devices)';
     } else {
-      indicator.innerHTML = '⚠️ Offline';
+      indicator.textContent = '⚠️ Offline';
       indicator.className = 'api-sync-indicator indicator-offline';
       indicator.title = 'API enabled but unable to connect';
     }
   } catch {
-    indicator.innerHTML = '⚠️ Error';
+    indicator.textContent = '⚠️ Error';
     indicator.className = 'api-sync-indicator indicator-error';
     indicator.title = 'API connection error';
   }
@@ -248,8 +275,8 @@ async function updateApiSyncIndicator() {
 document.addEventListener('DOMContentLoaded', () => {
   addApiSyncIndicator();
 
-  // Update indicator every 30 seconds
-  setInterval(updateApiSyncIndicator, 30000);
+  // Update indicator periodically
+  setInterval(updateApiSyncIndicator, SYNC_INDICATOR_POLL_INTERVAL_MS);
 });
 
 // Close modal when clicking outside

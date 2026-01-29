@@ -12,6 +12,28 @@ const REVIEW_STAGE_KEY = 'aprReviewStageV1';
 const FINANCIAL_YEAR_KEY = 'aprFinancialYearV1';
 const PLAN_VERSION_KEY = 'aprPlanVersionV1';
 
+// Custom event name for forecast load failures
+const FORECAST_LOAD_FAILED_EVENT = 'apr:forecast-load-failed';
+
+/**
+ * Dispatch a forecast load failed event with context details
+ * @param {Object} detail - Event detail object
+ */
+function dispatchForecastLoadFailedEvent(detail) {
+  const event = new CustomEvent(FORECAST_LOAD_FAILED_EVENT, {
+    detail: {
+      stage: detail.stage || window.currentReviewStage,
+      year: detail.year || window.currentFinancialYear,
+      planVersion: detail.planVersion || window.currentPlanVersion,
+      sourcesAttempted: detail.sourcesAttempted || [],
+      reason: detail.reason || 'No forecast data found',
+      timestamp: new Date().toISOString()
+    },
+    bubbles: true
+  });
+  window.dispatchEvent(event);
+}
+
 /**
  * Initialize context from localStorage
  */
@@ -155,15 +177,23 @@ function getPreferredPlanVersion(year) {
 /**
  * Load forecast for current context
  * Tries: localStorage > library > initialize v1 from v0
+ * Dispatches 'apr:forecast-load-failed' event if no forecast is found
  */
 function loadForecastForCurrentContext() {
+  const sourcesAttempted = [];
+
   if (!window.currentFinancialYear || !window.currentPlanVersion) {
     console.warn('Cannot load forecast: missing year or plan version');
     window.fData = null;
+    dispatchForecastLoadFailedEvent({
+      reason: 'Missing year or plan version',
+      sourcesAttempted: []
+    });
     return null;
   }
 
   // Try localStorage first
+  sourcesAttempted.push('localStorage');
   const cached = loadForecastFromStorage(window.currentFinancialYear, window.currentPlanVersion);
   if (cached) {
     window.fData = cached.data;
@@ -172,6 +202,7 @@ function loadForecastForCurrentContext() {
   }
 
   // Try library
+  sourcesAttempted.push('library');
   const library = loadForecastFromLibrary(window.currentFinancialYear, window.currentPlanVersion);
   if (library) {
     window.fData = library.data;
@@ -181,6 +212,7 @@ function loadForecastForCurrentContext() {
 
   // Auto-initialize v1 from v0 if needed
   if (window.currentPlanVersion === 'v1') {
+    sourcesAttempted.push('v0-initialization');
     const initialized = initializeV1FromV0(window.currentFinancialYear);
     if (initialized) {
       window.fData = initialized.data;
@@ -188,32 +220,48 @@ function loadForecastForCurrentContext() {
     }
   }
 
-  // No forecast available
+  // No forecast available - dispatch event for UI notification
   window.fData = null;
   console.log(`No forecast available for ${window.currentFinancialYear} ${window.currentPlanVersion}`);
+  dispatchForecastLoadFailedEvent({
+    year: window.currentFinancialYear,
+    planVersion: window.currentPlanVersion,
+    sourcesAttempted,
+    reason: 'No forecast data found in any source'
+  });
   return null;
 }
 
 /**
  * Load forecast for current context (async version with GitHub support)
  * Tries: localStorage > GitHub > library > initialize v1 from v0
+ * Dispatches 'apr:forecast-load-failed' event if no forecast is found
  */
 async function loadForecastForCurrentContextAsync() {
+  const sourcesAttempted = [];
+
   if (!window.currentFinancialYear || !window.currentPlanVersion) {
     console.warn('Cannot load forecast: missing year or plan version');
     window.fData = null;
+    dispatchForecastLoadFailedEvent({
+      reason: 'Missing year or plan version',
+      sourcesAttempted: []
+    });
     return null;
   }
 
   // Try API/localStorage (API checked first if enabled)
+  const apiEnabled = window.isApiEnabled && window.isApiEnabled();
+  sourcesAttempted.push(apiEnabled ? 'API' : 'localStorage');
   const cached = await loadForecastFromStorageAsync(window.currentFinancialYear, window.currentPlanVersion);
   if (cached) {
     window.fData = cached.data;
-    console.log(`✓ Forecast loaded: ${window.currentFinancialYear} ${window.currentPlanVersion} (${cached.savedAt || 'unknown date'})`, window.isApiEnabled() ? '[API]' : '[local]');
+    console.log(`✓ Forecast loaded: ${window.currentFinancialYear} ${window.currentPlanVersion} (${cached.savedAt || 'unknown date'})`, apiEnabled ? '[API]' : '[local]');
     return cached;
   }
 
   // Try GitHub or library
+  sourcesAttempted.push('GitHub/library');
   const library = await loadForecastFromLibraryAsync(window.currentFinancialYear, window.currentPlanVersion);
   if (library) {
     window.fData = library.data;
@@ -224,6 +272,7 @@ async function loadForecastForCurrentContextAsync() {
 
   // Auto-initialize v1 from v0 if needed
   if (window.currentPlanVersion === 'v1') {
+    sourcesAttempted.push('v0-initialization');
     const initialized = initializeV1FromV0(window.currentFinancialYear);
     if (initialized) {
       window.fData = initialized.data;
@@ -231,9 +280,15 @@ async function loadForecastForCurrentContextAsync() {
     }
   }
 
-  // No forecast available
+  // No forecast available - dispatch event for UI notification
   window.fData = null;
   console.log(`No forecast available for ${window.currentFinancialYear} ${window.currentPlanVersion}`);
+  dispatchForecastLoadFailedEvent({
+    year: window.currentFinancialYear,
+    planVersion: window.currentPlanVersion,
+    sourcesAttempted,
+    reason: 'No forecast data found in any source'
+  });
   return null;
 }
 

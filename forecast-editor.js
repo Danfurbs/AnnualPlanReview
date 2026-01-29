@@ -1125,8 +1125,9 @@ async function handleForecastEditorSubmit(event) {
 
     if (saved) {
       // If saving v1, mark these jobs as explicitly edited (overrides)
+      // Use async version to prevent race conditions with concurrent saves
       if (planVersion === 'v1' && jobNumbers.length > 0) {
-        addToV1Overrides(year, jobNumbers);
+        await addToV1OverridesAsync(year, jobNumbers);
       }
 
       // Refresh only the work group selector (not full selectors) for better performance
@@ -1674,8 +1675,9 @@ function handleForecastEditorDeleteRow(event) {
       await saveForecastToStorageAsync(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
 
       // If deleting from v1 and job had a number, mark it as explicitly deleted
+      // Use async version to prevent race conditions with concurrent deletes
       if (window.forecastEditorState.planVersion === 'v1' && jobNumber) {
-        addToV1Overrides(window.forecastEditorState.year, [jobNumber]);
+        await addToV1OverridesAsync(window.forecastEditorState.year, [jobNumber]);
       }
 
       // Update work group selector to refresh checkmarks (lighter than full re-render)
@@ -2439,8 +2441,9 @@ async function handleCopyActuals(event) {
   await saveForecastToStorageAsync(window.fData, window.fData.size, year, planVersion);
 
   // If saving to v1, mark jobs as overrides
+  // Use async version to prevent race conditions with concurrent pastes
   if (planVersion === 'v1') {
-    addToV1Overrides(year, jobsToUpdate);
+    await addToV1OverridesAsync(year, jobsToUpdate);
   }
 
   // Reload editor and refresh selectors to update checkmarks

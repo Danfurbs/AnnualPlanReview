@@ -55,6 +55,7 @@ async function initializeBaselinePage() {
 
 /**
  * Render the baseline table with all standard jobs
+ * Uses DOM APIs to prevent XSS/HTML injection vulnerabilities
  */
 function renderBaselineTable() {
   const tableBody = document.getElementById('baselineTableBody');
@@ -75,34 +76,61 @@ function renderBaselineTable() {
       )
     : allJobs;
 
-  // Build table rows
-  const rows = filteredJobs.map(job => {
+  // Clear existing content
+  tableBody.innerHTML = '';
+
+  // Build table rows using DOM APIs
+  const fragment = document.createDocumentFragment();
+
+  filteredJobs.forEach(job => {
     const baseline = baselineEdits.get(job.jobNumber) || 0;
     const perPeriod = baseline > 0 ? (baseline / 13).toFixed(2) : '0.00';
 
-    return `
-      <tr>
-        <td>${job.jobNumber}</td>
-        <td>${job.desc}</td>
-        <td>${job.unit || 'N/A'}</td>
-        <td>
-          <input
-            type="number"
-            class="baseline-input"
-            data-job="${job.jobNumber}"
-            value="${baseline}"
-            min="0"
-            step="0.01"
-            onchange="handleBaselineChange('${job.jobNumber}', this.value)"
-            placeholder="0"
-          >
-        </td>
-        <td class="per-period" data-job="${job.jobNumber}">${perPeriod}</td>
-      </tr>
-    `;
-  }).join('');
+    const tr = document.createElement('tr');
 
-  tableBody.innerHTML = rows;
+    // Job number cell - textContent prevents HTML injection
+    const tdJobNumber = document.createElement('td');
+    tdJobNumber.textContent = job.jobNumber;
+    tr.appendChild(tdJobNumber);
+
+    // Description cell - textContent prevents HTML injection
+    const tdDesc = document.createElement('td');
+    tdDesc.textContent = job.desc;
+    tr.appendChild(tdDesc);
+
+    // Unit cell
+    const tdUnit = document.createElement('td');
+    tdUnit.textContent = job.unit || 'N/A';
+    tr.appendChild(tdUnit);
+
+    // Baseline input cell
+    const tdInput = document.createElement('td');
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'baseline-input';
+    input.dataset.job = job.jobNumber;
+    input.value = baseline;
+    input.min = '0';
+    input.step = '0.01';
+    input.placeholder = '0';
+    // Attach event listener instead of inline onchange
+    input.addEventListener('change', function() {
+      handleBaselineChange(job.jobNumber, this.value);
+    });
+    tdInput.appendChild(input);
+    tr.appendChild(tdInput);
+
+    // Per-period cell
+    const tdPerPeriod = document.createElement('td');
+    tdPerPeriod.className = 'per-period';
+    tdPerPeriod.dataset.job = job.jobNumber;
+    tdPerPeriod.textContent = perPeriod;
+    tr.appendChild(tdPerPeriod);
+
+    fragment.appendChild(tr);
+  });
+
+  tableBody.appendChild(fragment);
 }
 
 /**
@@ -135,10 +163,20 @@ function handleBaselineChange(jobNumber, value) {
 
 /**
  * Update the per-period display for a specific job
+ * Uses safe DOM traversal instead of CSS selector to avoid injection risks
  * @param {string} jobNumber - The job number
  */
 function updatePerPeriodDisplay(jobNumber) {
-  const perPeriodCell = document.querySelector(`.per-period[data-job="${jobNumber}"]`);
+  // Find the per-period cell by iterating through elements
+  // This avoids CSS selector injection if jobNumber contains special characters
+  const perPeriodCells = document.querySelectorAll('.per-period');
+  let perPeriodCell = null;
+  for (const cell of perPeriodCells) {
+    if (cell.dataset.job === jobNumber) {
+      perPeriodCell = cell;
+      break;
+    }
+  }
   if (!perPeriodCell) return;
 
   const baseline = baselineEdits.get(jobNumber) || 0;
