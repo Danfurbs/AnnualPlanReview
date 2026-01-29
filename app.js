@@ -412,6 +412,7 @@
 
     function updateGroupFilterOptions() {
       const select = document.getElementById('groupFilter');
+      const container = document.getElementById('groupFilterContainer');
       if (!select) return;
       const current = select.value || 'all';
       const options = [
@@ -420,7 +421,39 @@
       ];
       select.innerHTML = options.join('');
       select.value = groupStore.some(group => group.id === current) ? current : 'all';
+      // Show/hide group filter container based on whether groups exist
+      if (container) {
+        container.style.display = groupStore.length > 0 ? 'flex' : 'none';
+      }
     }
+
+    // Engineer filter functions
+    function updateEngineerFilterOptions() {
+      const select = document.getElementById('engineerFilter');
+      if (!select) return;
+      const current = select.value || 'all';
+      const engineers = window.getEngineers ? window.getEngineers() : [];
+      const options = [
+        '<option value="all">All Engineers</option>',
+        ...engineers.map(eng => `<option value="${escapeHtml(eng.id)}">${escapeHtml(eng.name)}</option>`)
+      ];
+      select.innerHTML = options.join('');
+      select.value = engineers.some(eng => eng.id === current) ? current : 'all';
+    }
+
+    function getSelectedEngineerWorkGroups() {
+      const engineerFilter = document.getElementById('engineerFilter')?.value || 'all';
+      if (engineerFilter === 'all' || !window.getEngineerWorkGroups) return null;
+      return window.getEngineerWorkGroups(engineerFilter);
+    }
+
+    function onEngineerFilterChange() {
+      // Update work group filter options based on selected engineer
+      updateWorkGroupFilterOptions();
+      render();
+    }
+    // Expose for HTML onclick handler
+    window.onEngineerFilterChange = onEngineerFilterChange;
 
     function renderGroupList() {
       const list = document.getElementById('groupList');
@@ -800,6 +833,7 @@
         }
       }
       updateGroupFilterOptions();
+      updateEngineerFilterOptions();
       const groupForm = document.getElementById('groupForm');
       if (groupForm) {
         groupForm.addEventListener('submit', handleGroupSubmit);
@@ -1168,9 +1202,28 @@
       const select = document.getElementById('wgFilter');
       if (!select) return;
       const current = select.value || 'all';
-      const options = getWorkGroupOptions();
+      let options = getWorkGroupOptions();
+
+      // Filter by selected engineer's work groups
+      const engineerWorkGroups = getSelectedEngineerWorkGroups();
+      if (engineerWorkGroups && engineerWorkGroups.length > 0) {
+        options = options.filter(key => {
+          const normalizedKey = normalizeWorkGroupSet(key);
+          return engineerWorkGroups.some(ewg => normalizeWorkGroupSet(ewg) === normalizedKey);
+        });
+      }
+
+      // Get contextual label for "all" option
+      const engineerFilter = document.getElementById('engineerFilter')?.value || 'all';
+      const selectedEngineer = engineerFilter !== 'all' && window.getEngineerById
+        ? window.getEngineerById(engineerFilter)
+        : null;
+      const allLabel = selectedEngineer
+        ? `All Work Groups (${selectedEngineer.name})`
+        : 'All Work Group Sets';
+
       const optionHtml = [
-        '<option value="all">All Work Group Sets</option>',
+        `<option value="all">${escapeHtml(allLabel)}</option>`,
         ...options.map(key => {
           // key might be a code (like "DBAPPTRA") or already a description
           let description = key;
@@ -2090,6 +2143,18 @@
         return activeGroup.jobNumbers.includes(job.jn);
       };
 
+      const engineerWorkGroups = getSelectedEngineerWorkGroups();
+      const filterByEngineer = (job) => {
+        // If no engineer selected, show all jobs
+        if (!engineerWorkGroups || engineerWorkGroups.length === 0) return true;
+        // Check if job has data for any of the engineer's work groups
+        const jobWorkGroups = Object.keys(job.wgs || {});
+        return jobWorkGroups.some(jwg => {
+          const normalizedJwg = normalizeWorkGroupSet(jwg);
+          return engineerWorkGroups.some(ewg => normalizeWorkGroupSet(ewg) === normalizedJwg);
+        });
+      };
+
       const filterBySearch = (job) => {
         const matchesSearch = !search || job.jn.includes(search) || job.desc.toLowerCase().includes(search) || job.disc.toLowerCase().includes(search);
         if (!matchesSearch) return false;
@@ -2099,12 +2164,12 @@
         return Object.values(wgData.periods || {}).some(periodData => periodData.f !== 0 || periodData.a !== 0);
       };
 
-      const baseFiltered = baseJobs.filter(job => filterByGroup(job) && filterBySearch(job));
+      const baseFiltered = baseJobs.filter(job => filterByGroup(job) && filterByEngineer(job) && filterBySearch(job));
       const rollupJobs = groupStore
         .filter(group => group.rollUp)
         .map(group => buildGroupRollupJob(group, baseJobs))
         .filter(Boolean);
-      const rollupFiltered = rollupJobs.filter(job => filterByGroup(job) && filterBySearch(job));
+      const rollupFiltered = rollupJobs.filter(job => filterByGroup(job) && filterByEngineer(job) && filterBySearch(job));
 
       const applyVarianceFilter = (job) => {
         const displayData = getJobDisplayData(job);
