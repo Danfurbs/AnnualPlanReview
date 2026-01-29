@@ -124,6 +124,91 @@ async function apiRequest(endpoint, options = {}) {
 // ========== Forecast API Functions ==========
 
 /**
+ * Valid period keys for forecast data
+ */
+const VALID_PERIOD_KEYS = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11', 'P12', 'P13'];
+
+/**
+ * Validate serialized forecast data before sending to API
+ * @param {*} serialized - The serialized forecast data to validate
+ * @returns {{ valid: boolean, error?: string }} - Validation result
+ */
+function validateSerializedForecastData(serialized) {
+  // Check that serialized is a non-null object (not array)
+  if (!serialized || typeof serialized !== 'object' || Array.isArray(serialized)) {
+    return { valid: false, error: 'Serialized data must be a non-null object' };
+  }
+
+  const jobNumbers = Object.keys(serialized);
+
+  // Empty object is valid (no jobs to save)
+  if (jobNumbers.length === 0) {
+    return { valid: true };
+  }
+
+  for (const jobNumber of jobNumbers) {
+    // Job number must be a non-empty string
+    if (typeof jobNumber !== 'string' || jobNumber.trim() === '') {
+      return { valid: false, error: `Invalid job number: must be a non-empty string` };
+    }
+
+    const jobData = serialized[jobNumber];
+
+    // Job data must be a non-null object
+    if (!jobData || typeof jobData !== 'object' || Array.isArray(jobData)) {
+      return { valid: false, error: `Job ${jobNumber}: data must be a non-null object` };
+    }
+
+    // Validate 'wgs' (workgroups) - required field
+    if (!jobData.wgs || typeof jobData.wgs !== 'object' || Array.isArray(jobData.wgs)) {
+      return { valid: false, error: `Job ${jobNumber}: 'wgs' must be a non-null object` };
+    }
+
+    // Validate each workgroup's period values
+    for (const [wgName, wgData] of Object.entries(jobData.wgs)) {
+      if (!wgData || typeof wgData !== 'object' || Array.isArray(wgData)) {
+        return { valid: false, error: `Job ${jobNumber}, workgroup '${wgName}': period data must be a non-null object` };
+      }
+
+      // Check that period values are numbers
+      for (const [periodKey, periodValue] of Object.entries(wgData)) {
+        if (!VALID_PERIOD_KEYS.includes(periodKey)) {
+          return { valid: false, error: `Job ${jobNumber}, workgroup '${wgName}': invalid period key '${periodKey}'` };
+        }
+        if (typeof periodValue !== 'number' || !Number.isFinite(periodValue)) {
+          return { valid: false, error: `Job ${jobNumber}, workgroup '${wgName}': period ${periodKey} must be a finite number` };
+        }
+      }
+    }
+
+    // Validate 'periods' if present (aggregated totals) - optional but must be valid if present
+    if (jobData.periods !== undefined) {
+      if (!jobData.periods || typeof jobData.periods !== 'object' || Array.isArray(jobData.periods)) {
+        return { valid: false, error: `Job ${jobNumber}: 'periods' must be a non-null object if present` };
+      }
+
+      for (const [periodKey, periodValue] of Object.entries(jobData.periods)) {
+        if (!VALID_PERIOD_KEYS.includes(periodKey)) {
+          return { valid: false, error: `Job ${jobNumber}: invalid period key '${periodKey}' in periods` };
+        }
+        if (typeof periodValue !== 'number' || !Number.isFinite(periodValue)) {
+          return { valid: false, error: `Job ${jobNumber}: period ${periodKey} must be a finite number` };
+        }
+      }
+    }
+
+    // Validate 'comments' if present - optional but must be valid if present
+    if (jobData.comments !== undefined) {
+      if (!jobData.comments || typeof jobData.comments !== 'object' || Array.isArray(jobData.comments)) {
+        return { valid: false, error: `Job ${jobNumber}: 'comments' must be a non-null object if present` };
+      }
+    }
+  }
+
+  return { valid: true };
+}
+
+/**
  * Load forecast from API
  * @param {string} year - Fiscal year
  * @param {string} planVersion - Plan version (v0, v1)
@@ -162,16 +247,33 @@ async function loadForecastFromApi(year, planVersion) {
 async function saveForecastToApi(forecastData, rowCount, year, planVersion) {
   if (!isApiEnabled()) return false;
 
+  const endpoint = `/forecasts/${year}/${planVersion}`;
+
   try {
     const serialized = window.serializeForecastData(forecastData);
-    const response = await apiRequest(`/forecasts/${year}/${planVersion}`, {
+
+    // Validate serialized data before sending to API
+    const validation = validateSerializedForecastData(serialized);
+    if (!validation.valid) {
+      const errorMsg = `Failed to save forecast: ${validation.error}`;
+      console.error(`Forecast validation failed for POST ${endpoint}:`, validation.error);
+
+      // Surface error to user via Toast (non-blocking)
+      if (window.Toast && typeof window.Toast.error === 'function') {
+        window.Toast.error(errorMsg);
+      }
+
+      return false;
+    }
+
+    const response = await apiRequest(endpoint, {
       method: 'POST',
       body: { data: serialized }
     });
 
     return response.success === true;
   } catch (err) {
-    console.error('Failed to save forecast to API:', err);
+    console.error(`Failed to save forecast to API (POST ${endpoint}):`, err);
     return false;
   }
 }
