@@ -156,6 +156,12 @@
         </select>
       </div>
       <div class="control-group">
+        <label for="engineerFilter">Engineer</label>
+        <select id="engineerFilter" onchange="onEngineerFilterChange()">
+          <option value="all">All Engineers</option>
+        </select>
+      </div>
+      <div class="control-group" id="groupFilterContainer" style="display: none;">
         <label for="groupFilter">Group filter</label>
         <select id="groupFilter" onchange="render()">
           <option value="all">All Standard Jobs</option>
@@ -799,6 +805,7 @@
   <!-- Data -->
   <script src="work-group-sets-data.js"></script>
   <script src="work-group-utils.js"></script>
+  <script src="engineer-data.js"></script>
   <script src="standard-jobs-data.js"></script>
   <script src="forecast-library.js"></script>
   <!-- Backend API integration -->
