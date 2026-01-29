@@ -44,6 +44,62 @@ function getForecastStorageKey(year, planVersion) {
 }
 
 /**
+ * Deep clone a single job entry (periods, wgs, comments)
+ * Uses structuredClone if available, otherwise manual deep copy
+ * @param {Object} jobEntry - Job entry with periods, wgs, comments
+ * @returns {Object} - Deep cloned job entry
+ */
+function deepCloneJobEntry(jobEntry) {
+  if (!jobEntry || typeof jobEntry !== 'object') {
+    return { periods: {}, wgs: {}, comments: {} };
+  }
+
+  // Try structuredClone first (modern browsers, Node 17+)
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(jobEntry);
+    } catch {
+      // Fall through to manual clone if structuredClone fails
+    }
+  }
+
+  // Manual deep clone for the known forecast data shape
+  // This is faster than JSON.parse(JSON.stringify()) for simple structures
+
+  // Clone periods: { P1: number, ..., P13: number }
+  const periods = {};
+  if (jobEntry.periods && typeof jobEntry.periods === 'object') {
+    Object.keys(jobEntry.periods).forEach(key => {
+      periods[key] = jobEntry.periods[key];
+    });
+  }
+
+  // Clone wgs: { [workGroup]: { P1: number, ..., P13: number } }
+  const wgs = {};
+  if (jobEntry.wgs && typeof jobEntry.wgs === 'object') {
+    Object.keys(jobEntry.wgs).forEach(wgName => {
+      const wgData = jobEntry.wgs[wgName];
+      if (wgData && typeof wgData === 'object') {
+        wgs[wgName] = {};
+        Object.keys(wgData).forEach(periodKey => {
+          wgs[wgName][periodKey] = wgData[periodKey];
+        });
+      }
+    });
+  }
+
+  // Clone comments: { [workGroup]: string }
+  const comments = {};
+  if (jobEntry.comments && typeof jobEntry.comments === 'object') {
+    Object.keys(jobEntry.comments).forEach(key => {
+      comments[key] = jobEntry.comments[key];
+    });
+  }
+
+  return { periods, wgs, comments };
+}
+
+/**
  * Serialize forecast Map to plain object for storage
  */
 function serializeForecastData(forecastMap) {
@@ -56,13 +112,15 @@ function serializeForecastData(forecastMap) {
 }
 
 /**
- * Hydrate stored object back to Map
+ * Hydrate stored object back to Map with deep cloning
+ * Ensures no shared references between the source and the returned Map
  */
 function hydrateForecastData(rawData) {
   const output = new Map();
   Object.entries(rawData || {}).forEach(([key, value]) => {
     if (value && typeof value === 'object') {
-      output.set(key, { ...value });
+      // Deep clone to prevent shared references with source data
+      output.set(key, deepCloneJobEntry(value));
     }
   });
   return output;
@@ -70,18 +128,14 @@ function hydrateForecastData(rawData) {
 
 /**
  * Deep clone forecast data Map
+ * Creates a completely independent copy with no shared references
  */
 function cloneForecastData(forecastMap) {
   const cloned = new Map();
   if (!forecastMap) return cloned;
   forecastMap.forEach((value, key) => {
-    const periods = value?.periods ? { ...value.periods } : {};
-    const wgs = {};
-    Object.entries(value?.wgs || {}).forEach(([wg, data]) => {
-      wgs[wg] = { ...data };
-    });
-    const comments = value?.comments ? { ...value.comments } : {};
-    cloned.set(key, { periods, wgs, comments });
+    // Use the deep clone helper for consistent behavior
+    cloned.set(key, deepCloneJobEntry(value));
   });
   return cloned;
 }
@@ -710,6 +764,91 @@ function clearAllForecastDataForYear(year, version) {
   };
 }
 
+/**
+ * DEV ONLY: Sanity check that deep cloning produces independent copies
+ * Run in browser console: window.__verifyForecastDeepClone()
+ * @returns {{ passed: boolean, details: string[] }}
+ */
+function __verifyForecastDeepClone() {
+  const details = [];
+  let passed = true;
+
+  // Create test data
+  const testData = {
+    '123456': {
+      periods: { P1: 100, P2: 200 },
+      wgs: {
+        'WorkGroup A': { P1: 50, P2: 100 },
+        'WorkGroup B': { P1: 50, P2: 100 }
+      },
+      comments: { 'WorkGroup A': 'Test comment' }
+    }
+  };
+
+  // Test hydrateForecastData
+  const hydrated1 = hydrateForecastData(testData);
+  const hydrated2 = hydrateForecastData(testData);
+
+  // Mutate hydrated1 and verify hydrated2 is unaffected
+  const job1 = hydrated1.get('123456');
+  job1.periods.P1 = 999;
+  job1.wgs['WorkGroup A'].P1 = 999;
+  job1.comments['WorkGroup A'] = 'MUTATED';
+
+  const job2 = hydrated2.get('123456');
+  if (job2.periods.P1 === 999) {
+    details.push('FAIL: hydrateForecastData - periods reference shared');
+    passed = false;
+  } else {
+    details.push('PASS: hydrateForecastData - periods independent');
+  }
+
+  if (job2.wgs['WorkGroup A'].P1 === 999) {
+    details.push('FAIL: hydrateForecastData - wgs reference shared');
+    passed = false;
+  } else {
+    details.push('PASS: hydrateForecastData - wgs independent');
+  }
+
+  if (job2.comments['WorkGroup A'] === 'MUTATED') {
+    details.push('FAIL: hydrateForecastData - comments reference shared');
+    passed = false;
+  } else {
+    details.push('PASS: hydrateForecastData - comments independent');
+  }
+
+  // Test cloneForecastData
+  const original = hydrateForecastData({
+    '789': { periods: { P1: 10 }, wgs: { 'WG': { P1: 10 } }, comments: {} }
+  });
+  const cloned = cloneForecastData(original);
+
+  // Mutate clone and verify original unaffected
+  const clonedJob = cloned.get('789');
+  clonedJob.periods.P1 = 999;
+  clonedJob.wgs['WG'].P1 = 999;
+
+  const originalJob = original.get('789');
+  if (originalJob.periods.P1 === 999) {
+    details.push('FAIL: cloneForecastData - periods reference shared');
+    passed = false;
+  } else {
+    details.push('PASS: cloneForecastData - periods independent');
+  }
+
+  if (originalJob.wgs['WG'].P1 === 999) {
+    details.push('FAIL: cloneForecastData - wgs reference shared');
+    passed = false;
+  } else {
+    details.push('PASS: cloneForecastData - wgs independent');
+  }
+
+  console.log('Deep clone verification:', passed ? 'ALL PASSED' : 'FAILED');
+  details.forEach(d => console.log('  ' + d));
+
+  return { passed, details };
+}
+
 // Expose functions globally for cross-module access
 window.getForecastStorageKey = getForecastStorageKey;
 window.serializeForecastData = serializeForecastData;
@@ -742,3 +881,4 @@ window.removeFromV1Overrides = removeFromV1Overrides;
 window.removeFromV1OverridesAsync = removeFromV1OverridesAsync;
 window.checkV0ConflictsWithV1 = checkV0ConflictsWithV1;
 window.clearAllForecastDataForYear = clearAllForecastDataForYear;
+window.__verifyForecastDeepClone = __verifyForecastDeepClone; // DEV ONLY sanity check
