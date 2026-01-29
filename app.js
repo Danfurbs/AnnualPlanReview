@@ -2793,6 +2793,7 @@
         // Group work groups by engineer
         const engineerGroups = new Map();
         const ungrouped = [];
+        let ungroupedTotal = 0;
 
         wgEntries.forEach(([wg, data]) => {
           const engineer = getEngineerForWorkGroupNormalized(wg);
@@ -2803,6 +2804,12 @@
             engineerGroups.get(engineer.id).workGroups.push([wg, data]);
           } else {
             ungrouped.push([wg, data]);
+            for (let i = 1; i <= 13; i++) {
+              const p = `P${i}`;
+              const d = data.periods[p] || { f: 0, v: 0 };
+              const val = showForecast ? (d.f || 0) : (d.v || 0);
+              ungroupedTotal += val;
+            }
           }
         });
 
@@ -2824,7 +2831,12 @@
           });
 
           // Engineer header row
-          tableHTML += `<tr class="engineer-header" data-eng="${engineer.id}"><td colspan="15">${escapeHtml(engineer.name)} (${workGroups.length} work group${workGroups.length !== 1 ? 's' : ''})<span class="eng-toggle">Show</span></td></tr>`;
+          const engHeaderLabel = `${escapeHtml(engineer.name)} (${workGroups.length} work group${workGroups.length !== 1 ? 's' : ''})<span class="eng-toggle">Show</span>`;
+          const engHeaderTotalClass = showForecast
+            ? (engTotal !== 0 ? 'forecast-nonzero' : '')
+            : (engTotal > 0 ? 'positive' : engTotal < 0 ? 'negative' : 'neutral');
+          const engHeaderPrefix = showForecast ? '' : (engTotal > 0 ? '+' : '');
+          tableHTML += `<tr class="engineer-header" data-eng="${engineer.id}"><td colspan="14">${engHeaderLabel}</td><td class="${engHeaderTotalClass}"><strong>${engHeaderPrefix}${engTotal.toFixed(1)}</strong></td></tr>`;
 
           // Work group rows for this engineer
           workGroups.forEach(([wg, data]) => {
@@ -2883,7 +2895,12 @@
         // Render ungrouped work groups (if any)
         if (ungrouped.length > 0) {
           if (engineerGroups.size > 0) {
-            tableHTML += `<tr class="engineer-header" data-eng="ungrouped"><td colspan="15">Other Work Groups (${ungrouped.length})<span class="eng-toggle">Show</span></td></tr>`;
+            const ungroupedHeaderLabel = `Other Work Groups (${ungrouped.length})<span class="eng-toggle">Show</span>`;
+            const ungroupedHeaderTotalClass = showForecast
+              ? (ungroupedTotal !== 0 ? 'forecast-nonzero' : '')
+              : (ungroupedTotal > 0 ? 'positive' : ungroupedTotal < 0 ? 'negative' : 'neutral');
+            const ungroupedHeaderPrefix = showForecast ? '' : (ungroupedTotal > 0 ? '+' : '');
+            tableHTML += `<tr class="engineer-header" data-eng="ungrouped"><td colspan="14">${ungroupedHeaderLabel}</td><td class="${ungroupedHeaderTotalClass}"><strong>${ungroupedHeaderPrefix}${ungroupedTotal.toFixed(1)}</strong></td></tr>`;
           }
           ungrouped.forEach(([wg, data]) => {
             const idx = globalIdx++;
