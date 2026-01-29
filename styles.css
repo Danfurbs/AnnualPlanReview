@@ -180,6 +180,7 @@
     .positive { color: #48bb78; }
     .negative { color: #f56565; }
     .neutral { color: #718096; }
+    .forecast-nonzero { color: #3b82f6; font-weight: 600; }
     .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000; }
     .modal.open { display: flex; }
     .modal-content { background: white; border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; border: 2px solid transparent; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18); }

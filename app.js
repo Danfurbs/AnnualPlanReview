@@ -2789,12 +2789,12 @@
             const d = data.periods[p] || {f: 0, v: 0};
             const val = showForecast ? (d.f || 0) : (d.v || 0);
             rowTotal += val;
-            // Only apply color coding for variance mode
-            const cl = showForecast ? '' : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
+            // Apply color coding: variance mode uses pos/neg, forecast mode highlights non-zero
+            const cl = showForecast ? (val !== 0 ? 'forecast-nonzero' : '') : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
             const prefix = showForecast ? '' : (val > 0 ? '+' : '');
             tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
           }
-          const tcl = showForecast ? '' : (rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral');
+          const tcl = showForecast ? (rowTotal !== 0 ? 'forecast-nonzero' : '') : (rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral');
           const tprefix = showForecast ? '' : (rowTotal > 0 ? '+' : '');
           tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
 
