@@ -13,36 +13,25 @@ const ENGINEERS_DATA = [
     id: 'carlisle',
     name: 'Carlisle Engineer',
     workGroupSets: [
-      'DBCARTRW', // Carlisle WDM(TRACK)
+     
       'DBCARTRA', // Carlisle SM(TRACK)
       'DBCARTRE', // Carlisle ENG(TRACK)
-      'DBCAROTA', // Carlisle SM(OFFTRACK)
       'DBCARLXA', // Carlisle LCM
-      'DBCARDPE', // Carlisle ENG(D&P)
-      'DBCARSGW', // Carlisle WDM(SIGNALS)
-      'DBCARSGA', // Carlisle SM(SIGNALS)
-      'DBCARSGC', // Carlisle SM(S&TME)
-      'DBCARSGB', // Carlisle West SM(SIGNALS)
-      'DBCAROLA', // Carlisle SM(OLE)
-      'DBCARDPA', // Carlisle SM(D&P)
+'DBPRERTA', // Preston SM(RT&L)
+      'DBPREWGA', // Preston SM(W&G)
+      'DBPRELXA', // Preston LCM
+      'DBCANWGA', // Carnforth SM(W&G)
     ]
   },
   {
     id: 'preston',
     name: 'Preston Engineer',
     workGroupSets: [
-      'DBPRERTA', // Preston SM(RT&L)
-      'DBPREOTA', // Preston SM(OFFTRACK)
+      
+      'DBCANOFT', // Carnforth SM (OFFTRACK)
       'DBPRETRA', // Preston SM(TRACK)
       'DBPRETRE', // Preston ENG(TRACK)
-      'DBPRESGW', // Preston WDM(SIGNALS)
-      'DBPREWGA', // Preston SM(W&G)
-      'DBPREOLA', // Preston SM(OLE)
-      'DBPREEPA', // Preston ENG(E&P)
-      'DBPREDPA', // Preston SM(D&P)
-      'DBPRESGA', // Preston SM(SIGNALS)
-      'DBPRESGE', // Preston ENG(SIGNALS)
-      'DBPRELXA', // Preston LCM
+      
     ]
   },
   {
@@ -51,10 +40,7 @@ const ENGINEERS_DATA = [
     workGroupSets: [
       'DBCANTRA', // Carnforth SM(TRACK)
       'DBCANTRE', // Carnforth ENG(TRACK)
-      'DBCANOFT', // Carnforth SM (OFFTRACK)
-      'DBCANWGA', // Carnforth SM(W&G)
-      'DBCANSGA', // Carnforth & Barrow SM(SIGNALS)
-      'DBCANRTA', // Carnforth SM(RT&L)
+      'DBCAROTA', // Carlisle SM (OFFTRACK)
     ]
   },
   {
@@ -185,6 +171,7 @@ const ENGINEERS_DATA = [
     workGroupSets: [
       'DBBLATRA', // Blackburn SM(TRACK)
       'DBBLATRE', // Blackburn ENG(TRACK)
+     'DBPREOTA', // Preston SM(OFFTRACK)
     ]
   },
   {
