@@ -245,8 +245,22 @@ function isWorkGroupForEngineer(workGroupCode, engineerId) {
   return workGroups.includes(workGroupCode);
 }
 
+/**
+ * Find which engineer a work group belongs to
+ * @param {string} workGroupCode - Work group set code
+ * @returns {Object|null} Engineer object or null if not found
+ */
+function getEngineerForWorkGroup(workGroupCode) {
+  if (!workGroupCode) return null;
+  const code = workGroupCode.trim().toUpperCase();
+  return getEngineers().find(eng =>
+    eng.workGroupSets.some(wg => wg.toUpperCase() === code)
+  ) || null;
+}
+
 // Expose functions globally
 window.getEngineers = getEngineers;
 window.getEngineerById = getEngineerById;
 window.getEngineerWorkGroups = getEngineerWorkGroups;
 window.isWorkGroupForEngineer = isWorkGroupForEngineer;
+window.getEngineerForWorkGroup = getEngineerForWorkGroup;
