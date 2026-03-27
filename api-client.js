@@ -600,7 +600,16 @@ async function saveCommentsToApi(commentStore) {
       body: { commentStore }
     });
 
-    return response.success === true;
+    const ok = response.success === true;
+    if (ok && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('apr:comments-saved', {
+        detail: {
+          count: response.count || 0,
+          durationMs: response.durationMs ?? null
+        }
+      }));
+    }
+    return ok;
   } catch (err) {
     console.error('Failed to save comments to API:', err);
     return false;

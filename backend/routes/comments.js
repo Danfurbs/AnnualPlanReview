@@ -124,6 +124,7 @@ module.exports = (db) => {
         });
       }
 
+      const commentsToSave = [];
       let count = 0;
       for (const [jobNumber, comments] of Object.entries(commentStore)) {
         if (!isValidJobNumber(jobNumber)) {
@@ -152,15 +153,32 @@ module.exports = (db) => {
               error: `Comment jobNumber mismatch for ${jobNumber}: received ${comment.jobNumber}`
             });
           }
-          await db.saveJobComment(comment);
+          commentsToSave.push(comment);
           count++;
         }
       }
+      if (count > 10000) {
+        return res.status(413).json({
+          success: false,
+          error: 'Comment bulk payload too large (max 10,000 comments per request)'
+        });
+      }
+
+      const startedAt = Date.now();
+      if (typeof db.saveAllJobComments === 'function') {
+        await db.saveAllJobComments(commentsToSave);
+      } else {
+        for (const comment of commentsToSave) {
+          await db.saveJobComment(comment);
+        }
+      }
+      const durationMs = Date.now() - startedAt;
 
       res.json({
         success: true,
         message: 'Comments saved successfully',
-        count: count
+        count: count,
+        durationMs
       });
     } catch (error) {
       console.error('Error saving comments:', error);

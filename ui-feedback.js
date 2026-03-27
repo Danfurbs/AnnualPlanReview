@@ -375,6 +375,17 @@ window.addEventListener('apr:forecast-load-failed', (event) => {
   console.warn('Forecast load failed:', event.detail);
 });
 
+/**
+ * Listen for successful comment bulk saves and provide lightweight feedback.
+ */
+window.addEventListener('apr:comments-saved', (event) => {
+  const { count, durationMs } = event.detail || {};
+  if (!count) return;
+
+  const durationText = typeof durationMs === 'number' ? ` in ${durationMs}ms` : '';
+  Toast.success(`Saved ${count} comment${count === 1 ? '' : 's'}${durationText}`, 3000);
+});
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
   LoadingOverlay.init();
