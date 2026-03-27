@@ -4,12 +4,14 @@
  */
 
 // Configuration
+const IS_RENDER_HOST = window.location.hostname.endsWith('onrender.com');
 const API_CONFIG = {
   baseUrl: window.location.origin, // Will be overridden by loadApiConfig()
   enabled: true, // Set to true to use backend API, false to use localStorage only
   timeout: 30000,
   retryAttempts: 3,
-  retryDelay: 1000
+  retryDelay: 1000,
+  forceServerPersistence: IS_RENDER_HOST
 };
 
 /**
@@ -40,6 +42,10 @@ function setApiBaseUrl(url) {
  * Toggle API mode
  */
 function toggleApiMode(enabled) {
+  if (API_CONFIG.forceServerPersistence && enabled === false) {
+    console.warn('API mode cannot be disabled on Render-hosted environments.');
+    return;
+  }
   API_CONFIG.enabled = enabled;
   localStorage.setItem('aprApiEnabled', JSON.stringify(enabled));
   console.log(`API mode ${enabled ? 'enabled' : 'disabled'}`);
@@ -54,6 +60,11 @@ function loadApiConfig() {
     const savedEnabled = localStorage.getItem('aprApiEnabled');
     if (savedEnabled !== null) {
       API_CONFIG.enabled = JSON.parse(savedEnabled);
+    }
+
+    if (API_CONFIG.forceServerPersistence) {
+      API_CONFIG.enabled = true;
+      localStorage.setItem('aprApiEnabled', JSON.stringify(true));
     }
 
     // Load base URL

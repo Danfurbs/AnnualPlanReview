@@ -74,9 +74,15 @@ async function saveBaselineDataAsync(baselineData) {
   if (window.isApiEnabled && window.isApiEnabled() && window.saveBaselinesToApi) {
     try {
       const obj = Object.fromEntries(baselineData);
-      await window.saveBaselinesToApi(obj);
+      const apiSaved = await window.saveBaselinesToApi(obj);
+      if (!apiSaved && window.API_CONFIG?.forceServerPersistence) {
+        alert('Server baseline save failed. Local cache updated, but Render database did not confirm the write.');
+      }
     } catch (err) {
       console.warn('Failed to save baselines to API (data saved locally):', err);
+      if (window.API_CONFIG?.forceServerPersistence) {
+        alert('Server baseline save failed. Local cache updated, but Render database did not confirm the write.');
+      }
     }
   }
 }
@@ -123,9 +129,15 @@ async function setBaselineAsync(jobNumber, value) {
     // Delete from API if enabled
     if (window.isApiEnabled && window.isApiEnabled() && window.deleteBaselineFromApi) {
       try {
-        await window.deleteBaselineFromApi(jobNumber);
+        const deleted = await window.deleteBaselineFromApi(jobNumber);
+        if (!deleted && window.API_CONFIG?.forceServerPersistence) {
+          alert('Server baseline delete failed. Local cache changed, but Render database delete was not confirmed.');
+        }
       } catch (err) {
         console.warn('Failed to delete baseline from API (deleted locally):', err);
+        if (window.API_CONFIG?.forceServerPersistence) {
+          alert('Server baseline delete failed. Local cache changed, but Render database delete was not confirmed.');
+        }
       }
     }
   } else {
@@ -134,9 +146,15 @@ async function setBaselineAsync(jobNumber, value) {
     // Save to API if enabled
     if (window.isApiEnabled && window.isApiEnabled() && window.saveBaselineToApi) {
       try {
-        await window.saveBaselineToApi(jobNumber, Number(value));
+        const apiSaved = await window.saveBaselineToApi(jobNumber, Number(value));
+        if (!apiSaved && window.API_CONFIG?.forceServerPersistence) {
+          alert('Server baseline save failed. Local cache updated, but Render database did not confirm the write.');
+        }
       } catch (err) {
         console.warn('Failed to save baseline to API (saved locally):', err);
+        if (window.API_CONFIG?.forceServerPersistence) {
+          alert('Server baseline save failed. Local cache updated, but Render database did not confirm the write.');
+        }
       }
     }
   }
