@@ -22,9 +22,13 @@ On save, the app writes to localStorage and then mirrors to the server API.
 To keep data across deploys/restarts on Render:
 
 - Run this repo as a **Web Service** (not static site).
-- Start command: `npm start`
+- Use repo root commands (there is no `backend/` folder):
+  - Build command: `npm install`
+  - Start command: `npm start`
 - Attach a **Persistent Disk**.
 - Set `DATA_DIR` environment variable to a path on the mounted disk (example: `/var/data`).
+
+This repository now includes a `render.yaml` Blueprint with the correct defaults above so a new Render service will not try `cd backend`.
 
 The app stores forecasts in `${DATA_DIR}/forecast-store.json`.
 
