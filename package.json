@@ -1,0 +1,13 @@
+{
+  "name": "annual-plan-review",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Annual Plan Review with server-side forecast persistence",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
