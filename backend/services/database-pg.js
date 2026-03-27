@@ -213,6 +213,34 @@ class DatabaseServicePG {
   }
 
   /**
+   * Bulk save job comments in a single query
+   * @param {Array<Object>} comments - Array of comment objects
+   */
+  async saveAllJobComments(comments) {
+    if (!Array.isArray(comments) || comments.length === 0) return;
+
+    const ids = comments.map(comment => comment.id);
+    const jobNumbers = comments.map(comment => comment.jobNumber);
+    const categories = comments.map(comment => comment.category);
+    const texts = comments.map(comment => comment.text);
+    const timestamps = comments.map(comment => comment.timestamp);
+    const fiscalYears = comments.map(comment => comment.fy);
+    const rfStages = comments.map(comment => comment.rf);
+
+    await this.pool.query(
+      `INSERT INTO job_comments (id, job_number, category, text, timestamp, fiscal_year, rf_stage)
+       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[], $6::text[], $7::text[])
+       ON CONFLICT (id) DO UPDATE SET
+         category = EXCLUDED.category,
+         text = EXCLUDED.text,
+         timestamp = EXCLUDED.timestamp,
+         fiscal_year = EXCLUDED.fiscal_year,
+         rf_stage = EXCLUDED.rf_stage`,
+      [ids, jobNumbers, categories, texts, timestamps, fiscalYears, rfStages]
+    );
+  }
+
+  /**
    * Get all comments for a specific job
    * @param {string} jobNumber
    */

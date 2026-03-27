@@ -271,6 +271,30 @@ class DatabaseService {
   }
 
   /**
+   * Bulk save job comments in a single transaction
+   * @param {Array<Object>} comments - Array of comment objects
+   */
+  saveAllJobComments(comments) {
+    if (!Array.isArray(comments) || comments.length === 0) return;
+
+    const saveTransaction = this.db.transaction((items) => {
+      for (const comment of items) {
+        this.stmts.insertJobComment.run(
+          comment.id,
+          comment.jobNumber,
+          comment.category,
+          comment.text,
+          comment.timestamp,
+          comment.fy,
+          comment.rf
+        );
+      }
+    });
+
+    saveTransaction(comments);
+  }
+
+  /**
    * Get all comments for a specific job
    * @param {string} jobNumber
    */
