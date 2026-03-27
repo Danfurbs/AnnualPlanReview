@@ -141,6 +141,39 @@ function cloneForecastData(forecastMap) {
 }
 
 /**
+ * Build normalized payload for localStorage persistence
+ */
+function buildForecastStoragePayload(forecastData, rowCount) {
+  const normalizedMap = forecastData instanceof Map ? forecastData : hydrateForecastData(forecastData || {});
+  return {
+    data: serializeForecastData(normalizedMap),
+    rowCount: rowCount ?? normalizedMap.size,
+    savedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Legacy sync fallback used by storage loader when cache is missing.
+ * Synchronous paths cannot call async API, so this delegates to local library data.
+ */
+function loadForecastFromServer(year, planVersion) {
+  return loadForecastFromLibrary(year, planVersion);
+}
+
+/**
+ * Legacy async server persistence hook (fire-and-forget).
+ */
+function saveForecastToServerAsync(payload, year, planVersion) {
+  if (!(window.isApiEnabled && window.isApiEnabled() && window.saveForecastToApi)) return;
+
+  const hydrated = hydrateForecastData(payload?.data || {});
+  Promise.resolve(window.saveForecastToApi(hydrated, payload?.rowCount ?? hydrated.size, year, planVersion))
+    .catch(err => {
+      console.warn('Failed background save to API (data saved locally):', err);
+    });
+}
+
+/**
  * Load forecast from localStorage
  * Returns: { data: Map, rowCount: number, savedAt: string } or null
  */
