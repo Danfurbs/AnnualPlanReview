@@ -1,41 +1,42 @@
 # AnnualPlanReview
 
-Annual Plan Review now supports **server-side forecast persistence** with a local browser cache.
+This project is configured for **Render + PostgreSQL** as the canonical deployment path.
 
-## Persistence model
+## Production storage model (Render)
 
-Forecast data is stored in two places:
+- Backend API is served by `backend/server.js`.
+- Persistent data is stored in Render PostgreSQL via `DATABASE_URL`.
+- Browser `localStorage` is used only as a cache/offline fallback.
+- On `*.onrender.com`, API mode is forced on to prevent local-only mode.
 
-1. **Server-side JSON store** via API (`/api/forecast/:year/:planVersion`) for durable storage.
-2. **Browser localStorage** (`aprForecastDataV1:<FY>:<planVersion>`) as a fast client cache.
+## Local development
 
-The app load order is:
+```bash
+cd backend
+npm install
+npm run init-db-pg   # recommended (matches production)
+npm start
+```
 
-1. Try localStorage cache.
-2. If cache is missing, load from server API and repopulate local cache.
-3. If no server data exists, fall back to `forecast-library.js`.
+For convenience from repo root:
 
-On save, the app writes to localStorage and then mirrors to the server API.
+```bash
+npm start
+```
 
-## Render deployment notes
+This forwards to `backend` scripts.
 
-To keep data across deploys/restarts on Render:
+## Render deployment
 
-- Run this repo as a **Web Service** (not static site).
-- Use repo root commands (there is no `backend/` folder):
-  - Build command: `npm install`
-  - Start command: `npm start`
-- Attach a **Persistent Disk**.
-- Set `DATA_DIR` environment variable to a path on the mounted disk (example: `/var/data`).
+Use the included `render.yaml` Blueprint:
 
-This repository now includes a `render.yaml` Blueprint with the correct defaults above so a new Render service will not try `cd backend`.
+- Creates a free PostgreSQL instance
+- Injects `DATABASE_URL` into the backend service
+- Initializes schema via `npm run init-db-pg`
 
-The app stores forecasts in `${DATA_DIR}/forecast-store.json`.
+Health endpoints:
 
-## Backup / restore workflow
+- `GET /api/health`
+- `GET /api/health/db`
 
-Use **Forecast Builder**:
-
-1. **Save Forecast File** (download JSON backup).
-2. Keep the file in shared storage (SharePoint/OneDrive/etc).
-3. If data disappears, use **Load Forecast File** to restore.
+For long-term safety, take periodic external PostgreSQL backups (`pg_dump "$DATABASE_URL"`).

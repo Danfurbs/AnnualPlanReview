@@ -380,9 +380,17 @@ async function saveForecastToStorageAsync(forecastData, rowCount, year, planVers
   // Also save to API if enabled
   if (window.isApiEnabled && window.isApiEnabled() && window.saveForecastToApi) {
     try {
-      await window.saveForecastToApi(forecastData, rowCount, year, planVersion);
+      const apiSaved = await window.saveForecastToApi(forecastData, rowCount, year, planVersion);
+      if (!apiSaved && window.API_CONFIG?.forceServerPersistence) {
+        alert('Server save failed. Your browser cache has a local copy, but persistence to Render database did not complete.');
+        return false;
+      }
     } catch (err) {
       console.warn('Failed to save to API (data saved locally):', err);
+      if (window.API_CONFIG?.forceServerPersistence) {
+        alert('Server save failed. Your browser cache has a local copy, but persistence to Render database did not complete.');
+        return false;
+      }
     }
   }
 

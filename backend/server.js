@@ -14,7 +14,8 @@ const morgan = require('morgan');
 const path = require('path');
 
 // Select database service based on environment
-const USE_POSTGRESQL = process.env.USE_POSTGRESQL === 'true' || process.env.DATABASE_URL;
+const isProduction = process.env.NODE_ENV === 'production';
+const USE_POSTGRESQL = process.env.USE_POSTGRESQL === 'true' || Boolean(process.env.DATABASE_URL) || isProduction;
 const DatabaseService = USE_POSTGRESQL
   ? require('./services/database-pg')
   : require('./services/database');
@@ -25,14 +26,26 @@ const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
+// In production we require PostgreSQL connection details to guarantee persistent storage.
+if (isProduction && !process.env.DATABASE_URL) {
+  console.error('FATAL: DATABASE_URL is required in production to guarantee persistent server storage.');
+  process.exit(1);
+}
+
 // Initialize database service
 const db = new DatabaseService();
 
 console.log(`Using ${USE_POSTGRESQL ? 'PostgreSQL' : 'SQLite'} database`);
 
 // Middleware
+function parseCorsOrigin(value) {
+  if (!value || value === '*') return '*';
+  const origins = value.split(',').map(origin => origin.trim()).filter(Boolean);
+  return origins.length === 1 ? origins[0] : origins;
+}
+
 const corsOptions = {
-  origin: CORS_ORIGIN,
+  origin: parseCorsOrigin(CORS_ORIGIN),
   credentials: true,
   optionsSuccessStatus: 200
 };
@@ -51,8 +64,27 @@ app.get('/api/health', (req, res) => {
     message: 'API is running',
     environment: NODE_ENV,
     database: USE_POSTGRESQL ? 'PostgreSQL' : 'SQLite',
+    storage: USE_POSTGRESQL ? 'persistent-postgresql' : 'local-sqlite',
     timestamp: new Date().toISOString()
   });
+});
+
+app.get('/api/health/db', async (req, res) => {
+  try {
+    const ok = await db.ping();
+    res.status(ok ? 200 : 503).json({
+      success: ok,
+      database: USE_POSTGRESQL ? 'PostgreSQL' : 'SQLite',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      database: USE_POSTGRESQL ? 'PostgreSQL' : 'SQLite',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // API Routes

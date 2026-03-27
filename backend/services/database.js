@@ -453,6 +453,11 @@ class DatabaseService {
 
   // ========== Utility ==========
 
+  ping() {
+    const row = this.db.prepare('SELECT 1 AS ok').get();
+    return row && row.ok === 1;
+  }
+
   close() {
     this.db.close();
   }

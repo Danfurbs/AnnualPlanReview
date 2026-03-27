@@ -370,9 +370,15 @@
       // Also save to API if enabled
       if (window.isApiEnabled && window.isApiEnabled() && window.saveCommentsToApi) {
         try {
-          await window.saveCommentsToApi(commentStore);
+          const apiSaved = await window.saveCommentsToApi(commentStore);
+          if (!apiSaved && window.API_CONFIG?.forceServerPersistence) {
+            alert('Server comment sync failed. Local cache updated, but Render database did not confirm the write.');
+          }
         } catch (err) {
           console.warn('Failed to save comments to API (data saved locally):', err);
+          if (window.API_CONFIG?.forceServerPersistence) {
+            alert('Server comment sync failed. Local cache updated, but Render database did not confirm the write.');
+          }
         }
       }
     }
@@ -781,9 +787,15 @@
       // Save single comment to API if enabled
       if (window.isApiEnabled && window.isApiEnabled() && window.saveCommentToApi) {
         try {
-          await window.saveCommentToApi({ ...newComment, jobNumber });
+          const apiSaved = await window.saveCommentToApi({ ...newComment, jobNumber });
+          if (!apiSaved && window.API_CONFIG?.forceServerPersistence) {
+            alert('Server comment save failed. Local cache updated, but Render database did not confirm the write.');
+          }
         } catch (err) {
           console.warn('Failed to save comment to API (saved locally):', err);
+          if (window.API_CONFIG?.forceServerPersistence) {
+            alert('Server comment save failed. Local cache updated, but Render database did not confirm the write.');
+          }
         }
       }
     }
@@ -798,9 +810,15 @@
       // Delete from API if enabled
       if (window.isApiEnabled && window.isApiEnabled() && window.deleteCommentFromApi) {
         try {
-          await window.deleteCommentFromApi(id);
+          const deleted = await window.deleteCommentFromApi(id);
+          if (!deleted && window.API_CONFIG?.forceServerPersistence) {
+            alert('Server comment delete failed. Local cache changed, but Render database delete was not confirmed.');
+          }
         } catch (err) {
           console.warn('Failed to delete comment from API (deleted locally):', err);
+          if (window.API_CONFIG?.forceServerPersistence) {
+            alert('Server comment delete failed. Local cache changed, but Render database delete was not confirmed.');
+          }
         }
       }
     }

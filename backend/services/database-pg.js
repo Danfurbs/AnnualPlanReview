@@ -518,6 +518,11 @@ class DatabaseServicePG {
 
   // ========== Utility ==========
 
+  async ping() {
+    const result = await this.pool.query('SELECT 1 AS ok');
+    return result.rows[0]?.ok === 1;
+  }
+
   async close() {
     await this.pool.end();
   }

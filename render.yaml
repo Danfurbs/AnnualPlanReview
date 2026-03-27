@@ -1,6 +1,5 @@
 databases:
   # PostgreSQL Database (Free Tier with Persistence)
-  # This is the RECOMMENDED option for production deployment
   - name: annual-plan-review-db
     databaseName: annual_plan_review
     plan: free
@@ -8,7 +7,6 @@ databases:
 
 services:
   # Backend API Service (Free Tier)
-  # Uses PostgreSQL database by default for persistent storage
   - type: web
     name: annual-plan-review-backend
     env: node
@@ -30,45 +28,3 @@ services:
           property: connectionString
       - key: CORS_ORIGIN
         sync: false
-  # ALTERNATIVE: SQLite with Persistent Disk (Paid Tier Only)
-  # Uncomment the entire section below and comment out the PostgreSQL configuration above
-  # if you prefer SQLite with a paid plan ($7/mo Starter or higher)
-  # - type: web
-  #   name: annual-plan-review-backend
-  #   env: node
-  #   region: oregon
-  #   plan: starter  # Change to 'starter' or higher
-  #   buildCommand: cd backend && npm install && npm run init-db
-  #   startCommand: cd backend && npm start
-  #   healthCheckPath: /api/health
-  #   envVars:
-  #     - key: NODE_ENV
-  #       value: production
-  #     - key: PORT
-  #       value: 3000
-  #     - key: DATABASE_PATH
-  #       value: ./db/apr.db
-  #     - key: CORS_ORIGIN
-  #       sync: false
-  #   disk:
-  #     name: sqlite-data
-  #     mountPath: /opt/render/project/src/backend/db
-  #     sizeGB: 1
-
-  # Static Site Service (Optional - for hosting the frontend separately)
-  # Uncomment if you want to deploy frontend separately from backend
-  # - type: web
-  #   name: annual-plan-review-frontend
-  #   env: static
-  #   buildCommand: echo "No build needed"
-  #   staticPublishPath: .
-  #   routes:
-  #     - type: rewrite
-  #       source: /*
-  #       destination: /index.html
-  #   envVars:
-  #     - key: API_BASE_URL
-  #       fromService:
-  #         type: web
-  #         name: annual-plan-review-backend
-  #         envVarKey: RENDER_EXTERNAL_URL
