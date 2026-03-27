@@ -147,7 +147,21 @@ function cloneForecastData(forecastMap) {
 function loadForecastFromStorage(year, planVersion) {
   try {
     const raw = localStorage.getItem(getForecastStorageKey(year, planVersion));
-    if (!raw) return null;
+    if (!raw) {
+      const serverSnapshot = loadForecastFromServer(year, planVersion);
+      if (!serverSnapshot) return null;
+
+      // Warm local cache for faster future loads
+      localStorage.setItem(
+        getForecastStorageKey(year, planVersion),
+        JSON.stringify({
+          data: serializeForecastData(serverSnapshot.data),
+          rowCount: serverSnapshot.rowCount,
+          savedAt: serverSnapshot.savedAt || new Date().toISOString()
+        })
+      );
+      return serverSnapshot;
+    }
 
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return null;
@@ -345,13 +359,10 @@ function saveForecastToStorage(forecastData, rowCount, year, planVersion) {
       return false;
     }
 
-    const payload = {
-      data: serializeForecastData(forecastData || new Map()),
-      rowCount: rowCount ?? null,
-      savedAt: new Date().toISOString()
-    };
+    const payload = buildForecastStoragePayload(forecastData, rowCount);
 
     localStorage.setItem(getForecastStorageKey(year, planVersion), JSON.stringify(payload));
+    saveForecastToServerAsync(payload, year, planVersion);
     return true;
   } catch (err) {
     console.warn('Failed to save forecast to storage:', err);
