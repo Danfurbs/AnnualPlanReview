@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: annual-plan-review
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: annual-plan-review-data
+      mountPath: /var/data
+      sizeGB: 1
