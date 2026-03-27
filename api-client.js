@@ -116,6 +116,35 @@ function getRetryDelayWithJitter(attempt) {
 }
 
 /**
+ * Determine whether a failed request should be retried.
+ * Retries are limited to network/server issues and specific transient HTTP statuses.
+ * @param {number|null} status - HTTP status code when available
+ * @returns {boolean}
+ */
+function shouldRetryRequest(status) {
+  if (status == null) return true; // network or fetch-level failure
+  if (status >= 500) return true; // server-side transient errors
+  return status === 408 || status === 429; // timeout / rate limit
+}
+
+/**
+ * Try to parse API error response body safely.
+ * @param {Response} response
+ * @returns {Promise<string|null>}
+ */
+async function parseApiErrorMessage(response) {
+  try {
+    const payload = await response.clone().json();
+    if (payload && typeof payload.error === 'string' && payload.error.trim()) {
+      return payload.error.trim();
+    }
+  } catch {
+    // No-op: response may not be JSON
+  }
+  return null;
+}
+
+/**
  * Generic API request handler with retry logic and deduplication
  */
 async function apiRequest(endpoint, options = {}) {
@@ -147,35 +176,53 @@ async function apiRequest(endpoint, options = {}) {
   // Create the request promise and track it
   const requestPromise = (async () => {
     let lastError;
+    let lastStatus = null;
+    let attemptsMade = 0;
     for (let attempt = 0; attempt < API_CONFIG.retryAttempts; attempt++) {
+      let timeoutId;
+      attemptsMade = attempt + 1;
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+        timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
 
         // Create a fresh config for each attempt with new signal
         const attemptConfig = { ...config, signal: controller.signal };
 
         const response = await fetch(url, attemptConfig);
-        clearTimeout(timeoutId);
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const errorDetail = await parseApiErrorMessage(response);
+          const reason = errorDetail || response.statusText || 'Request failed';
+          const err = new Error(`HTTP ${response.status}: ${reason}`);
+          err.status = response.status;
+          throw err;
         }
 
         return await response.json();
       } catch (err) {
         lastError = err;
-        if (attempt < API_CONFIG.retryAttempts - 1) {
+        lastStatus = typeof err.status === 'number' ? err.status : null;
+
+        if (err.name === 'AbortError') {
+          err.message = `Request timed out after ${API_CONFIG.timeout}ms`;
+        }
+
+        const canRetry = shouldRetryRequest(lastStatus);
+        if (attempt < API_CONFIG.retryAttempts - 1 && canRetry) {
           const delay = getRetryDelayWithJitter(attempt);
           console.warn(`API request ${method} ${endpoint} failed, retrying in ${delay}ms...`, err.message);
           await new Promise(resolve => setTimeout(resolve, delay));
+        } else if (!canRetry) {
+          break;
         }
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 
     // Create descriptive error with endpoint and method, preserving original cause
     const errorMessage = `API request failed: ${method} ${endpoint} - ${lastError.message}`;
-    console.error(`${errorMessage} (after ${API_CONFIG.retryAttempts} attempts)`);
+    console.error(`${errorMessage} (after ${attemptsMade} attempt${attemptsMade === 1 ? '' : 's'})`);
 
     // Use Error cause if supported (ES2022+), otherwise attach as property
     let finalError;
