@@ -5,6 +5,71 @@
 const express = require('express');
 const router = express.Router();
 
+function isValidFiscalYear(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 20;
+}
+
+function isValidPlanVersion(value) {
+  return typeof value === 'string' && /^v\d+$/.test(value);
+}
+
+function isValidJobNumber(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 100;
+}
+
+const VALID_PERIOD_KEYS = new Set(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11', 'P12', 'P13']);
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function validatePeriods(periods, context) {
+  if (!isPlainObject(periods)) {
+    return `${context} must be an object`;
+  }
+
+  for (const [periodKey, periodValue] of Object.entries(periods)) {
+    if (!VALID_PERIOD_KEYS.has(periodKey)) {
+      return `${context} contains invalid period key '${periodKey}'`;
+    }
+    if (!isFiniteNumber(periodValue)) {
+      return `${context} period '${periodKey}' must be a finite number`;
+    }
+  }
+
+  return null;
+}
+
+function validateForecastEntry(jobNumber, forecastData) {
+  if (!isPlainObject(forecastData)) {
+    return `Job ${jobNumber}: forecast data must be an object`;
+  }
+
+  if (!isPlainObject(forecastData.wgs)) {
+    return `Job ${jobNumber}: 'wgs' must be an object`;
+  }
+
+  for (const [wgName, wgPeriods] of Object.entries(forecastData.wgs)) {
+    const periodsError = validatePeriods(wgPeriods, `Job ${jobNumber} workgroup '${wgName}'`);
+    if (periodsError) return periodsError;
+  }
+
+  if (forecastData.periods !== undefined) {
+    const periodsError = validatePeriods(forecastData.periods, `Job ${jobNumber} periods`);
+    if (periodsError) return periodsError;
+  }
+
+  if (forecastData.comments !== undefined && !isPlainObject(forecastData.comments)) {
+    return `Job ${jobNumber}: 'comments' must be an object when provided`;
+  }
+
+  return null;
+}
+
 module.exports = (db) => {
   /**
    * GET /api/forecasts/:fiscalYear/:planVersion
@@ -13,6 +78,12 @@ module.exports = (db) => {
   router.get('/:fiscalYear/:planVersion', async (req, res) => {
     try {
       const { fiscalYear, planVersion } = req.params;
+      if (!isValidFiscalYear(fiscalYear) || !isValidPlanVersion(planVersion)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid fiscal year or plan version format'
+        });
+      }
       const data = await db.getForecastData(fiscalYear, planVersion);
 
       res.json({
@@ -37,6 +108,12 @@ module.exports = (db) => {
   router.get('/:fiscalYear/:planVersion/job/:jobNumber', async (req, res) => {
     try {
       const { fiscalYear, planVersion, jobNumber } = req.params;
+      if (!isValidFiscalYear(fiscalYear) || !isValidPlanVersion(planVersion) || !isValidJobNumber(jobNumber)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid fiscal year, plan version, or job number format'
+        });
+      }
       const data = await db.getForecastByJob(jobNumber, fiscalYear, planVersion);
 
       res.json({
@@ -61,12 +138,33 @@ module.exports = (db) => {
     try {
       const { fiscalYear, planVersion } = req.params;
       const { data } = req.body;
+      if (!isValidFiscalYear(fiscalYear) || !isValidPlanVersion(planVersion)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid fiscal year or plan version format'
+        });
+      }
 
-      if (!data || typeof data !== 'object') {
+      if (!isPlainObject(data)) {
         return res.status(400).json({
           success: false,
           error: 'Invalid data format'
         });
+      }
+      for (const [jobNumber, forecastData] of Object.entries(data)) {
+        if (!isValidJobNumber(jobNumber)) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid job number: ${jobNumber}`
+          });
+        }
+        const validationError = validateForecastEntry(jobNumber, forecastData);
+        if (validationError) {
+          return res.status(400).json({
+            success: false,
+            error: validationError
+          });
+        }
       }
 
       // Use bulk save for all forecasts in a single transaction
@@ -95,11 +193,18 @@ module.exports = (db) => {
     try {
       const { fiscalYear, planVersion, jobNumber } = req.params;
       const forecastData = req.body;
-
-      if (!forecastData.wgs || typeof forecastData.wgs !== 'object') {
+      if (!isValidFiscalYear(fiscalYear) || !isValidPlanVersion(planVersion) || !isValidJobNumber(jobNumber)) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid forecast data format'
+          error: 'Invalid fiscal year, plan version, or job number format'
+        });
+      }
+
+      const validationError = validateForecastEntry(jobNumber, forecastData);
+      if (validationError) {
+        return res.status(400).json({
+          success: false,
+          error: validationError
         });
       }
 
@@ -127,11 +232,23 @@ module.exports = (db) => {
     try {
       const { fiscalYear } = req.params;
       const { jobNumbers } = req.body;
+      if (!isValidFiscalYear(fiscalYear)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid fiscal year format'
+        });
+      }
 
       if (!Array.isArray(jobNumbers)) {
         return res.status(400).json({
           success: false,
           error: 'jobNumbers must be an array'
+        });
+      }
+      if (!jobNumbers.every(isValidJobNumber)) {
+        return res.status(400).json({
+          success: false,
+          error: 'All job numbers must be non-empty strings with max length 100'
         });
       }
 
@@ -158,6 +275,12 @@ module.exports = (db) => {
   router.get('/v1-overrides/:fiscalYear', async (req, res) => {
     try {
       const { fiscalYear } = req.params;
+      if (!isValidFiscalYear(fiscalYear)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid fiscal year format'
+        });
+      }
       const overrides = await db.getV1Overrides(fiscalYear);
 
       res.json({
@@ -180,6 +303,12 @@ module.exports = (db) => {
   router.post('/v1-overrides/:fiscalYear/:jobNumber', async (req, res) => {
     try {
       const { fiscalYear, jobNumber } = req.params;
+      if (!isValidFiscalYear(fiscalYear) || !isValidJobNumber(jobNumber)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid fiscal year or job number format'
+        });
+      }
       await db.addV1Override(jobNumber, fiscalYear);
 
       res.json({
@@ -202,6 +331,12 @@ module.exports = (db) => {
   router.delete('/v1-overrides/:fiscalYear/:jobNumber', async (req, res) => {
     try {
       const { fiscalYear, jobNumber } = req.params;
+      if (!isValidFiscalYear(fiscalYear) || !isValidJobNumber(jobNumber)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid fiscal year or job number format'
+        });
+      }
       await db.removeV1Override(jobNumber, fiscalYear);
 
       res.json({
