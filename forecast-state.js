@@ -3,24 +3,36 @@
  * Manages forecast context (FY, RF stage, plan version) and global state
  */
 
-const REVIEW_STAGES = ['RF3', 'RF6', 'RF9', 'RF11'];
-const DEFAULT_FINANCIAL_YEARS = ['FY27', 'FY28', 'FY29', 'FY30'];
-const PLAN_VERSIONS = [
-  { id: 'v0', label: 'Plan v0' },
-  { id: 'v1', label: 'Plan v1' }
-];
+// Use shared globals from forecast-globals.js
+const REVIEW_STAGES = window.REVIEW_STAGES;
+const DEFAULT_FINANCIAL_YEARS = window.DEFAULT_FINANCIAL_YEARS;
+const PLAN_VERSIONS = window.PLAN_VERSIONS;
 
 const REVIEW_STAGE_KEY = 'aprReviewStageV1';
 const FINANCIAL_YEAR_KEY = 'aprFinancialYearV1';
 const PLAN_VERSION_KEY = 'aprPlanVersionV1';
 
-// Global forecast context
-let currentReviewStage = null;
-let currentFinancialYear = null;
-let currentPlanVersion = 'v1';
+// Custom event name for forecast load failures
+const FORECAST_LOAD_FAILED_EVENT = 'apr:forecast-load-failed';
 
-// Global forecast data (Map of job numbers to {periods, wgs})
-let fData = null;
+/**
+ * Dispatch a forecast load failed event with context details
+ * @param {Object} detail - Event detail object
+ */
+function dispatchForecastLoadFailedEvent(detail) {
+  const event = new CustomEvent(FORECAST_LOAD_FAILED_EVENT, {
+    detail: {
+      stage: detail.stage || window.currentReviewStage,
+      year: detail.year || window.currentFinancialYear,
+      planVersion: detail.planVersion || window.currentPlanVersion,
+      sourcesAttempted: detail.sourcesAttempted || [],
+      reason: detail.reason || 'No forecast data found',
+      timestamp: new Date().toISOString()
+    },
+    bubbles: true
+  });
+  window.dispatchEvent(event);
+}
 
 /**
  * Initialize context from localStorage
@@ -29,19 +41,19 @@ function initializeForecastContext() {
   // Load saved stage
   const savedStage = localStorage.getItem(REVIEW_STAGE_KEY);
   if (REVIEW_STAGES.includes(savedStage)) {
-    currentReviewStage = savedStage;
+    window.currentReviewStage = savedStage;
   }
 
   // Load saved year
   const savedYear = localStorage.getItem(FINANCIAL_YEAR_KEY);
   if (savedYear) {
-    currentFinancialYear = savedYear;
+    window.currentFinancialYear = savedYear;
   }
 
   // Load saved plan version
   const savedPlan = localStorage.getItem(PLAN_VERSION_KEY);
   if (savedPlan && PLAN_VERSIONS.some(plan => plan.id === savedPlan)) {
-    currentPlanVersion = savedPlan;
+    window.currentPlanVersion = savedPlan;
   }
 }
 
@@ -54,19 +66,19 @@ function setReviewContext(stage, year, { persist = true } = {}) {
     return false;
   }
 
-  currentReviewStage = stage;
-  currentFinancialYear = year || currentFinancialYear;
+  window.currentReviewStage = stage;
+  window.currentFinancialYear = year || window.currentFinancialYear;
 
   // Auto-select plan version based on availability
-  currentPlanVersion = getPreferredPlanVersion(currentFinancialYear);
+  window.currentPlanVersion = getPreferredPlanVersion(window.currentFinancialYear);
 
   if (persist) {
     localStorage.setItem(REVIEW_STAGE_KEY, stage);
-    if (currentFinancialYear) {
-      localStorage.setItem(FINANCIAL_YEAR_KEY, currentFinancialYear);
+    if (window.currentFinancialYear) {
+      localStorage.setItem(FINANCIAL_YEAR_KEY, window.currentFinancialYear);
     }
-    if (currentPlanVersion) {
-      localStorage.setItem(PLAN_VERSION_KEY, currentPlanVersion);
+    if (window.currentPlanVersion) {
+      localStorage.setItem(PLAN_VERSION_KEY, window.currentPlanVersion);
     }
   }
 
@@ -87,17 +99,17 @@ function setForecastContext(stage, year, planVersion, { persist = true } = {}) {
     return false;
   }
 
-  currentReviewStage = stage;
-  currentFinancialYear = year || currentFinancialYear;
-  currentPlanVersion = planVersion || currentPlanVersion;
+  window.currentReviewStage = stage;
+  window.currentFinancialYear = year || window.currentFinancialYear;
+  window.currentPlanVersion = planVersion || window.currentPlanVersion;
 
   if (persist) {
     localStorage.setItem(REVIEW_STAGE_KEY, stage);
-    if (currentFinancialYear) {
-      localStorage.setItem(FINANCIAL_YEAR_KEY, currentFinancialYear);
+    if (window.currentFinancialYear) {
+      localStorage.setItem(FINANCIAL_YEAR_KEY, window.currentFinancialYear);
     }
-    if (currentPlanVersion) {
-      localStorage.setItem(PLAN_VERSION_KEY, currentPlanVersion);
+    if (window.currentPlanVersion) {
+      localStorage.setItem(PLAN_VERSION_KEY, window.currentPlanVersion);
     }
   }
 
@@ -109,9 +121,9 @@ function setForecastContext(stage, year, planVersion, { persist = true } = {}) {
  */
 function getCurrentContext() {
   return {
-    stage: currentReviewStage,
-    year: currentFinancialYear,
-    planVersion: currentPlanVersion
+    stage: window.currentReviewStage,
+    year: window.currentFinancialYear,
+    planVersion: window.currentPlanVersion
   };
 }
 
@@ -124,7 +136,7 @@ function getFinancialYearOptions() {
     return Object.keys(FORECAST_LIBRARY);
   })();
 
-  const current = currentFinancialYear ? [currentFinancialYear] : [];
+  const current = window.currentFinancialYear ? [window.currentFinancialYear] : [];
   const combined = Array.from(new Set([...libraryYears, ...DEFAULT_FINANCIAL_YEARS, ...current]));
   return combined.length ? combined.sort() : DEFAULT_FINANCIAL_YEARS;
 }
@@ -140,75 +152,161 @@ function getForecastAvailability(year) {
 }
 
 /**
+ * Get forecast availability for a year (async version with GitHub support)
+ */
+async function getForecastAvailabilityAsync(year) {
+  return {
+    v1: Boolean(await getForecastSnapshotAsync(year, 'v1')),
+    v0: Boolean(await getForecastSnapshotAsync(year, 'v0'))
+  };
+}
+
+/**
  * Get preferred plan version based on availability
  * Preference order: v1 > v0 > current
  */
 function getPreferredPlanVersion(year) {
-  if (!year) return currentPlanVersion || 'v1';
+  if (!year) return window.currentPlanVersion || 'v0';
 
   const availability = getForecastAvailability(year);
   if (availability.v1) return 'v1';
   if (availability.v0) return 'v0';
-  return currentPlanVersion || 'v1';
+  return window.currentPlanVersion || 'v0';
 }
 
 /**
  * Load forecast for current context
  * Tries: localStorage > library > initialize v1 from v0
+ * Dispatches 'apr:forecast-load-failed' event if no forecast is found
  */
 function loadForecastForCurrentContext() {
-  if (!currentFinancialYear || !currentPlanVersion) {
+  const sourcesAttempted = [];
+
+  if (!window.currentFinancialYear || !window.currentPlanVersion) {
     console.warn('Cannot load forecast: missing year or plan version');
-    fData = null;
+    window.fData = null;
+    dispatchForecastLoadFailedEvent({
+      reason: 'Missing year or plan version',
+      sourcesAttempted: []
+    });
     return null;
   }
 
   // Try localStorage first
-  const cached = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+  sourcesAttempted.push('localStorage');
+  const cached = loadForecastFromStorage(window.currentFinancialYear, window.currentPlanVersion);
   if (cached) {
-    fData = cached.data;
-    console.log(`✓ Forecast loaded from storage: ${currentFinancialYear} ${currentPlanVersion} (${cached.savedAt || 'unknown date'})`);
+    window.fData = cached.data;
+    console.log(`✓ Forecast loaded from storage: ${window.currentFinancialYear} ${window.currentPlanVersion} (${cached.savedAt || 'unknown date'})`);
     return cached;
   }
 
   // Try library
-  const library = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+  sourcesAttempted.push('library');
+  const library = loadForecastFromLibrary(window.currentFinancialYear, window.currentPlanVersion);
   if (library) {
-    fData = library.data;
-    console.log(`✓ Forecast loaded from library: ${currentFinancialYear} ${currentPlanVersion}`);
+    window.fData = library.data;
+    console.log(`✓ Forecast loaded from library: ${window.currentFinancialYear} ${window.currentPlanVersion}`);
     return library;
   }
 
   // Auto-initialize v1 from v0 if needed
-  if (currentPlanVersion === 'v1') {
-    const initialized = initializeV1FromV0(currentFinancialYear);
+  if (window.currentPlanVersion === 'v1') {
+    sourcesAttempted.push('v0-initialization');
+    const initialized = initializeV1FromV0(window.currentFinancialYear);
     if (initialized) {
-      fData = initialized.data;
+      window.fData = initialized.data;
       return initialized;
     }
   }
 
-  // No forecast available
-  fData = null;
-  console.log(`No forecast available for ${currentFinancialYear} ${currentPlanVersion}`);
+  // No forecast available - dispatch event for UI notification
+  window.fData = null;
+  console.log(`No forecast available for ${window.currentFinancialYear} ${window.currentPlanVersion}`);
+  dispatchForecastLoadFailedEvent({
+    year: window.currentFinancialYear,
+    planVersion: window.currentPlanVersion,
+    sourcesAttempted,
+    reason: 'No forecast data found in any source'
+  });
+  return null;
+}
+
+/**
+ * Load forecast for current context (async version with GitHub support)
+ * Tries: localStorage > GitHub > library > initialize v1 from v0
+ * Dispatches 'apr:forecast-load-failed' event if no forecast is found
+ */
+async function loadForecastForCurrentContextAsync() {
+  const sourcesAttempted = [];
+
+  if (!window.currentFinancialYear || !window.currentPlanVersion) {
+    console.warn('Cannot load forecast: missing year or plan version');
+    window.fData = null;
+    dispatchForecastLoadFailedEvent({
+      reason: 'Missing year or plan version',
+      sourcesAttempted: []
+    });
+    return null;
+  }
+
+  // Try API/localStorage (API checked first if enabled)
+  const apiEnabled = window.isApiEnabled && window.isApiEnabled();
+  sourcesAttempted.push(apiEnabled ? 'API' : 'localStorage');
+  const cached = await loadForecastFromStorageAsync(window.currentFinancialYear, window.currentPlanVersion);
+  if (cached) {
+    window.fData = cached.data;
+    console.log(`✓ Forecast loaded: ${window.currentFinancialYear} ${window.currentPlanVersion} (${cached.savedAt || 'unknown date'})`, apiEnabled ? '[API]' : '[local]');
+    return cached;
+  }
+
+  // Try GitHub or library
+  sourcesAttempted.push('GitHub/library');
+  const library = await loadForecastFromLibraryAsync(window.currentFinancialYear, window.currentPlanVersion);
+  if (library) {
+    window.fData = library.data;
+    const source = library.source === 'github' ? 'GitHub' : 'library';
+    console.log(`✓ Forecast loaded from ${source}: ${window.currentFinancialYear} ${window.currentPlanVersion}`);
+    return library;
+  }
+
+  // Auto-initialize v1 from v0 if needed
+  if (window.currentPlanVersion === 'v1') {
+    sourcesAttempted.push('v0-initialization');
+    const initialized = initializeV1FromV0(window.currentFinancialYear);
+    if (initialized) {
+      window.fData = initialized.data;
+      return initialized;
+    }
+  }
+
+  // No forecast available - dispatch event for UI notification
+  window.fData = null;
+  console.log(`No forecast available for ${window.currentFinancialYear} ${window.currentPlanVersion}`);
+  dispatchForecastLoadFailedEvent({
+    year: window.currentFinancialYear,
+    planVersion: window.currentPlanVersion,
+    sourcesAttempted,
+    reason: 'No forecast data found in any source'
+  });
   return null;
 }
 
 /**
  * Save current forecast data
  */
-function saveCurrentForecast(rowCount) {
-  if (!fData) {
+async function saveCurrentForecast(rowCount) {
+  if (!window.fData) {
     console.warn('No forecast data to save');
     return false;
   }
 
-  if (!currentFinancialYear || !currentPlanVersion) {
+  if (!window.currentFinancialYear || !window.currentPlanVersion) {
     console.warn('Cannot save forecast: missing year or plan version');
     return false;
   }
 
-  return saveForecastToStorage(fData, rowCount, currentFinancialYear, currentPlanVersion);
+  return await saveForecastToStorageAsync(window.fData, rowCount, window.currentFinancialYear, window.currentPlanVersion);
 }
 
 /**
@@ -218,15 +316,15 @@ function getAllWorkGroupSetNames() {
   const names = new Set();
 
   // From work group sets mapping (if available)
-  if (typeof workGroupSets !== 'undefined' && workGroupSets) {
-    workGroupSets.forEach(value => {
+  if (typeof window.workGroupSets !== 'undefined' && window.workGroupSets) {
+    window.workGroupSets.forEach(value => {
       if (value) names.add(value);
     });
   }
 
   // From forecast data
-  if (fData) {
-    fData.forEach(job => {
+  if (window.fData) {
+    window.fData.forEach(job => {
       Object.keys(job.wgs || {}).forEach(wg => {
         if (wg) names.add(wg);
       });
@@ -234,8 +332,8 @@ function getAllWorkGroupSetNames() {
   }
 
   // From work done data (if available)
-  if (typeof wData !== 'undefined' && wData) {
-    wData.forEach(job => {
+  if (typeof window.wData !== 'undefined' && window.wData) {
+    window.wData.forEach(job => {
       Object.keys(job.wgs || {}).forEach(wg => {
         if (wg) names.add(wg);
       });
@@ -253,7 +351,7 @@ function getJobNumbersForWorkGroupSet(workGroup) {
   const numbers = new Set();
   if (!workGroup) return numbers;
 
-  [fData, typeof wData !== 'undefined' ? wData : null].forEach(source => {
+  [window.fData, typeof window.wData !== 'undefined' ? window.wData : null].forEach(source => {
     if (!source) return;
     source.forEach((job, jobNumber) => {
       if (job?.wgs?.[workGroup]) numbers.add(jobNumber);
@@ -269,8 +367,8 @@ function getJobNumbersForWorkGroupSet(workGroup) {
 function getStandardJobList() {
   const list = [];
 
-  if (typeof stdJobs !== 'undefined' && stdJobs && stdJobs.size) {
-    stdJobs.forEach((meta, jobNumber) => {
+  if (typeof window.stdJobs !== 'undefined' && window.stdJobs && window.stdJobs.size) {
+    window.stdJobs.forEach((meta, jobNumber) => {
       list.push({
         jobNumber,
         desc: meta.desc || `Job ${jobNumber}`,
@@ -280,7 +378,7 @@ function getStandardJobList() {
   } else {
     // Fallback: get from forecast and work done data
     const numbers = new Set();
-    [fData, typeof wData !== 'undefined' ? wData : null].forEach(source => {
+    [window.fData, typeof window.wData !== 'undefined' ? window.wData : null].forEach(source => {
       if (!source) return;
       source.forEach((_, jobNumber) => numbers.add(jobNumber));
     });
@@ -299,16 +397,34 @@ function getJobMetadata(jobNumber) {
   if (!jobNumber) return {};
 
   // Try standard jobs lookup
-  if (typeof stdJobs !== 'undefined' && stdJobs) {
-    const stdMeta = stdJobs.get(jobNumber);
+  if (typeof window.stdJobs !== 'undefined' && window.stdJobs) {
+    const stdMeta = window.stdJobs.get(jobNumber);
     if (stdMeta) return stdMeta;
   }
 
   // Try current jobs map
-  if (typeof currentJobsMap !== 'undefined' && currentJobsMap) {
-    const currentMeta = currentJobsMap.get(jobNumber);
+  if (typeof window.currentJobsMap !== 'undefined' && window.currentJobsMap) {
+    const currentMeta = window.currentJobsMap.get(jobNumber);
     if (currentMeta) return currentMeta;
   }
 
   return {};
 }
+
+// Expose functions globally for cross-module access
+window.initializeForecastContext = initializeForecastContext;
+window.setReviewContext = setReviewContext;
+window.setForecastContext = setForecastContext;
+window.getCurrentContext = getCurrentContext;
+window.getFinancialYearOptions = getFinancialYearOptions;
+window.getForecastAvailability = getForecastAvailability;
+window.getForecastAvailabilityAsync = getForecastAvailabilityAsync;
+window.getPreferredPlanVersion = getPreferredPlanVersion;
+window.loadForecastForCurrentContext = loadForecastForCurrentContext;
+window.loadForecastForCurrentContextAsync = loadForecastForCurrentContextAsync;
+window.saveCurrentForecast = saveCurrentForecast;
+window.getAllWorkGroupSetNames = getAllWorkGroupSetNames;
+window.getJobNumbersForWorkGroupSet = getJobNumbersForWorkGroupSet;
+window.getStandardJobList = getStandardJobList;
+window.getJobMetadata = getJobMetadata;
+

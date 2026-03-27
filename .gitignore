@@ -1,2 +1,46 @@
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Node modules
 node_modules/
-data/
+backend/node_modules/
+
+# Database files
+backend/db/*.db
+backend/db/*.db-shm
+backend/db/*.db-wal
+
+# Logs
+*.log
+npm-debug.log*
+backend/logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build outputs
+dist/
+build/
+
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Local config overrides
+config.local.js
+*.local.json

@@ -1,44 +1,136 @@
-    let fData = null, wData = null, stdJobs = new Map();
-    let workGroupSets = new Map();
+    // Core data (exposed on window for forecast modules)
+    window.wData = null;
+    window.stdJobs = new Map();
+    window.workGroupSets = new Map();
+    window.currentJobsMap = new Map();
+
+    // UI state (not in modules)
     let groupStore = [];
     let editingGroupId = null;
     let currentChart = null;
     let currentWorkOrders = [];
     let currentWorkOrderWorkGroup = 'all';
-    let currentJobsMap = new Map();
     let lastForecastRowCount = null;
+    let requiresContextSelection = true;
+
+    // Comment-related (not in modules)
     const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11', 'IME'];
     const COMMENT_STORAGE_KEY = 'aprJobCommentsV2';
     const LEGACY_COMMENT_STORAGE_KEY = 'aprJobComments';
-    const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
-    const REVIEW_STORAGE_KEY = 'aprReviewStatusV1';
-    const REVIEW_STAGE_KEY = 'aprReviewStageV1';
-    const FINANCIAL_YEAR_KEY = 'aprFinancialYearV1';
-    const PLAN_VERSION_KEY = 'aprPlanVersionV1';
-    const WORK_ORDER_AMENDMENTS_KEY = 'aprWorkOrderAmendmentsV1';
-    const GROUP_STORAGE_KEY = 'aprGroupStoreV1';
-    const FORECAST_PERIODS = Array.from({ length: 13 }, (_, i) => `P${i + 1}`);
-    let forecastEditorState = {
-      year: '',
-      stage: '',
-      planVersion: '',
-      workGroup: '',
-      rows: []
-    };
-    const REVIEW_STAGES = ['RF3', 'RF6', 'RF9', 'RF11'];
-    const DEFAULT_FINANCIAL_YEARS = ['FY27', 'FY28', 'FY29', 'FY30'];
-    const PLAN_VERSIONS = [
-      { id: 'v0', label: 'Plan v0' },
-      { id: 'v1', label: 'Plan v1' }
-    ];
     let commentStore = {};
-    let reviewStore = {};
-    let workOrderAmendments = {};
     let currentCommentJob = null;
-    let currentReviewStage = null;
-    let currentFinancialYear = null;
-    let currentPlanVersion = 'v1';
-    let requiresContextSelection = true;
+
+    // Review tracking (not in modules)
+    const REVIEW_STORAGE_KEY = 'aprReviewStatusV1';
+    let reviewStore = {};
+
+    // Work order amendments (not in modules)
+    const WORK_ORDER_AMENDMENTS_KEY = 'aprWorkOrderAmendmentsV1';
+    let workOrderAmendments = {};
+
+    // Group management (not in modules)
+    const GROUP_STORAGE_KEY = 'aprGroupStoreV1';
+
+    // Breakdown plan version preference
+    const BREAKDOWN_PLAN_VERSION_KEY = 'aprBreakdownPlanVersionV1';
+    let breakdownPlanVersion = 'v0'; // Default to v0
+
+    function loadBreakdownPlanVersion() {
+      const saved = localStorage.getItem(BREAKDOWN_PLAN_VERSION_KEY);
+      if (saved && ['v0', 'v1', 'both'].includes(saved)) {
+        breakdownPlanVersion = saved;
+      }
+    }
+
+    function saveBreakdownPlanVersion(version) {
+      breakdownPlanVersion = version;
+      localStorage.setItem(BREAKDOWN_PLAN_VERSION_KEY, version);
+    }
+
+    function handleBreakdownPlanVersionChange() {
+      const select = document.getElementById('breakdownPlanVersion');
+      if (!select) return;
+      saveBreakdownPlanVersion(select.value);
+      // Re-render the current breakdown if it's open
+      if (currentCommentJob) {
+        const job = window.currentJobsMap.get(currentCommentJob);
+        if (job) showBreakdown(job);
+      }
+    }
+    // Expose globally for HTML onclick handler
+    window.handleBreakdownPlanVersionChange = handleBreakdownPlanVersionChange;
+
+    // Work group table display mode preference (forecast vs variance)
+    const WG_DISPLAY_MODE_KEY = 'aprWgDisplayModeV1';
+    let wgDisplayMode = 'variance'; // Default to variance (current behavior)
+
+    function loadWgDisplayMode() {
+      const saved = localStorage.getItem(WG_DISPLAY_MODE_KEY);
+      if (saved && ['forecast', 'variance'].includes(saved)) {
+        wgDisplayMode = saved;
+      }
+    }
+
+    function saveWgDisplayMode(mode) {
+      wgDisplayMode = mode;
+      localStorage.setItem(WG_DISPLAY_MODE_KEY, mode);
+    }
+
+    function handleWgDisplayModeChange() {
+      const select = document.getElementById('wgDisplayMode');
+      if (!select) return;
+      saveWgDisplayMode(select.value);
+      // Re-render the current breakdown if it's open
+      if (currentCommentJob) {
+        const job = window.currentJobsMap.get(currentCommentJob);
+        if (job) showBreakdown(job);
+      }
+    }
+    // Expose globally for HTML onclick handler
+    window.handleWgDisplayModeChange = handleWgDisplayModeChange;
+
+    async function handleDashboardPlanVersionChange() {
+      const select = document.getElementById('dashboardPlanVersion');
+      if (!select) return;
+
+      const newPlanVersion = select.value;
+      if (!PLAN_VERSIONS.some(plan => plan.id === newPlanVersion)) return;
+
+      // Update current plan version
+      currentPlanVersion = newPlanVersion;
+      localStorage.setItem(PLAN_VERSION_KEY, currentPlanVersion);
+
+      // Reload forecast data for new plan version
+      fData = null;
+      const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
+      if (forecastCache) {
+        fData = forecastCache.data;
+        updateWorkGroupFilterOptions();
+        console.log(`✓ Switched to ${newPlanVersion}: Forecast loaded (${window.isApiEnabled() ? 'API' : 'local'})`);
+      } else {
+        const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
+        if (libraryForecast) {
+          fData = libraryForecast.data;
+          updateWorkGroupFilterOptions();
+          const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
+          console.log(`✓ Switched to ${newPlanVersion}: ${source} forecast loaded`);
+        } else if (currentPlanVersion === 'v1') {
+          // Try to initialize v1 from v0
+          const initialized = initializeV1FromV0(currentFinancialYear);
+          if (initialized) {
+            fData = initialized.data;
+            updateWorkGroupFilterOptions();
+            console.log(`✓ Switched to ${newPlanVersion}: Initialized from v0`);
+          }
+        }
+      }
+
+      // Update UI and re-render
+      updateContextControls();
+      render();
+    }
+    // Expose globally for HTML onclick handler
+    window.handleDashboardPlanVersionChange = handleDashboardPlanVersionChange;
 
     function loadCommentStore() {
       try {
@@ -49,6 +141,26 @@
         console.warn('Failed to load comments:', err);
         commentStore = {};
       }
+    }
+
+    async function loadCommentStoreAsync() {
+      // Try API first if enabled
+      if (window.isApiEnabled && window.isApiEnabled() && window.loadJobCommentsFromApi) {
+        try {
+          const apiData = await window.loadJobCommentsFromApi();
+          if (apiData) {
+            commentStore = apiData;
+            // Cache in localStorage for offline access
+            localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
+            return;
+          }
+        } catch (err) {
+          console.warn('Failed to load comments from API, falling back to localStorage:', err);
+        }
+      }
+
+      // Fall back to localStorage
+      loadCommentStore();
     }
 
     function loadReviewStore() {
@@ -65,23 +177,6 @@
       localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(reviewStore));
     }
 
-    function loadReviewStage() {
-      const saved = localStorage.getItem(REVIEW_STAGE_KEY);
-      if (REVIEW_STAGES.includes(saved)) currentReviewStage = saved;
-    }
-
-    function loadFinancialYear() {
-      const saved = localStorage.getItem(FINANCIAL_YEAR_KEY);
-      if (saved) currentFinancialYear = saved;
-    }
-
-    function loadPlanVersion() {
-      const saved = localStorage.getItem(PLAN_VERSION_KEY);
-      if (saved && PLAN_VERSIONS.some(plan => plan.id === saved)) {
-        currentPlanVersion = saved;
-      }
-    }
-
     function updateReviewContextDisplay() {
       const stageDisplay = document.getElementById('reviewStageDisplay');
       if (stageDisplay) stageDisplay.textContent = currentReviewStage || 'RF';
@@ -94,7 +189,7 @@
       }
     }
 
-    function setReviewContext(stage, year, { persist = true } = {}) {
+    async function setReviewContext(stage, year, { persist = true } = {}) {
       if (!REVIEW_STAGES.includes(stage)) return;
       currentReviewStage = stage;
       currentFinancialYear = year || currentFinancialYear;
@@ -112,16 +207,18 @@
       updateReviewContextDisplay();
       updateContextControls();
       fData = null;
-      const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+      const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
         fData = forecastCache.data;
         updateWorkGroupFilterOptions();
-        console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+        console.log('✓ Forecast loaded', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '', window.isApiEnabled() ? '[API]' : '[local]');
       } else {
-        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+        const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
           fData = libraryForecast.data;
           updateWorkGroupFilterOptions();
+          const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
+          console.log(`✓ Forecast loaded from ${source}`);
         }
       }
       closeStageModal();
@@ -140,20 +237,10 @@
         const label = PLAN_VERSIONS.find(plan => plan.id === currentPlanVersion)?.label || 'Plan';
         planDisplay.textContent = label;
       }
-      const statusMessage = document.getElementById('forecastStatusMessage');
-      if (statusMessage) {
-        if (!currentFinancialYear || !currentReviewStage) {
-          statusMessage.textContent = 'Select a financial year and RF stage to load forecasts.';
-        } else {
-          const availability = getForecastAvailability(currentFinancialYear);
-          if (!availability.v0 && !availability.v1) {
-            statusMessage.textContent = `No forecast updated for ${currentFinancialYear} yet.`;
-          } else {
-            const label = PLAN_VERSIONS.find(plan => plan.id === currentPlanVersion)?.label || 'Plan';
-            const suffix = availability.v1 && availability.v0 ? ' (v0 & v1 available)' : '';
-            statusMessage.textContent = `Using ${label} forecast${suffix} (FY-wide across RF stages).`;
-          }
-        }
+      // Sync dashboard plan version selector
+      const dashboardPlanVersionSelect = document.getElementById('dashboardPlanVersion');
+      if (dashboardPlanVersionSelect && dashboardPlanVersionSelect.value !== currentPlanVersion) {
+        dashboardPlanVersionSelect.value = currentPlanVersion;
       }
       const forecastPage = document.getElementById('forecastPage');
       if (forecastPage && !forecastPage.classList.contains('is-hidden')) {
@@ -165,7 +252,7 @@
       return String(value || '').trim();
     }
 
-    function setForecastContext(stage, year, planVersion, { persist = true } = {}) {
+    async function setForecastContext(stage, year, planVersion, { persist = true } = {}) {
       if (!REVIEW_STAGES.includes(stage)) return;
       if (planVersion && !PLAN_VERSIONS.some(plan => plan.id === planVersion)) return;
       currentReviewStage = stage;
@@ -184,16 +271,18 @@
       updateReviewContextDisplay();
       updateContextControls();
       fData = null;
-      const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+      const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
         fData = forecastCache.data;
         updateWorkGroupFilterOptions();
-        console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+        console.log('✓ Forecast loaded', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '', window.isApiEnabled() ? '[API]' : '[local]');
       } else {
-        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+        const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
           fData = libraryForecast.data;
           updateWorkGroupFilterOptions();
+          const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
+          console.log(`✓ Forecast loaded from ${source}`);
         } else if (currentPlanVersion === 'v1') {
           const initialized = initializeV1FromV0(currentFinancialYear);
           if (initialized) {
@@ -274,6 +363,20 @@
       localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
     }
 
+    async function saveCommentStoreAsync() {
+      // Save to localStorage first (always)
+      saveCommentStore();
+
+      // Also save to API if enabled
+      if (window.isApiEnabled && window.isApiEnabled() && window.saveCommentsToApi) {
+        try {
+          await window.saveCommentsToApi(commentStore);
+        } catch (err) {
+          console.warn('Failed to save comments to API (data saved locally):', err);
+        }
+      }
+    }
+
     function loadWorkOrderAmendments() {
       try {
         const raw = localStorage.getItem(WORK_ORDER_AMENDMENTS_KEY);
@@ -311,7 +414,7 @@
     }
 
     function getUnitForJob(jobNumber) {
-      return stdJobs.get(jobNumber)?.unit || currentJobsMap.get(jobNumber)?.unit || '';
+      return window.stdJobs.get(jobNumber)?.unit || window.currentJobsMap.get(jobNumber)?.unit || '';
     }
 
     function getGroupUnitLabel(group) {
@@ -338,6 +441,7 @@
 
     function updateGroupFilterOptions() {
       const select = document.getElementById('groupFilter');
+      const container = document.getElementById('groupFilterContainer');
       if (!select) return;
       const current = select.value || 'all';
       const options = [
@@ -346,7 +450,39 @@
       ];
       select.innerHTML = options.join('');
       select.value = groupStore.some(group => group.id === current) ? current : 'all';
+      // Show/hide group filter container based on whether groups exist
+      if (container) {
+        container.style.display = groupStore.length > 0 ? 'flex' : 'none';
+      }
     }
+
+    // Engineer filter functions
+    function updateEngineerFilterOptions() {
+      const select = document.getElementById('engineerFilter');
+      if (!select) return;
+      const current = select.value || 'all';
+      const engineers = window.getEngineers ? window.getEngineers() : [];
+      const options = [
+        '<option value="all">All Engineers</option>',
+        ...engineers.map(eng => `<option value="${escapeHtml(eng.id)}">${escapeHtml(eng.name)}</option>`)
+      ];
+      select.innerHTML = options.join('');
+      select.value = engineers.some(eng => eng.id === current) ? current : 'all';
+    }
+
+    function getSelectedEngineerWorkGroups() {
+      const engineerFilter = document.getElementById('engineerFilter')?.value || 'all';
+      if (engineerFilter === 'all' || !window.getEngineerWorkGroups) return null;
+      return window.getEngineerWorkGroups(engineerFilter);
+    }
+
+    function onEngineerFilterChange() {
+      // Update work group filter options based on selected engineer
+      updateWorkGroupFilterOptions();
+      render();
+    }
+    // Expose for HTML onclick handler
+    window.onEngineerFilterChange = onEngineerFilterChange;
 
     function renderGroupList() {
       const list = document.getElementById('groupList');
@@ -400,7 +536,7 @@
       if (!table) return;
       const normalizedFilter = filterText.toLowerCase().trim();
       const selectedSet = new Set(selectedJobs || getSelectedGroupJobNumbers());
-      const jobs = Array.from(stdJobs.entries()).map(([jobNumber, meta]) => ({
+      const jobs = Array.from(window.stdJobs.entries()).map(([jobNumber, meta]) => ({
         jobNumber,
         disc: meta?.disc || '',
         desc: meta?.desc || '',
@@ -589,7 +725,7 @@
       if (!Number.isFinite(updatedUnits)) return false;
       const order = currentWorkOrders.find(item => item.id === orderId);
       if (!order) return false;
-      const job = wData?.get(order.jobNumber);
+      const job = window.wData?.get(order.jobNumber);
       if (!job) return false;
       const previousUnits = Number(order.units) || 0;
       if (Math.abs(previousUnits - updatedUnits) < 0.0001) return false;
@@ -608,7 +744,7 @@
       job.wgs[order.workGroup][order.period] = (job.wgs[order.workGroup][order.period] || 0) + delta;
       updateWorkOrderAmendment(orderId, updatedUnits, order.originalUnits);
       render();
-      const updatedJob = currentJobsMap.get(order.jobNumber);
+      const updatedJob = window.currentJobsMap.get(order.jobNumber);
       if (updatedJob) {
         showBreakdown(updatedJob, { scrollTop: false });
       }
@@ -616,49 +752,80 @@
     }
 
     function getJobComments(jobNumber) {
-      return commentStore[jobNumber] || [];
+      const allComments = commentStore[jobNumber] || [];
+      // Filter comments for current FY and RF stage
+      return allComments.filter(comment => {
+        const commentFY = comment.fy || comment.financialYear;
+        const commentRF = comment.rf || comment.reviewStage;
+        return commentFY === currentFinancialYear && commentRF === currentReviewStage;
+      });
     }
 
-    function addJobComment(jobNumber, category, value) {
+    async function addJobComment(jobNumber, category, value) {
       const trimmed = value.trim();
       if (!trimmed) return;
       if (!commentStore[jobNumber]) commentStore[jobNumber] = [];
-      commentStore[jobNumber].unshift({
+      const newComment = {
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         category,
         text: trimmed,
-        timestamp: new Date().toISOString()
-      });
+        timestamp: new Date().toISOString(),
+        fy: currentFinancialYear,
+        rf: currentReviewStage
+      };
+      commentStore[jobNumber].unshift(newComment);
+
+      // Save to localStorage
       saveCommentStore();
+
+      // Save single comment to API if enabled
+      if (window.isApiEnabled && window.isApiEnabled() && window.saveCommentToApi) {
+        try {
+          await window.saveCommentToApi({ ...newComment, jobNumber });
+        } catch (err) {
+          console.warn('Failed to save comment to API (saved locally):', err);
+        }
+      }
     }
 
-    function deleteJobComment(jobNumber, id) {
+    async function deleteJobComment(jobNumber, id) {
       if (!commentStore[jobNumber]) return;
       commentStore[jobNumber] = commentStore[jobNumber].filter(entry => entry.id !== id);
+
+      // Save to localStorage first
       saveCommentStore();
+
+      // Delete from API if enabled
+      if (window.isApiEnabled && window.isApiEnabled() && window.deleteCommentFromApi) {
+        try {
+          await window.deleteCommentFromApi(id);
+        } catch (err) {
+          console.warn('Failed to delete comment from API (deleted locally):', err);
+        }
+      }
     }
 
-    function init() {
-      loadCommentStore();
+    async function init() {
+      await loadCommentStoreAsync();
       loadReviewStore();
-      loadReviewStage();
-      loadFinancialYear();
-      loadPlanVersion();
+      initializeForecastContext();  // Load forecast context from localStorage
       loadWorkOrderAmendments();
       loadGroupStore();
+      loadBreakdownPlanVersion();
+      loadWgDisplayMode();
       const stageDisplay = document.getElementById('reviewStageDisplay');
-      if (stageDisplay && currentReviewStage) stageDisplay.textContent = currentReviewStage;
+      if (stageDisplay && window.currentReviewStage) stageDisplay.textContent = window.currentReviewStage;
       const fyDisplay = document.getElementById('financialYearDisplay');
-      if (fyDisplay) fyDisplay.textContent = currentFinancialYear || 'FY';
+      if (fyDisplay) fyDisplay.textContent = window.currentFinancialYear || 'FY';
       updateContextControls();
       if (typeof WORK_GROUP_SETS_RAW !== 'undefined') {
         WORK_GROUP_SETS_RAW.split('\n').slice(1).forEach(line => {
           const p = line.split('\t');
           if (p.length >= 2) {
-            workGroupSets.set(p[0].trim(), p[1].trim());
+            window.workGroupSets.set(p[0].trim(), p[1].trim());
           }
         });
-        console.log('✓ Work group sets loaded:', workGroupSets.size);
+        console.log('✓ Work group sets loaded:', window.workGroupSets.size);
       } else {
         console.warn('⚠ work-group-sets-data.js not found - using raw values');
       }
@@ -667,32 +834,36 @@
         STANDARD_JOBS_RAW.split('\n').slice(1).forEach(line => {
           const p = line.split('\t');
           if (p.length >= 5) {
-            stdJobs.set(p[2].trim().padStart(6,'0'), {
+            window.stdJobs.set(p[2].trim().padStart(6,'0'), {
               disc: p[0].trim(), mnt: p[1].trim(), desc: p[3].trim(), unit: p[4].trim()
             });
           }
         });
-        console.log('✓ Standard jobs loaded:', stdJobs.size);
+        console.log('✓ Standard jobs loaded:', window.stdJobs.size);
       } else {
         console.warn('⚠ standard-jobs-data.js not found - all jobs will be processed');
         // Process all jobs when no filter available
       }
       if (currentFinancialYear && currentReviewStage) {
         currentPlanVersion = getPreferredPlanVersion(currentFinancialYear);
-        const forecastCache = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
+        const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
         if (forecastCache) {
           fData = forecastCache.data;
           updateWorkGroupFilterOptions();
-          console.log('✓ Forecast cache restored', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '');
+          console.log('✓ Forecast loaded on init', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '', window.isApiEnabled() ? '[API]' : '[local]');
         } else {
-          const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
+          // Load from GitHub or library if not in storage/API
+          const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
           if (libraryForecast) {
             fData = libraryForecast.data;
             updateWorkGroupFilterOptions();
+            const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
+            console.log(`✓ Forecast loaded from ${source} on init`);
           }
         }
       }
       updateGroupFilterOptions();
+      updateEngineerFilterOptions();
       const groupForm = document.getElementById('groupForm');
       if (groupForm) {
         groupForm.addEventListener('submit', handleGroupSubmit);
@@ -702,33 +873,19 @@
       if (compareChangedOnly) {
         compareChangedOnly.addEventListener('change', renderForecastComparison);
       }
-      if (compareSearch) {
-        compareSearch.addEventListener('input', renderForecastComparison);
+      if (compareSearch && window.debounce) {
+        const debouncedCompare = window.debounce(renderForecastComparison, 300);
+        compareSearch.addEventListener('input', debouncedCompare);
       }
       const groupJobSearch = document.getElementById('groupJobSearch');
       const groupRollupInput = document.getElementById('groupRollup');
-      if (groupJobSearch) {
-        groupJobSearch.addEventListener('input', () => {
+      if (groupJobSearch && window.debounce) {
+        const debouncedRender = window.debounce(() => {
           renderGroupJobTable({ filterText: groupJobSearch.value });
-        });
+        }, 300);
+        groupJobSearch.addEventListener('input', debouncedRender);
       }
       if (groupRollupInput) groupRollupInput.addEventListener('change', updateGroupRollupHelp);
-      const forecastEditorForm = document.getElementById('forecastEditorForm');
-      if (forecastEditorForm) {
-        forecastEditorForm.addEventListener('submit', handleForecastEditorSubmit);
-      }
-      const forecastEditorYear = document.getElementById('forecastEditorYear');
-      const forecastEditorStage = document.getElementById('forecastEditorStage');
-      const forecastEditorPlan = document.getElementById('forecastEditorPlan');
-      const forecastEditorWorkGroup = document.getElementById('forecastEditorWorkGroup');
-      const forecastEditorTable = document.getElementById('forecastEditorTable');
-      if (forecastEditorYear) forecastEditorYear.addEventListener('change', handleForecastEditorContextChange);
-      if (forecastEditorStage) forecastEditorStage.addEventListener('change', handleForecastEditorContextChange);
-      if (forecastEditorPlan) forecastEditorPlan.addEventListener('change', handleForecastEditorContextChange);
-      if (forecastEditorWorkGroup) forecastEditorWorkGroup.addEventListener('change', handleForecastEditorWorkGroupChange);
-      if (forecastEditorTable) forecastEditorTable.addEventListener('input', handleForecastEditorTableInput);
-      if (forecastEditorTable) forecastEditorTable.addEventListener('paste', handleForecastEditorTablePaste);
-      if (forecastEditorTable) forecastEditorTable.addEventListener('click', handleForecastEditorTableClick);
     }
 
     function extractJob(txt) {
@@ -742,10 +899,32 @@
       if (!raw) return 'Unspecified';
       const text = String(raw).trim();
       if (!text) return 'Unspecified';
-      const code = text.split(/\s+/)[0];
-      if (workGroupSets.has(code)) return workGroupSets.get(code);
-      if (workGroupSets.has(text)) return workGroupSets.get(text);
+      const code = text.split(/\s+/)[0].toUpperCase();
+      // Try lookup by code
+      if (window.workGroupSets.has(code)) return window.workGroupSets.get(code);
+      // Try lookup by full text as code
+      const upperText = text.toUpperCase();
+      if (window.workGroupSets.has(upperText)) return window.workGroupSets.get(upperText);
+      // Try matching against description values (for Work Done files that have descriptions instead of codes)
+      // Normalize: lowercase, collapse whitespace, remove spaces before parentheses
+      const normalizeForMatch = (s) => s.toLowerCase().replace(/\s+/g, ' ').replace(/\s*\(/g, '(').trim();
+      const normalizedInput = normalizeForMatch(text);
+      for (const [wgCode, description] of window.workGroupSets) {
+        if (normalizeForMatch(description) === normalizedInput) {
+          return description; // Return canonical description
+        }
+      }
       return text;
+    }
+
+    function getEngineerForWorkGroupNormalized(workGroupCode) {
+      if (!workGroupCode || !window.getEngineers) return null;
+      const normalizedWorkGroup = normalizeWorkGroupSet(workGroupCode);
+      return window.getEngineers().find(eng =>
+        eng.workGroupSets.some(setCode =>
+          normalizeWorkGroupSet(setCode) === normalizedWorkGroup
+        )
+      ) || null;
     }
 
     function extractWorkOrderNumber(row) {
@@ -780,11 +959,11 @@
 
     function getWorkGroupOptions() {
       const names = new Set();
-      [fData, wData].forEach(source => {
+      [fData, window.wData].forEach(source => {
         if (!source) return;
         source.forEach(job => {
           Object.keys(job.wgs || {}).forEach(wg => {
-            if (wg) names.add(wg);
+            if (wg) names.add(normalizeWorkGroupSet(wg));
           });
         });
       });
@@ -796,12 +975,175 @@
       let total = 0;
       Object.values(commentStore || {}).forEach(comments => {
         comments.forEach(entry => {
+          // Filter by current FY across all RF stages
+          const commentFY = entry.fy || entry.financialYear;
+          if (commentFY !== currentFinancialYear) return;
+
           total += 1;
           const category = entry.category || 'General';
           counts[category] = (counts[category] || 0) + 1;
         });
       });
       return { total, counts };
+    }
+
+    function getJobHealthStatus(varianceData) {
+      const forecast = Math.abs(varianceData.f || 0);
+      const rawVariance = varianceData.v || 0;
+      const absVariance = Math.abs(rawVariance);
+      const variancePercent = forecast > 0 ? (absVariance / forecast) * 100 : 0;
+      const isOverdelivering = rawVariance > 0;
+
+      if (variancePercent >= 50) {
+        const label = isOverdelivering ? 'OVER DELIVERED' : 'UNDER DELIVERED';
+        return { status: 'critical', label, percent: variancePercent, isOverdelivering };
+      } else if (variancePercent >= 10) {
+        const label = isOverdelivering ? 'AHEAD OF PLAN' : 'BEHIND PLAN';
+        return { status: 'warning', label, percent: variancePercent, isOverdelivering };
+      } else {
+        return { status: 'good', label: 'ON TRACK', percent: variancePercent, isOverdelivering };
+      }
+    }
+
+    function updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter }) {
+      if (!baseFiltered || !baseFiltered.length) {
+        // Hide or clear health indicator when no jobs
+        ['healthBarGreen', 'healthBarAmber', 'healthBarRed', 'healthBarGrey'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.style.width = '0%';
+        });
+
+        ['healthGoodCount', 'healthWarningCount', 'healthCriticalCount', 'healthNoForecastCount'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = '0';
+        });
+        ['healthGoodPercent', 'healthWarningPercent', 'healthCriticalPercent', 'healthNoForecastPercent'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = '0%';
+        });
+        ['legendGoodCount', 'legendWarningCount', 'legendCriticalCount', 'legendNoForecastCount'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = '0';
+        });
+
+        const healthJobCount = document.getElementById('healthJobCount');
+        if (healthJobCount) healthJobCount.textContent = '0 jobs';
+
+        const healthIssues = document.getElementById('healthIssues');
+        if (healthIssues) healthIssues.innerHTML = '';
+        return;
+      }
+
+      // Calculate health metrics based on variance
+      let goodCount = 0;
+      let warningCount = 0;
+      let criticalCount = 0;
+      let noForecastCount = 0;
+      const issues = [];
+
+      baseFiltered.forEach(job => {
+        const displayData = getJobDisplayData(job);
+        const pd = period === 'all' ? displayData.tot : displayData.periods[period];
+        const forecast = Math.abs(pd.f || 0);
+        const variance = Math.abs(pd.v || 0);
+
+        // Check if job has no forecast
+        if (forecast === 0 && (pd.a || 0) === 0) {
+          noForecastCount++;
+          return;
+        }
+
+        const variancePercent = forecast > 0 ? (variance / forecast) * 100 : 0;
+
+        if (variancePercent < 10) {
+          goodCount++;
+        } else if (variancePercent < 50) {
+          warningCount++;
+        } else {
+          criticalCount++;
+          if (issues.length < 5) {  // Only show top 5 issues
+            const rawVariance = pd.v || 0;
+            const direction = rawVariance > 0 ? 'over' : 'under';
+            issues.push(`${job.jn} is ${variancePercent.toFixed(0)}% ${direction} (${rawVariance > 0 ? '+' : ''}${rawVariance.toFixed(1)})`);
+          }
+        }
+      });
+
+      const totalJobs = baseFiltered.length;
+      const jobsWithForecast = goodCount + warningCount + criticalCount;
+      const goodPercent = totalJobs > 0 ? Math.round((goodCount / totalJobs) * 100) : 0;
+      const warningPercent = totalJobs > 0 ? Math.round((warningCount / totalJobs) * 100) : 0;
+      const criticalPercent = totalJobs > 0 ? Math.round((criticalCount / totalJobs) * 100) : 0;
+      const noForecastPercent = totalJobs > 0 ? Math.round((noForecastCount / totalJobs) * 100) : 0;
+
+      // Update segmented health bar
+      const healthBarGreen = document.getElementById('healthBarGreen');
+      const healthBarAmber = document.getElementById('healthBarAmber');
+      const healthBarRed = document.getElementById('healthBarRed');
+      const healthBarGrey = document.getElementById('healthBarGrey');
+
+      if (healthBarGreen) healthBarGreen.style.width = `${goodPercent}%`;
+      if (healthBarAmber) healthBarAmber.style.width = `${warningPercent}%`;
+      if (healthBarRed) healthBarRed.style.width = `${criticalPercent}%`;
+      if (healthBarGrey) healthBarGrey.style.width = `${noForecastPercent}%`;
+
+      // Update job count display
+      const healthJobCount = document.getElementById('healthJobCount');
+      if (healthJobCount) healthJobCount.textContent = `${totalJobs} jobs`;
+
+      // Update stat counts
+      const updateEl = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      };
+
+      updateEl('healthGoodCount', goodCount);
+      updateEl('healthWarningCount', warningCount);
+      updateEl('healthCriticalCount', criticalCount);
+      updateEl('healthNoForecastCount', noForecastCount);
+
+      updateEl('healthGoodPercent', `${goodPercent}%`);
+      updateEl('healthWarningPercent', `${warningPercent}%`);
+      updateEl('healthCriticalPercent', `${criticalPercent}%`);
+      updateEl('healthNoForecastPercent', `${noForecastPercent}%`);
+
+      // Update legend counts
+      updateEl('legendGoodCount', goodCount);
+      updateEl('legendWarningCount', warningCount);
+      updateEl('legendCriticalCount', criticalCount);
+      updateEl('legendNoForecastCount', noForecastCount);
+
+      // Update active state for filter
+      document.querySelectorAll('.health-stat[data-filter]').forEach(stat => {
+        const filter = stat.dataset.filter;
+        stat.classList.toggle('active', filter && filter === varianceFilter);
+      });
+      document.querySelectorAll('.health-legend-clickable-item[data-filter]').forEach(item => {
+        const filter = item.dataset.filter;
+        item.classList.toggle('active', filter && filter === varianceFilter);
+      });
+      document.querySelectorAll('.health-bar-segment[data-filter]').forEach(segment => {
+        const filter = segment.dataset.filter;
+        segment.classList.toggle('active', filter && filter === varianceFilter);
+      });
+
+      // Update issues list
+      const healthIssues = document.getElementById('healthIssues');
+      if (healthIssues) {
+        if (issues.length > 0 || criticalCount > 0) {
+          const issuesList = issues.map(issue => `<li>${escapeHtml(issue)}</li>`).join('');
+          const additionalText = criticalCount > issues.length ? `<li>and ${criticalCount - issues.length} more critical jobs...</li>` : '';
+          healthIssues.innerHTML = `
+            <div class="health-issues-title">Issues Requiring Attention:</div>
+            <ul class="health-issues-list">
+              ${issuesList}
+              ${additionalText}
+            </ul>
+          `;
+        } else {
+          healthIssues.innerHTML = '';
+        }
+      }
     }
 
     function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter }) {
@@ -820,25 +1162,30 @@
       if (progressEl) progressEl.style.width = `${percent}%`;
       if (stageDisplay) stageDisplay.textContent = reviewStage;
 
-      const ragCounts = { red: 0, amber: 0, green: 0 };
-      baseFiltered.forEach(job => {
-        const displayData = getJobDisplayData(job);
-        const pd = period === 'all' ? displayData.tot : displayData.periods[period];
-        const { status } = getVarianceStatus(pd);
-        if (status === 'bad') ragCounts.red += 1;
-        else if (status === 'warning') ragCounts.amber += 1;
-        else ragCounts.green += 1;
-      });
-      const ragRed = document.getElementById('ragRed');
-      const ragAmber = document.getElementById('ragAmber');
-      const ragGreen = document.getElementById('ragGreen');
-      if (ragRed) ragRed.textContent = ragCounts.red;
-      if (ragAmber) ragAmber.textContent = ragCounts.amber;
-      if (ragGreen) ragGreen.textContent = ragCounts.green;
-      document.querySelectorAll('.rag-pill').forEach(pill => {
-        const filter = pill.dataset.filter;
-        pill.classList.toggle('active', filter && filter === varianceFilter);
-      });
+      // Update Work Order Activity card
+      let totalWorkOrders = 0;
+      let totalUnits = 0;
+      let flaggedCount = 0;
+      let amendedCount = 0;
+      if (window.wData) {
+        window.wData.forEach(jobData => {
+          const workOrders = jobData.workOrders || [];
+          totalWorkOrders += workOrders.length;
+          workOrders.forEach(wo => {
+            totalUnits += wo.units || 0;
+            if (wo.flags && wo.flags.length > 0) flaggedCount++;
+            if (wo.isAmended) amendedCount++;
+          });
+        });
+      }
+      const workOrderCountEl = document.getElementById('workOrderCount');
+      const workOrderMetaEl = document.getElementById('workOrderMeta');
+      const workOrderFlaggedEl = document.getElementById('workOrderFlagged');
+      const workOrderAmendedEl = document.getElementById('workOrderAmended');
+      if (workOrderCountEl) workOrderCountEl.textContent = totalWorkOrders.toLocaleString();
+      if (workOrderMetaEl) workOrderMetaEl.textContent = `${totalUnits.toLocaleString()} units complete`;
+      if (workOrderFlaggedEl) workOrderFlaggedEl.textContent = flaggedCount.toLocaleString();
+      if (workOrderAmendedEl) workOrderAmendedEl.textContent = amendedCount.toLocaleString();
 
       const { total: commentTotal, counts: commentCounts } = getCommentSummary();
       const commentTotalEl = document.getElementById('commentTotal');
@@ -886,7 +1233,7 @@
     }
 
     function showBreakdownByJobNumber(jobNumber) {
-      const job = currentJobsMap.get(jobNumber);
+      const job = window.currentJobsMap.get(jobNumber);
       if (!job) return;
       showBreakdown(job, { scrollTop: true });
     }
@@ -895,19 +1242,61 @@
       const select = document.getElementById('wgFilter');
       if (!select) return;
       const current = select.value || 'all';
-      const options = getWorkGroupOptions();
+      let options = getWorkGroupOptions();
+
+      // Filter by selected engineer's work groups
+      const engineerWorkGroups = getSelectedEngineerWorkGroups();
+      if (engineerWorkGroups && engineerWorkGroups.length > 0) {
+        options = options.filter(key => {
+          const normalizedKey = normalizeWorkGroupSet(key);
+          return engineerWorkGroups.some(ewg => normalizeWorkGroupSet(ewg) === normalizedKey);
+        });
+      }
+
+      // Get contextual label for "all" option
+      const engineerFilter = document.getElementById('engineerFilter')?.value || 'all';
+      const selectedEngineer = engineerFilter !== 'all' && window.getEngineerById
+        ? window.getEngineerById(engineerFilter)
+        : null;
+      const allLabel = selectedEngineer
+        ? `All Work Groups (${selectedEngineer.name})`
+        : 'All Work Group Sets';
+
       const optionHtml = [
-        '<option value="all">All Work Group Sets</option>',
-        ...options.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+        `<option value="all">${escapeHtml(allLabel)}</option>`,
+        ...options.map(key => {
+          // key might be a code (like "DBAPPTRA") or already a description
+          let description = key;
+
+          // Try direct lookup (key is a code)
+          if (window.workGroupSets?.has(key)) {
+            description = window.workGroupSets.get(key);
+          } else {
+            // Try uppercase version (handles case mismatches)
+            const upperKey = String(key).trim().toUpperCase();
+            if (window.workGroupSets?.has(upperKey)) {
+              description = window.workGroupSets.get(upperKey);
+            } else {
+              // Try extracting first word as code (handles combined formats like "DBAPPTRA Appleby SM(TRACK)")
+              const extractedCode = String(key).trim().split(/\s+/)[0].toUpperCase();
+              if (extractedCode !== upperKey && window.workGroupSets?.has(extractedCode)) {
+                description = window.workGroupSets.get(extractedCode);
+              }
+              // If still not found, key might already be a description or unknown - use as-is
+            }
+          }
+
+          return `<option value="${escapeHtml(key)}">${escapeHtml(description)}</option>`;
+        })
       ].join('');
       select.innerHTML = optionHtml;
       select.value = options.includes(current) ? current : 'all';
     }
 
     function getMaxWorkDonePeriod() {
-      if (!wData) return 0;
+      if (!window.wData) return 0;
       let max = 0;
-      wData.forEach(job => {
+      window.wData.forEach(job => {
         Object.entries(job.periods || {}).forEach(([period, value]) => {
           const numeric = parseInt(String(period).replace(/[^0-9]/g, ''), 10);
           if (!Number.isNaN(numeric) && numeric > max && value !== 0) {
@@ -935,8 +1324,6 @@
         }
         const row = parseInt(document.getElementById('fRow').value) - 1;
         const rows = XLSX.utils.sheet_to_json(wb.Sheets['Results'], {range:row});
-        console.log('Forecast:', rows.length, 'rows');
-        console.log('Columns:', Object.keys(rows[0]||{}));
         
         const selectedYear = document.getElementById('forecastYearSelect')?.value || currentFinancialYear;
         if (!selectedYear) {
@@ -960,7 +1347,7 @@
           if (!jn || jn==='000000') return;
           
           // If no standard jobs loaded, accept all jobs
-          if (stdJobs.size > 0 && !stdJobs.has(jn)) return;
+          if (window.stdJobs.size > 0 && !window.stdJobs.has(jn)) return;
           
           matched++;
           if (!fData.has(jn)) {
@@ -982,7 +1369,7 @@
           }
         });
         console.log('✓ Matched:', matched, 'of', rows.length);
-        saveForecastToStorage(fData, rows.length, selectedYear, selectedPlan);
+        await saveForecastToStorageAsync(fData, rows.length, selectedYear, selectedPlan);
         setReviewContext(currentReviewStage, selectedYear);
         closeModal();
       } catch(err) {
@@ -1003,10 +1390,8 @@
         }
         const row = parseInt(document.getElementById('wRow').value) - 1;
         const rows = XLSX.utils.sheet_to_json(wb.Sheets['Detail'], {range:row});
-        console.log('Work done:', rows.length, 'rows');
-        console.log('Columns:', Object.keys(rows[0]||{}));
         
-        wData = new Map();
+        window.wData = new Map();
         let matched = 0;
         let sampleUnmatched = [];
         
@@ -1039,12 +1424,12 @@
           if (!jn) return;
           
           // If no standard jobs loaded, accept all jobs
-          if (stdJobs.size > 0 && !stdJobs.has(jn)) return;
+          if (window.stdJobs.size > 0 && !window.stdJobs.has(jn)) return;
           
           if (!per.match(/^P\d+$/i)) return;
           matched++;
-          if (!wData.has(jn)) wData.set(jn, {periods:{}, wgs:{}});
-          const job = wData.get(jn);
+          if (!window.wData.has(jn)) window.wData.set(jn, {periods:{}, wgs:{}});
+          const job = window.wData.get(jn);
           if (!job.workOrders) job.workOrders = [];
           const rawUnits = parseFloat(units || 0);
           const workOrderNumber = extractWorkOrderNumber(r);
@@ -1091,12 +1476,6 @@
           job.workOrders.push(workOrder);
         });
         
-        console.log('Sample work done rows:');
-        sampleUnmatched.forEach(s => {
-          console.log('  Job:', s.raw, '→', s.extracted);
-          console.log('  Period:', s.periodRaw, '→', s.periodNormalized, 'Units:', s.units);
-        });
-        console.log('✓ Matched:', matched, 'of', rows.length);
         updateWorkGroupFilterOptions();
         render();
         closeModal();
@@ -1135,21 +1514,26 @@
           const jn = rawJob.replace(/\D/g, '').padStart(6, '0');
           const category = String(r['Comment Type'] || '').trim() || 'General';
           const text = String(r['Comment'] || '').trim();
+          const fy = String(r['Financial Year'] || '').trim() || currentFinancialYear;
+          const rf = String(r['Review Stage'] || '').trim() || currentReviewStage;
           if (!jn || jn === '000000' || !text) return;
           if (!commentStore[jn]) commentStore[jn] = [];
           commentStore[jn].unshift({
             id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
             category,
             text,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            fy,
+            rf
           });
           added += 1;
         });
-        saveCommentStore();
+        await saveCommentStoreAsync();
         if (currentCommentJob) {
           renderCommentsTable(currentCommentJob);
         }
-        alert(`Imported ${added} comments.`);
+        const apiStatus = window.isApiEnabled && window.isApiEnabled() ? ' (synced to server)' : '';
+        alert(`Imported ${added} comments.${apiStatus}`);
       } catch (err) {
         console.error(err);
         alert('Error loading comments');
@@ -1162,23 +1546,217 @@
       const rows = [];
       Object.entries(commentStore).forEach(([jobNumber, comments]) => {
         comments.forEach(entry => {
+          // Only export comments for current FY
+          const commentFY = entry.fy || entry.financialYear;
+          if (commentFY !== currentFinancialYear) return;
+
           rows.push({
             'Standard Job Number': jobNumber,
             'Comment Type': entry.category,
-            'Comment': entry.text
+            'Comment': entry.text,
+            'Financial Year': entry.fy || '',
+            'Review Stage': entry.rf || ''
           });
         });
       });
       if (!rows.length) {
-        alert('No comments to export.');
+        alert(`No comments to export for ${currentFinancialYear}.`);
         return;
       }
       const ws = XLSX.utils.json_to_sheet(rows, {
-        header: ['Standard Job Number', 'Comment Type', 'Comment']
+        header: ['Standard Job Number', 'Comment Type', 'Comment', 'Financial Year', 'Review Stage']
       });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Comments');
-      XLSX.writeFile(wb, 'apr-comments.xlsx');
+      XLSX.writeFile(wb, `apr-comments-${currentFinancialYear}.xlsx`);
+    }
+
+    function exportWorkGroupJobSummary() {
+      // Get all work groups
+      const workGroups = [];
+      if (window.workGroupSets) {
+        window.workGroupSets.forEach((desc, code) => {
+          workGroups.push({ code, description: desc });
+        });
+      }
+
+      // Sort work groups by code
+      workGroups.sort((a, b) => a.code.localeCompare(b.code));
+
+      const rows = [];
+      const fiscalYears = ['FY27', 'FY28', 'FY29', 'FY30'];
+
+      // For each work group, count jobs in V0 and V1 for each FY
+      workGroups.forEach(wg => {
+        const row = {
+          'Work Group Code': wg.code,
+          'Work Group Description': wg.description
+        };
+
+        fiscalYears.forEach(fy => {
+          // Load V0 data
+          const v0Data = loadForecastFromStorage(fy, 'v0');
+          let v0JobCount = 0;
+          if (v0Data && v0Data.data) {
+            v0Data.data.forEach((job) => {
+              if (job.wgs && job.wgs[wg.description]) {
+                // Check if any period has data for this work group
+                const wgData = job.wgs[wg.description];
+                const hasData = Object.values(wgData).some(val => val && val !== 0);
+                if (hasData) v0JobCount++;
+              }
+            });
+          }
+
+          // Load V1 data
+          const v1Data = loadForecastFromStorage(fy, 'v1');
+          let v1JobCount = 0;
+          if (v1Data && v1Data.data) {
+            v1Data.data.forEach((job) => {
+              if (job.wgs && job.wgs[wg.description]) {
+                // Check if any period has data for this work group
+                const wgData = job.wgs[wg.description];
+                const hasData = Object.values(wgData).some(val => val && val !== 0);
+                if (hasData) v1JobCount++;
+              }
+            });
+          }
+
+          row[`${fy} V0`] = v0JobCount;
+          row[`${fy} V1`] = v1JobCount;
+        });
+
+        rows.push(row);
+      });
+
+      if (!rows.length) {
+        alert('No work group data to export.');
+        return;
+      }
+
+      // Create Excel workbook
+      const ws = XLSX.utils.json_to_sheet(rows, {
+        header: ['Work Group Code', 'Work Group Description',
+                 'FY27 V0', 'FY27 V1', 'FY28 V0', 'FY28 V1',
+                 'FY29 V0', 'FY29 V1', 'FY30 V0', 'FY30 V1']
+      });
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Work Group Job Summary');
+      XLSX.writeFile(wb, 'apr-workgroup-job-summary.xlsx');
+    }
+
+    function exportForecastSummary() {
+      // Get current year and plan version from UI or use defaults
+      const year = currentFinancialYear || 'FY27';
+      const planVersion = currentPlanVersion || 'v0';
+
+      // Load forecast data
+      const forecastSnapshot = getForecastSnapshot(year, planVersion);
+      const forecastData = forecastSnapshot?.data || new Map();
+
+      // Get all standard jobs
+      if (!window.STANDARD_JOBS || !window.STANDARD_JOBS.length) {
+        alert('Standard jobs data not loaded.');
+        return;
+      }
+
+      const rows = [];
+
+      // Debug: Check first few job numbers
+      const firstFewStdJobs = window.STANDARD_JOBS.slice(0, 5).map(j => j.standardJobNo);
+
+      // Process each standard job
+      let foundCount = 0;
+      let notFoundCount = 0;
+      window.STANDARD_JOBS.forEach(job => {
+        // Pad job number to 6 digits to match forecast data format
+        const jobNumber = String(job.standardJobNo).padStart(6, '0');
+        const forecastJob = forecastData.get(jobNumber);
+        if (forecastJob) foundCount++; else notFoundCount++;
+
+        // Create row with basic info
+        const row = {
+          'Standard Job No': jobNumber,
+          'Description': job.standardJobDescription,
+          'Discipline': job.discipline,
+          'MNT Code': job.mntCode
+        };
+
+        // Determine which work groups have allocated volume (even if 0)
+        const workGroupsWithData = [];
+        if (forecastJob && forecastJob.wgs) {
+          Object.keys(forecastJob.wgs).forEach(wgName => {
+            // Check if this work group has any data defined (even if all zeros)
+            const wgData = forecastJob.wgs[wgName];
+            const hasDefined = window.FORECAST_PERIODS.some(period => {
+              return wgData.hasOwnProperty(period);
+            });
+            if (hasDefined) {
+              // Find the work group code for this description
+              let wgCode = wgName;
+              if (window.workGroupSets) {
+                window.workGroupSets.forEach((desc, code) => {
+                  if (desc === wgName) {
+                    wgCode = code;
+                  }
+                });
+              }
+              workGroupsWithData.push(wgCode);
+            }
+          });
+        }
+
+        row['Work Groups'] = workGroupsWithData.join(', ');
+
+        // Add period columns (P01-P13)
+        // Check if job has been forecast (has any work group data)
+        const jobHasBeenForecast = forecastJob && forecastJob.wgs && Object.keys(forecastJob.wgs).length > 0;
+
+        window.FORECAST_PERIODS.forEach((period, index) => {
+          // Use padded format for column headers (P01, P02, etc.)
+          const paddedPeriod = `P${String(index + 1).padStart(2, '0')}`;
+          if (jobHasBeenForecast) {
+            // Forecast has been entered - show period total (may be 0)
+            row[paddedPeriod] = forecastJob.periods?.[period] || 0;
+          } else {
+            // No forecast entered
+            row[paddedPeriod] = '(not forecast)';
+          }
+        });
+
+        rows.push(row);
+      });
+
+
+      if (!rows.length) {
+        alert('No standard jobs data to export.');
+        return;
+      }
+
+      // Create Excel workbook with padded period headers (P01-P13)
+      const periodHeaders = Array.from({ length: 13 }, (_, i) => `P${String(i + 1).padStart(2, '0')}`);
+      const headers = ['Standard Job No', 'Description', 'Discipline', 'MNT Code', 'Work Groups']
+        .concat(periodHeaders);
+
+      const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+
+      // Auto-size columns
+      const colWidths = headers.map(h => {
+        if (h === 'Description') return { wch: 50 };
+        if (h === 'Work Groups') return { wch: 30 };
+        if (h === 'Standard Job No') return { wch: 15 };
+        if (h === 'Discipline') return { wch: 20 };
+        if (h === 'MNT Code') return { wch: 12 };
+        return { wch: 12 };
+      });
+      ws['!cols'] = colWidths;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Forecast Summary');
+      XLSX.writeFile(wb, `apr-forecast-summary-${year}-${planVersion}.xlsx`);
+
+      console.log(`✓ Exported forecast summary for ${year} ${planVersion}`);
     }
 
     function computeQuantile(sorted, q) {
@@ -1290,7 +1868,7 @@
       if (!groupId) return [];
       const group = groupStore.find(entry => entry.id === groupId);
       if (!group) return [];
-      return group.jobNumbers.flatMap(jobNumber => wData?.get(jobNumber)?.workOrders || []);
+      return group.jobNumbers.flatMap(jobNumber => window.wData?.get(jobNumber)?.workOrders || []);
     }
 
     function renderWorkOrders() {
@@ -1360,9 +1938,17 @@
           `
           : '';
         const unitClass = canRevert ? 'wo-unit-value amended' : 'wo-unit-value';
+
+        // Create Ellipse hyperlink for work order number
+        const workOrderNumber = order.number || 'Unknown';
+        const ellipseUrl = `http://ellipse-ell9p.unix.ukrail.net/html/ui?application=MSEWOT&type=read&workOrder=${encodeURIComponent(workOrderNumber)}#!home`;
+        const workOrderLink = workOrderNumber !== 'Unknown'
+          ? `<a href="${ellipseUrl}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(workOrderNumber)}</strong></a>`
+          : `<strong>${escapeHtml(workOrderNumber)}</strong>`;
+
         return `
           <tr class="${rowClass}">
-            <td><strong>${escapeHtml(order.number || 'Unknown')}</strong></td>
+            <td>${workOrderLink}</td>
             <td>${escapeHtml(order.description || '-')}</td>
             <td>${escapeHtml(order.workOrderType || '-')}</td>
             <td>${escapeHtml(order.period || '-')}</td>
@@ -1457,36 +2043,55 @@
         openStageModal();
         return;
       }
-      const preferredPlanVersion = getPreferredPlanVersion(currentFinancialYear);
-      if (preferredPlanVersion !== currentPlanVersion) {
-        currentPlanVersion = preferredPlanVersion;
-        const libraryForecast = loadForecastFromLibrary(currentFinancialYear, currentPlanVersion);
-        if (libraryForecast) {
-          fData = libraryForecast.data;
-        } else {
-          const storedForecast = loadForecastFromStorage(currentFinancialYear, currentPlanVersion);
-          if (storedForecast) {
-            fData = storedForecast.data;
-          }
-        }
-        updateContextControls();
+      // Sync dashboard plan version selector with current plan version
+      const dashboardPlanVersionSelect = document.getElementById('dashboardPlanVersion');
+      if (dashboardPlanVersionSelect && dashboardPlanVersionSelect.value !== currentPlanVersion) {
+        dashboardPlanVersionSelect.value = currentPlanVersion;
       }
-      const viewMode = document.getElementById('viewMode')?.value || 'actual';
+      // Always show work done and forecast (no view mode toggle)
       const cutoffValue = document.getElementById('forecastCutoff')?.value || 'auto';
       const varianceFilter = document.getElementById('varianceFilter')?.value || 'all';
       const maxWorkDonePeriod = (() => {
-        if (viewMode !== 'forecast') return 0;
         if (cutoffValue === 'auto') return getMaxWorkDonePeriod();
         const numeric = parseInt(String(cutoffValue).replace(/[^0-9]/g, ''), 10);
         return Number.isNaN(numeric) ? 0 : numeric;
       })();
-      const all = new Set([...(fData?.keys()||[]), ...(wData?.keys()||[])]);
+
+      // For v1, merge with v0 for proper inheritance
+      let forecastDataToUse = fData;
+      if (currentPlanVersion === 'v1') {
+        const v0Snapshot = getForecastSnapshot(currentFinancialYear, 'v0');
+        const v1Overrides = loadV1Overrides(currentFinancialYear);
+
+        if (v0Snapshot && v0Snapshot.data) {
+          // Create merged data: v0 as base, v1 overrides take precedence
+          const mergedData = new Map();
+
+          // First, add all v0 jobs that haven't been overridden
+          v0Snapshot.data.forEach((job, jobNumber) => {
+            if (!v1Overrides.has(jobNumber)) {
+              mergedData.set(jobNumber, job);
+            }
+          });
+
+          // Then add all v1 jobs (overrides)
+          if (fData) {
+            fData.forEach((job, jobNumber) => {
+              mergedData.set(jobNumber, job);
+            });
+          }
+
+          forecastDataToUse = mergedData;
+        }
+      }
+
+      const all = new Set([...(forecastDataToUse?.keys()||[]), ...(window.wData?.keys()||[])]);
       const baseJobs = [];
       all.forEach(jn => {
         // Get metadata from standard jobs if available
-        const meta = stdJobs.get(jn);
-        const f = fData?.get(jn);
-        const a = wData?.get(jn);
+        const meta = window.stdJobs.get(jn);
+        const f = forecastDataToUse?.get(jn);
+        const a = window.wData?.get(jn);
         
         const job = {
           jn, 
@@ -1501,7 +2106,8 @@
           const p = `P${i}`;
           const fv = f?.periods[p]||0;
           const avRaw = a?.periods[p]||0;
-          const useForecast = viewMode === 'forecast' && i > maxWorkDonePeriod;
+          // Always use forecast mode: periods after cutoff use forecast, before use actual
+          const useForecast = i > maxWorkDonePeriod;
           const av = useForecast ? fv : avRaw;
           job.periods[p] = {f:fv, a:av, v:av-fv};
           job.tot.f += fv;
@@ -1509,19 +2115,38 @@
           job.tot.v += av-fv;
         }
 
-        const wgNames = new Set([
-          ...Object.keys(f?.wgs || {}),
-          ...Object.keys(a?.wgs || {})
-        ]);
-        wgNames.forEach(wg => {
-          job.wgs[wg] = {periods: {}};
+        // Build mapping from normalized workgroup to actual keys in each source
+        // This prevents duplicate entries when the same workgroup has different key formats
+        const fWgKeys = Object.keys(f?.wgs || {});
+        const aWgKeys = Object.keys(a?.wgs || {});
+        const normalizedToActual = new Map();
+
+        fWgKeys.forEach(key => {
+          const normalized = normalizeWorkGroupSet(key);
+          if (!normalizedToActual.has(normalized)) {
+            normalizedToActual.set(normalized, {});
+          }
+          normalizedToActual.get(normalized).fKey = key;
+        });
+
+        aWgKeys.forEach(key => {
+          const normalized = normalizeWorkGroupSet(key);
+          if (!normalizedToActual.has(normalized)) {
+            normalizedToActual.set(normalized, {});
+          }
+          normalizedToActual.get(normalized).aKey = key;
+        });
+
+        normalizedToActual.forEach((keys, normalized) => {
+          job.wgs[normalized] = {periods: {}};
           for(let i=1; i<=13; i++) {
             const p = `P${i}`;
-            const fv = f?.wgs?.[wg]?.[p] || 0;
-            const avRaw = a?.wgs?.[wg]?.[p] || 0;
-            const useForecast = viewMode === 'forecast' && i > maxWorkDonePeriod;
+            const fv = (keys.fKey ? f?.wgs?.[keys.fKey]?.[p] : 0) || 0;
+            const avRaw = (keys.aKey ? a?.wgs?.[keys.aKey]?.[p] : 0) || 0;
+            // Always use forecast mode: periods after cutoff use forecast, before use actual
+            const useForecast = i > maxWorkDonePeriod;
             const av = useForecast ? fv : avRaw;
-            job.wgs[wg].periods[p] = {f: fv, a: av, v: av - fv};
+            job.wgs[normalized].periods[p] = {f: fv, a: av, v: av - fv};
           }
         });
         baseJobs.push(job);
@@ -1558,6 +2183,18 @@
         return activeGroup.jobNumbers.includes(job.jn);
       };
 
+      const engineerWorkGroups = getSelectedEngineerWorkGroups();
+      const filterByEngineer = (job) => {
+        // If no engineer selected, show all jobs
+        if (!engineerWorkGroups || engineerWorkGroups.length === 0) return true;
+        // Check if job has data for any of the engineer's work groups
+        const jobWorkGroups = Object.keys(job.wgs || {});
+        return jobWorkGroups.some(jwg => {
+          const normalizedJwg = normalizeWorkGroupSet(jwg);
+          return engineerWorkGroups.some(ewg => normalizeWorkGroupSet(ewg) === normalizedJwg);
+        });
+      };
+
       const filterBySearch = (job) => {
         const matchesSearch = !search || job.jn.includes(search) || job.desc.toLowerCase().includes(search) || job.disc.toLowerCase().includes(search);
         if (!matchesSearch) return false;
@@ -1567,23 +2204,37 @@
         return Object.values(wgData.periods || {}).some(periodData => periodData.f !== 0 || periodData.a !== 0);
       };
 
-      const baseFiltered = baseJobs.filter(job => filterByGroup(job) && filterBySearch(job));
+      const baseFiltered = baseJobs.filter(job => filterByGroup(job) && filterByEngineer(job) && filterBySearch(job));
       const rollupJobs = groupStore
         .filter(group => group.rollUp)
         .map(group => buildGroupRollupJob(group, baseJobs))
         .filter(Boolean);
-      const rollupFiltered = rollupJobs.filter(job => filterByGroup(job) && filterBySearch(job));
+      const rollupFiltered = rollupJobs.filter(job => filterByGroup(job) && filterByEngineer(job) && filterBySearch(job));
 
       const applyVarianceFilter = (job) => {
         const displayData = getJobDisplayData(job);
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
         const { status, hasVariance } = getVarianceStatus(pd);
+        const forecast = pd.f || 0;
+        const actual = pd.a || 0;
+        const hasNoForecast = forecast === 0 && actual === 0;
         if (varianceFilter === 'all') return true;
         if (varianceFilter === 'variance') return hasVariance;
+        if (varianceFilter === 'noforecast') return hasNoForecast;
+        // For good/warning/bad filters, exclude jobs with no forecast
+        if (hasNoForecast) return false;
         return status === varianceFilter;
       };
 
-      const filtered = [...baseFiltered.filter(applyVarianceFilter), ...rollupFiltered.filter(applyVarianceFilter)];
+      const hideZeroVolume = document.getElementById('hideZeroVolume')?.checked || false;
+      const applyZeroVolumeFilter = (job) => {
+        if (!hideZeroVolume) return true;
+        const displayData = getJobDisplayData(job);
+        // Hide only if BOTH forecast AND actual are 0
+        return !(displayData.tot.f === 0 && displayData.tot.a === 0);
+      };
+
+      const filtered = [...baseFiltered.filter(applyVarianceFilter).filter(applyZeroVolumeFilter), ...rollupFiltered.filter(applyVarianceFilter).filter(applyZeroVolumeFilter)];
       
       filtered.sort((a,b) => {
         const aDisplay = getJobDisplayData(a);
@@ -1601,10 +2252,25 @@
 
       const cont = document.getElementById('jobs');
       cont.innerHTML = '';
-      currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
+      window.currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
       updateTopBarStats({ jobs: baseJobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter });
+      updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter });
 
-      Object.keys(byDisc).sort().forEach(disc => {
+      // Custom discipline order: ALL, P-Way, W&G, Off Track, S&T, E&P CS, E&P D, then groups/others
+      const disciplineOrder = ['ALL', 'P-Way', 'W&G', 'Off Track', 'S&T', 'E&P CS', 'E&P D'];
+      const sortedDisciplines = Object.keys(byDisc).sort((a, b) => {
+        const aIndex = disciplineOrder.indexOf(a);
+        const bIndex = disciplineOrder.indexOf(b);
+        // Both in order list - sort by order
+        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+        // Only a in order list - a comes first
+        if (aIndex !== -1) return -1;
+        // Only b in order list - b comes first
+        if (bIndex !== -1) return 1;
+        // Neither in list - sort alphabetically
+        return a.localeCompare(b);
+      });
+      sortedDisciplines.forEach(disc => {
         const sec = document.createElement('div');
         sec.className = 'discipline-section';
         sec.innerHTML = `
@@ -1654,11 +2320,37 @@
             ? `Group of ${j.groupJobCount} job${j.groupJobCount === 1 ? '' : 's'} • Unit: ${j.unit}`
             : `Discipline: ${j.disc} • Unit: ${j.unit} • Status: ${statusLabel}`;
           
+          // Calculate health status for non-rollup jobs
+          const healthStatus = !isGroupRollup ? getJobHealthStatus(pd) : null;
+
+          // Get work group count (work groups with volume forecast)
+          const workGroupCount = !isGroupRollup ? (j.wgs && Object.keys(j.wgs).length) || 0 : 0;
+
+          // Get actual work orders count from Work Done data
+          const actualWorkOrderCount = !isGroupRollup ? (window.wData?.get(j.jn)?.workOrders?.length || 0) : 0;
+
+          // Calculate period progress for progress bar
+          let periodsPlanned = 0;
+          let periodsActual = 0;
+          if (period === 'all') {
+            for (let i = 1; i <= 13; i++) {
+              const p = `P${i}`;
+              if (displayData.periods[p].f > 0) periodsPlanned++;
+              if (displayData.periods[p].a > 0) periodsActual++;
+            }
+          }
+
           const card = document.createElement('div');
           card.className = `job-card ${stat}`;
           card.onclick = () => showBreakdown(j);
-          
+
           card.innerHTML = `
+            ${!isGroupRollup && healthStatus ? `
+              <div class="job-status-badge status-${healthStatus.status}">
+                ${healthStatus.status === 'critical' ? '🔴' : healthStatus.status === 'warning' ? '🟡' : '🟢'} ${healthStatus.label}
+              </div>
+            ` : ''}
+
             <div class="job-card-header">
               <div class="job-pill-group">
                 ${isPriority ? '<span class="job-pill priority">Priority</span>' : ''}
@@ -1666,30 +2358,52 @@
                 ${!isGroupRollup ? `<span class="job-pill ${statusClass}">${statusLabel}</span>` : ''}
               </div>
             </div>
+
             <div class="job-card-body">
               <div class="job-details">
                 <div class="job-card-title">${escapeHtml(titleText)}</div>
                 <div class="job-card-subtitle">${escapeHtml(subtitleText)}</div>
-                <div class="job-alert ${stat}">
-                  <span>${alertTitle}</span>
-                  <span>${alertDetail}</span>
-                </div>
-              </div>
-              <div class="job-metrics">
-                <div class="metric-card">
-                  <div class="metric-label">Planned</div>
-                  <div class="metric-value">${pd.f.toFixed(1)}</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label">Actual</div>
-                  <div class="metric-value">${pd.a.toFixed(1)}</div>
-                </div>
-                <div class="metric-card">
-                  <div class="metric-label">Variance</div>
-                  <div class="metric-value ${vc}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)}</div>
-                </div>
+
+                ${isGroupRollup ? `
+                  <div class="group-planned-actual-box">
+                    <div class="group-pa-item">
+                      <div class="group-pa-label">PLANNED</div>
+                      <div class="group-pa-value">${pd.f.toFixed(1)}</div>
+                    </div>
+                    <div class="group-pa-divider">vs</div>
+                    <div class="group-pa-item">
+                      <div class="group-pa-label">ACTUAL</div>
+                      <div class="group-pa-value">${pd.a.toFixed(1)}</div>
+                    </div>
+                  </div>
+                ` : `
+                  <div class="job-variance-overview">
+                    <div class="job-variance-row">
+                      <div class="job-variance-item">
+                        <div class="job-variance-label">Planned</div>
+                        <div class="job-variance-value">${pd.f.toFixed(1)}</div>
+                      </div>
+                      <div class="job-variance-item">
+                        <div class="job-variance-label">Actual</div>
+                        <div class="job-variance-value">${pd.a.toFixed(1)}</div>
+                      </div>
+                      <div class="job-variance-item">
+                        <div class="job-variance-label">Variance</div>
+                        <div class="job-variance-value ${vc === 'negative' ? 'variance-negative' : vc === 'positive' ? 'variance-positive' : ''}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)} ${healthStatus ? `(${healthStatus.percent.toFixed(0)}%)` : ''}</div>
+                      </div>
+                    </div>
+                  </div>
+                `}
+
+                ${!isGroupRollup ? `
+                  <div class="job-info-row">
+                    <div class="job-rag-indicator rag-${healthStatus?.status === 'critical' ? 'red' : healthStatus?.status === 'warning' ? 'amber' : 'green'}"></div>
+                    <span class="job-info-text">${commentCount} comment${commentCount === 1 ? '' : 's'} • ${actualWorkOrderCount} work order${actualWorkOrderCount === 1 ? '' : 's'} • ${workGroupCount} work group${workGroupCount === 1 ? '' : 's'} with forecast • ${isReviewed ? 'Reviewed' : 'Needs review'}</span>
+                  </div>
+                ` : ''}
               </div>
             </div>
+
             <div class="job-actions">
               ${isGroupRollup
                 ? '<button type="button" class="group-action-button" data-action="manage-group">Manage Group</button>'
@@ -1735,23 +2449,13 @@
         sec.appendChild(grid);
         cont.appendChild(sec);
       });
-      updateForecastCutoffVisibility(viewMode);
-      updateModalModeNotes(viewMode, maxWorkDonePeriod, cutoffValue);
+      updateModalModeNotes(maxWorkDonePeriod, cutoffValue);
     }
 
-    function updateForecastCutoffVisibility(viewMode) {
-      const cutoffGroup = document.getElementById('forecastCutoffGroup');
-      if (!cutoffGroup) return;
-      cutoffGroup.style.display = viewMode === 'forecast' ? 'flex' : 'none';
-    }
-
-    function updateModalModeNotes(viewMode, maxWorkDonePeriod, cutoffValue) {
-      const isForecast = viewMode === 'forecast';
+    function updateModalModeNotes(maxWorkDonePeriod, cutoffValue) {
       const cutoffLabel = cutoffValue === 'auto' ? 'Auto' : 'Selected';
       const periodLabel = maxWorkDonePeriod > 0 ? `Period ${maxWorkDonePeriod}` : 'Period N/A';
-      const message = isForecast
-        ? `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining. Forecasts are managed in the Forecast Builder.`
-        : 'Units derived from Work Done only.';
+      const message = `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining. Forecasts are managed in the Forecast Builder.`;
       const uploadNote = document.getElementById('uploadModeNote');
       const breakdownNote = document.getElementById('breakdownModeNote');
       if (uploadNote) uploadNote.textContent = message;
@@ -1794,24 +2498,75 @@
       const search = (document.getElementById('compareSearch')?.value || '').toLowerCase();
       if (!table) return;
       const v0Snapshot = getForecastSnapshot(currentFinancialYear, 'v0');
-      const v1Snapshot = getForecastSnapshot(currentFinancialYear, 'v1');
-      if (!v0Snapshot || !v1Snapshot) {
-        table.innerHTML = '<thead><tr><th>Forecast comparison</th></tr></thead><tbody><tr><td class="wo-empty">Both Plan v0 and Plan v1 forecasts must be available in the library or local cache to compare.</td></tr></tbody>';
+      const v1SnapshotRaw = getForecastSnapshot(currentFinancialYear, 'v1');
+      if (!v0Snapshot) {
+        table.innerHTML = '<thead><tr><th>Forecast comparison</th></tr></thead><tbody><tr><td class="wo-empty">Plan v0 forecast must be available to compare.</td></tr></tbody>';
         if (meta) {
-          meta.textContent = `Missing data for ${currentFinancialYear} ${currentReviewStage}.`;
+          meta.textContent = `Missing v0 data for ${currentFinancialYear} ${currentReviewStage}.`;
         }
         return;
       }
-      const allJobs = new Set([...(v0Snapshot.data.keys()), ...(v1Snapshot.data.keys())]);
+
+      // Merge v0 with v1 overrides for proper inheritance
+      const v1Overrides = loadV1Overrides(currentFinancialYear);
+      const v1Data = new Map();
+
+      // Start with all v0 jobs
+      v0Snapshot.data.forEach((job, jobNumber) => {
+        if (!v1Overrides.has(jobNumber)) {
+          // Job not overridden in v1 - inherit from v0
+          v1Data.set(jobNumber, job);
+        }
+      });
+
+      // Add all v1 overrides
+      if (v1SnapshotRaw && v1SnapshotRaw.data) {
+        v1SnapshotRaw.data.forEach((job, jobNumber) => {
+          v1Data.set(jobNumber, job);
+        });
+      }
+
+      const allJobs = new Set([...(v0Snapshot.data.keys()), ...(v1Data.keys())]);
       const rows = [];
       allJobs.forEach(jobNumber => {
-        const v0 = getForecastTotal(v0Snapshot.data.get(jobNumber));
-        const v1 = getForecastTotal(v1Snapshot.data.get(jobNumber));
+        const v0Job = v0Snapshot.data.get(jobNumber);
+        const v1Job = v1Data.get(jobNumber);
+        const v0 = getForecastTotal(v0Job);
+        const v1 = getForecastTotal(v1Job);
         const delta = v1 - v0;
-        const desc = stdJobs.get(jobNumber)?.desc || `Job ${jobNumber}`;
+        const desc = window.stdJobs.get(jobNumber)?.desc || `Job ${jobNumber}`;
+
+        // Build work group breakdown for tooltip
+        const v0Breakdown = [];
+        const v1Breakdown = [];
+
+        if (v0Job && v0Job.wgs) {
+          Object.entries(v0Job.wgs).forEach(([wgName, wgData]) => {
+            let wgTotal = 0;
+            window.FORECAST_PERIODS.forEach(period => {
+              wgTotal += Number(wgData?.[period] || 0);
+            });
+            if (wgTotal !== 0) {
+              v0Breakdown.push(`${wgName}: ${wgTotal.toFixed(2)}`);
+            }
+          });
+        }
+
+        if (v1Job && v1Job.wgs) {
+          Object.entries(v1Job.wgs).forEach(([wgName, wgData]) => {
+            let wgTotal = 0;
+            window.FORECAST_PERIODS.forEach(period => {
+              wgTotal += Number(wgData?.[period] || 0);
+            });
+            if (wgTotal !== 0) {
+              v1Breakdown.push(`${wgName}: ${wgTotal.toFixed(2)}`);
+            }
+          });
+        }
+
         if (changedOnly && delta === 0) return;
         if (search && !`${jobNumber} ${desc}`.toLowerCase().includes(search)) return;
-        rows.push({ jobNumber, desc, v0, v1, delta });
+        rows.push({ jobNumber, desc, v0, v1, delta, v0Breakdown, v1Breakdown });
       });
       rows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
       const header = `
@@ -1833,8 +2588,19 @@
           <tbody>
             ${rows.map(row => {
               const deltaClass = row.delta > 0 ? 'positive' : row.delta < 0 ? 'negative' : 'neutral';
+
+              // Build tooltip text
+              const tooltipParts = [];
+              if (row.v0Breakdown.length > 0) {
+                tooltipParts.push(`Plan v0 breakdown:\n${row.v0Breakdown.join('\n')}`);
+              }
+              if (row.v1Breakdown.length > 0) {
+                tooltipParts.push(`Plan v1 breakdown:\n${row.v1Breakdown.join('\n')}`);
+              }
+              const tooltip = tooltipParts.length > 0 ? tooltipParts.join('\n\n') : 'No work group data';
+
               return `
-                <tr>
+                <tr title="${escapeHtml(tooltip)}" style="cursor: help;">
                   <td>${escapeHtml(row.jobNumber)}</td>
                   <td>${escapeHtml(row.desc)}</td>
                   <td>${row.v0.toFixed(2)}</td>
@@ -1847,7 +2613,8 @@
         `;
       }
       if (meta) {
-        meta.textContent = `${currentFinancialYear} ${currentReviewStage} • Plan v0 (${v0Snapshot.source}) vs Plan v1 (${v1Snapshot.source}) • ${rows.length} jobs`;
+        const v1Source = v1SnapshotRaw ? v1SnapshotRaw.source : 'inherited from v0';
+        meta.textContent = `${currentFinancialYear} ${currentReviewStage} • Plan v0 (${v0Snapshot.source}) vs Plan v1 (${v1Source}) • ${rows.length} jobs`;
       }
     }
 
@@ -1884,10 +2651,22 @@
       }
       const compareButton = document.getElementById('compareForecastButton');
       if (compareButton) {
-        const hasV1 = Boolean(getForecastSnapshot(currentFinancialYear, 'v1'));
+        const hasV1 = Boolean(getForecastSnapshot(window.currentFinancialYear, 'v1'));
         compareButton.style.display = hasV1 ? 'inline-flex' : 'none';
       }
-      
+
+      // Set breakdown plan version selector
+      const breakdownPlanSelect = document.getElementById('breakdownPlanVersion');
+      if (breakdownPlanSelect) {
+        breakdownPlanSelect.value = breakdownPlanVersion;
+      }
+
+      // Set work group display mode selector
+      const wgDisplaySelect = document.getElementById('wgDisplayMode');
+      if (wgDisplaySelect) {
+        wgDisplaySelect.value = wgDisplayMode;
+      }
+
       // Build cumulative data
       const periods = [];
       let cumA = 0;
@@ -1915,11 +2694,16 @@
       // Draw chart
       const ctx = document.getElementById('chart');
       if (currentChart) currentChart.destroy();
-      
+
       const datasets = [];
-      if (v0Periods) {
+
+      // Add plan datasets based on user preference
+      const showV0 = breakdownPlanVersion === 'v0' || breakdownPlanVersion === 'both';
+      const showV1 = breakdownPlanVersion === 'v1' || breakdownPlanVersion === 'both';
+
+      if (showV0 && v0Periods) {
         datasets.push({
-          label: 'Planned v0 (Cumulative)',
+          label: 'Forecast v0 (Original)',
           data: cumPlanV0,
           borderColor: '#60a5fa',
           backgroundColor: 'rgba(96, 165, 250, 0.12)',
@@ -1927,9 +2711,9 @@
           fill: true
         });
       }
-      if (v1Periods) {
+      if (showV1 && v1Periods) {
         datasets.push({
-          label: 'Planned v1 (Cumulative)',
+          label: 'Forecast v1 (Updated)',
           data: cumPlanV1,
           borderColor: '#6366f1',
           backgroundColor: 'rgba(99, 102, 241, 0.12)',
@@ -1938,13 +2722,37 @@
         });
       }
       datasets.push({
-        label: 'Actual (Cumulative)',
+        label: 'Work Done (Cumulative)',
         data: cumActual,
         borderColor: '#10b981',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
         tension: 0.3,
         fill: true
       });
+
+      // Add baseline if it exists and not filtered by workgroup
+      // (baseline is route-level, so don't show when viewing a specific workgroup)
+      // For group rollups, aggregate baselines from all jobs in the group
+      let baselineCumulative;
+      if (job.isGroupRollup) {
+        const group = groupStore.find(g => g.id === job.groupId);
+        baselineCumulative = group ? getGroupBaselineCumulative(group.jobNumbers, 13) : Array(13).fill(0);
+      } else {
+        baselineCumulative = getBaselineCumulative(job.jn, 13);
+      }
+      const hasBaseline = baselineCumulative.some(val => val > 0);
+      if (hasBaseline && wgFilter === 'all') {
+        datasets.push({
+          label: 'Prior Submission (Cumulative)',
+          data: baselineCumulative,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.08)',
+          tension: 0.3,
+          fill: false,
+          borderDash: [5, 5],
+          borderWidth: 2
+        });
+      }
 
       currentChart = new Chart(ctx, {
         type: 'line',
@@ -1974,53 +2782,187 @@
       let tableHTML = '<thead><tr><th>Work Group</th>';
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
       tableHTML += '<th>Total</th></tr></thead><tbody>';
-      
+
       const isFiltered = wgFilter !== 'all';
       const wgEntries = Object.entries(job.wgs || {}).filter(([wg]) => !isFiltered || wg === wgFilter);
+      const showForecast = wgDisplayMode === 'forecast';
+
       if (wgEntries.length === 0) {
         tableHTML += '<tr><td colspan="15"><em>No work group data available.</em></td></tr>';
       } else {
-        wgEntries.forEach(([wg, data], idx) => {
-          let rowTotal = 0;
-          const summaryOpen = isFiltered;
-          tableHTML += `<tr class="wg-summary${summaryOpen ? ' is-open' : ''}" data-wg="${idx}"><td><strong>${wg} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
-          for(let i=1; i<=13; i++) {
-            const p = `P${i}`;
-            const d = data.periods[p] || {v: 0};
-            const v = d.v || 0;
-            rowTotal += v;
-            const cl = v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
-            tableHTML += `<td class="${cl}">${v > 0 ? '+' : ''}${v.toFixed(1)}</td>`;
-          }
-          const tcl = rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral';
-          tableHTML += `<td class="${tcl}"><strong>${rowTotal > 0 ? '+' : ''}${rowTotal.toFixed(1)}</strong></td></tr>`;
+        // Group work groups by engineer
+        const engineerGroups = new Map();
+        const ungrouped = [];
+        let ungroupedTotal = 0;
 
-          const detailRows = [
-            { label: 'Planned', key: 'f' },
-            { label: 'Actual', key: 'a' },
-            { label: 'Variance', key: 'v' }
-          ];
-          detailRows.forEach(({ label, key }) => {
-            let detailTotal = 0;
-            tableHTML += `<tr class="wg-detail${summaryOpen ? ' open' : ''}" data-wg="${idx}"><td>${label}</td>`;
+        wgEntries.forEach(([wg, data]) => {
+          const engineer = getEngineerForWorkGroupNormalized(wg);
+          if (engineer) {
+            if (!engineerGroups.has(engineer.id)) {
+              engineerGroups.set(engineer.id, { engineer, workGroups: [] });
+            }
+            engineerGroups.get(engineer.id).workGroups.push([wg, data]);
+          } else {
+            ungrouped.push([wg, data]);
+            for (let i = 1; i <= 13; i++) {
+              const p = `P${i}`;
+              const d = data.periods[p] || { f: 0, v: 0 };
+              const val = showForecast ? (d.f || 0) : (d.v || 0);
+              ungroupedTotal += val;
+            }
+          }
+        });
+
+        let globalIdx = 0;
+
+        // Render grouped work groups by engineer
+        engineerGroups.forEach(({ engineer, workGroups }, engKey) => {
+          // Calculate engineer subtotals
+          const engSubtotals = Array(13).fill(0);
+          let engTotal = 0;
+          workGroups.forEach(([wg, data]) => {
             for(let i=1; i<=13; i++) {
               const p = `P${i}`;
-              const d = data.periods[p] || {f: 0, a: 0, v: 0};
-              const val = d[key] || 0;
-              detailTotal += val;
-              const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
-              tableHTML += `<td class="${cl}">${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}</td>`;
+              const d = data.periods[p] || {f: 0, v: 0};
+              const val = showForecast ? (d.f || 0) : (d.v || 0);
+              engSubtotals[i-1] += val;
+              engTotal += val;
             }
-            const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
-            tableHTML += `<td class="${tcl}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
           });
+
+          // Engineer header row
+          const engHeaderLabel = `${escapeHtml(engineer.name)} (${workGroups.length} work group${workGroups.length !== 1 ? 's' : ''})<span class="eng-toggle">Show</span>`;
+          const engHeaderTotalClass = showForecast
+            ? (engTotal !== 0 ? 'forecast-nonzero' : '')
+            : (engTotal > 0 ? 'positive' : engTotal < 0 ? 'negative' : 'neutral');
+          const engHeaderPrefix = showForecast ? '' : (engTotal > 0 ? '+' : '');
+          tableHTML += `<tr class="engineer-header" data-eng="${engineer.id}"><td colspan="14">${engHeaderLabel}</td><td class="${engHeaderTotalClass}"><strong>${engHeaderPrefix}${engTotal.toFixed(1)}</strong></td></tr>`;
+
+          // Work group rows for this engineer
+          workGroups.forEach(([wg, data]) => {
+            const idx = globalIdx++;
+            let rowTotal = 0;
+            const summaryOpen = isFiltered;
+            const wgDescription = window.workGroupSets?.get(wg) || wg;
+            tableHTML += `<tr class="wg-summary engineer-row${summaryOpen ? ' is-open' : ''}" data-wg="${idx}" data-eng="${engineer.id}"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
+            for(let i=1; i<=13; i++) {
+              const p = `P${i}`;
+              const d = data.periods[p] || {f: 0, v: 0};
+              const val = showForecast ? (d.f || 0) : (d.v || 0);
+              rowTotal += val;
+              const cl = showForecast ? (val !== 0 ? 'forecast-nonzero' : '') : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
+              const prefix = showForecast ? '' : (val > 0 ? '+' : '');
+              tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
+            }
+            const tcl = showForecast ? (rowTotal !== 0 ? 'forecast-nonzero' : '') : (rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral');
+            const tprefix = showForecast ? '' : (rowTotal > 0 ? '+' : '');
+            tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
+
+            const detailRows = [
+              { label: 'Planned', key: 'f' },
+              { label: 'Actual', key: 'a' },
+              { label: 'Variance', key: 'v' }
+            ];
+            detailRows.forEach(({ label, key }) => {
+              let detailTotal = 0;
+              tableHTML += `<tr class="wg-detail engineer-row${summaryOpen ? ' open' : ''}" data-wg="${idx}" data-eng="${engineer.id}"><td>${label}</td>`;
+              for(let i=1; i<=13; i++) {
+                const p = `P${i}`;
+                const d = data.periods[p] || {f: 0, a: 0, v: 0};
+                const val = d[key] || 0;
+                detailTotal += val;
+                const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
+                tableHTML += `<td class="${cl}">${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}</td>`;
+              }
+              const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
+              tableHTML += `<td class="${tcl}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+            });
+          });
+
+          // Engineer subtotal row
+          tableHTML += `<tr class="engineer-subtotal engineer-row" data-eng="${engineer.id}"><td>Subtotal</td>`;
+          for(let i=0; i<13; i++) {
+            const val = engSubtotals[i];
+            const cl = showForecast ? (val !== 0 ? 'forecast-nonzero' : '') : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
+            const prefix = showForecast ? '' : (val > 0 ? '+' : '');
+            tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
+          }
+          const etcl = showForecast ? (engTotal !== 0 ? 'forecast-nonzero' : '') : (engTotal > 0 ? 'positive' : engTotal < 0 ? 'negative' : 'neutral');
+          const etprefix = showForecast ? '' : (engTotal > 0 ? '+' : '');
+          tableHTML += `<td class="${etcl}"><strong>${etprefix}${engTotal.toFixed(1)}</strong></td></tr>`;
         });
+
+        // Render ungrouped work groups (if any)
+        if (ungrouped.length > 0) {
+          if (engineerGroups.size > 0) {
+            const ungroupedHeaderLabel = `Other Work Groups (${ungrouped.length})<span class="eng-toggle">Show</span>`;
+            const ungroupedHeaderTotalClass = showForecast
+              ? (ungroupedTotal !== 0 ? 'forecast-nonzero' : '')
+              : (ungroupedTotal > 0 ? 'positive' : ungroupedTotal < 0 ? 'negative' : 'neutral');
+            const ungroupedHeaderPrefix = showForecast ? '' : (ungroupedTotal > 0 ? '+' : '');
+            tableHTML += `<tr class="engineer-header" data-eng="ungrouped"><td colspan="14">${ungroupedHeaderLabel}</td><td class="${ungroupedHeaderTotalClass}"><strong>${ungroupedHeaderPrefix}${ungroupedTotal.toFixed(1)}</strong></td></tr>`;
+          }
+          ungrouped.forEach(([wg, data]) => {
+            const idx = globalIdx++;
+            let rowTotal = 0;
+            const summaryOpen = isFiltered;
+            const wgDescription = window.workGroupSets?.get(wg) || wg;
+            const engRowClass = engineerGroups.size > 0 ? ' engineer-row' : '';
+            tableHTML += `<tr class="wg-summary${engRowClass}${summaryOpen ? ' is-open' : ''}" data-wg="${idx}" data-eng="ungrouped"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
+            for(let i=1; i<=13; i++) {
+              const p = `P${i}`;
+              const d = data.periods[p] || {f: 0, v: 0};
+              const val = showForecast ? (d.f || 0) : (d.v || 0);
+              rowTotal += val;
+              const cl = showForecast ? (val !== 0 ? 'forecast-nonzero' : '') : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
+              const prefix = showForecast ? '' : (val > 0 ? '+' : '');
+              tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
+            }
+            const tcl = showForecast ? (rowTotal !== 0 ? 'forecast-nonzero' : '') : (rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral');
+            const tprefix = showForecast ? '' : (rowTotal > 0 ? '+' : '');
+            tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
+
+            const detailRows = [
+              { label: 'Planned', key: 'f' },
+              { label: 'Actual', key: 'a' },
+              { label: 'Variance', key: 'v' }
+            ];
+            detailRows.forEach(({ label, key }) => {
+              let detailTotal = 0;
+              tableHTML += `<tr class="wg-detail${engRowClass}${summaryOpen ? ' open' : ''}" data-wg="${idx}" data-eng="ungrouped"><td>${label}</td>`;
+              for(let i=1; i<=13; i++) {
+                const p = `P${i}`;
+                const d = data.periods[p] || {f: 0, a: 0, v: 0};
+                const val = d[key] || 0;
+                detailTotal += val;
+                const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
+                tableHTML += `<td class="${cl}">${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}</td>`;
+              }
+              const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
+              tableHTML += `<td class="${tcl}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+            });
+          });
+        }
       }
       tableHTML += '</tbody>';
       wgTable.innerHTML = tableHTML;
 
-      wgTable.querySelectorAll('.wg-summary').forEach(row => {
+      // Engineer header click to expand/collapse
+      wgTable.querySelectorAll('.engineer-header').forEach(row => {
         row.addEventListener('click', () => {
+          const engId = row.dataset.eng;
+          const engRows = wgTable.querySelectorAll(`.engineer-row[data-eng="${engId}"]`);
+          const isOpen = row.classList.toggle('is-open');
+          engRows.forEach(r => r.classList.toggle('open', isOpen));
+          const toggle = row.querySelector('.eng-toggle');
+          if (toggle) toggle.textContent = isOpen ? 'Hide' : 'Show';
+        });
+      });
+
+      // Work group summary click to expand/collapse details
+      wgTable.querySelectorAll('.wg-summary').forEach(row => {
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
           const key = row.dataset.wg;
           const details = wgTable.querySelectorAll(`.wg-detail[data-wg="${key}"]`);
           const isOpen = row.classList.toggle('is-open');
@@ -2029,7 +2971,87 @@
           if (toggle) toggle.textContent = isOpen ? 'Hide details' : 'Show details';
         });
       });
-      
+
+      // Forecast Comments Section
+      const forecastCommentsSection = document.getElementById('forecastCommentsSection');
+      const forecastCommentsContainer = document.getElementById('forecastCommentsContainer');
+
+      if (forecastCommentsSection && forecastCommentsContainer) {
+        // Get forecast data for this job
+        const v0Forecast = getForecastSnapshot(window.currentFinancialYear, 'v0');
+        const v1Forecast = getForecastSnapshot(window.currentFinancialYear, 'v1');
+
+        const comments = [];
+
+        // Collect comments from v0 and v1
+        if (v0Forecast && v0Forecast.data) {
+          const v0Job = v0Forecast.data.get(job.jn);
+          if (v0Job?.comments) {
+            Object.entries(v0Job.comments).forEach(([wg, comment]) => {
+              if (comment && (!isFiltered || wg === wgFilter)) {
+                comments.push({ workGroup: wg, plan: 'v0', comment });
+              }
+            });
+          }
+        }
+
+        if (v1Forecast && v1Forecast.data) {
+          const v1Job = v1Forecast.data.get(job.jn);
+          if (v1Job?.comments) {
+            Object.entries(v1Job.comments).forEach(([wg, comment]) => {
+              if (comment && (!isFiltered || wg === wgFilter)) {
+                // Check if we already have a v0 comment for this work group
+                const existingIndex = comments.findIndex(c => c.workGroup === wg && c.plan === 'v0');
+                if (existingIndex >= 0) {
+                  // Add v1 comment to the same entry
+                  comments[existingIndex].v1Comment = comment;
+                } else {
+                  comments.push({ workGroup: wg, plan: 'v1', comment });
+                }
+              }
+            });
+          }
+        }
+
+        if (comments.length > 0) {
+          forecastCommentsSection.style.display = 'block';
+          let commentsHTML = '<div class="forecast-comments-list">';
+
+          comments.forEach(({ workGroup, plan, comment, v1Comment }) => {
+            const wgDescription = window.workGroupSets?.get(workGroup) || workGroup;
+            commentsHTML += `
+              <div class="forecast-comment-item">
+                <div class="forecast-comment-header">
+                  <strong>${escapeHtml(wgDescription)}</strong>
+                  ${plan === 'v0' && !v1Comment ? '<span class="plan-badge plan-v0">Plan v0</span>' : ''}
+                  ${plan === 'v1' && !v1Comment ? '<span class="plan-badge plan-v1">Plan v1</span>' : ''}
+                </div>`;
+
+            if (plan === 'v0' || comment) {
+              commentsHTML += `
+                <div class="forecast-comment-text">
+                  ${v1Comment ? '<span class="plan-label">v0:</span>' : ''}
+                  ${escapeHtml(comment)}
+                </div>`;
+            }
+
+            if (v1Comment) {
+              commentsHTML += `
+                <div class="forecast-comment-text">
+                  <span class="plan-label">v1:</span> ${escapeHtml(v1Comment)}
+                </div>`;
+            }
+
+            commentsHTML += '</div>';
+          });
+
+          commentsHTML += '</div>';
+          forecastCommentsContainer.innerHTML = commentsHTML;
+        } else {
+          forecastCommentsSection.style.display = 'none';
+        }
+      }
+
       // Period summary
       const periodGrid = document.getElementById('periodGrid');
       periodGrid.innerHTML = '';
@@ -2050,7 +3072,7 @@
       // Work orders
       currentWorkOrders = job.isGroupRollup
         ? getWorkOrdersForGroup(job.groupId).slice()
-        : (wData?.get(job.jn)?.workOrders || []).slice();
+        : (window.wData?.get(job.jn)?.workOrders || []).slice();
       currentWorkOrderWorkGroup = wgFilter;
       const woSearch = document.getElementById('woSearch');
       const woFlagOnly = document.getElementById('woFlagOnly');
@@ -2164,11 +3186,12 @@
     document.getElementById('breakdown').onclick = e => { if (e.target.id==='breakdown') closeBreakdown(); };
     document.getElementById('forecastCompare').onclick = e => { if (e.target.id === 'forecastCompare') closeForecastComparison(); };
 
-    document.querySelectorAll('.rag-pill').forEach(pill => {
-      const filter = pill.dataset.filter;
+    // Health stats, legend items, and bar segments all act as filter buttons
+    document.querySelectorAll('.health-stat[data-filter], .health-legend-clickable-item[data-filter], .health-bar-segment[data-filter]').forEach(el => {
+      const filter = el.dataset.filter;
       if (!filter) return;
-      pill.addEventListener('click', () => applyRagFilter(filter));
-      pill.addEventListener('keydown', event => {
+      el.addEventListener('click', () => applyRagFilter(filter));
+      el.addEventListener('keydown', event => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           applyRagFilter(filter);

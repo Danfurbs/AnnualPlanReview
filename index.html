@@ -17,11 +17,63 @@
           </div>
         </div>
         <div class="top-bar-actions">
+          <button class="group-action-button" onclick="openBaselinePage()">Baseline Management</button>
           <button class="group-action-button" onclick="openForecastEditor()">Forecast Builder</button>
           <button class="primary-button" onclick="openModal()">Upload Files</button>
+          <button class="settings-button" onclick="openSettings()" title="Settings">⚙️</button>
         </div>
       </div>
     </header>
+
+    <div class="forecast-health">
+      <div class="health-header">
+        <h3>Forecast Health</h3>
+        <p class="health-explainer">RAG status is derived from the absolute variance ratio vs forecast: &gt;50% is red, &gt;10% is amber, otherwise green.</p>
+      </div>
+      <div class="health-content">
+        <div class="health-main">
+          <div class="health-label">Jobs by Status</div>
+          <div class="health-bar-container">
+            <div class="health-bar health-bar-segmented" id="healthBarSegmented">
+              <div class="health-bar-segment health-bar-green" id="healthBarGreen" data-filter="good"></div>
+              <div class="health-bar-segment health-bar-amber" id="healthBarAmber" data-filter="warning"></div>
+              <div class="health-bar-segment health-bar-red" id="healthBarRed" data-filter="bad"></div>
+              <div class="health-bar-segment health-bar-grey" id="healthBarGrey" data-filter="noforecast"></div>
+            </div>
+            <div class="health-job-count" id="healthJobCount">0 jobs</div>
+          </div>
+          <div class="health-legend health-legend-clickable">
+            <span class="health-legend-item health-legend-clickable-item" data-filter="good" role="button" tabindex="0"><span class="health-dot health-good"></span>On Track (<span id="legendGoodCount">0</span>)</span>
+            <span class="health-legend-item health-legend-clickable-item" data-filter="warning" role="button" tabindex="0"><span class="health-dot health-acceptable"></span>Minor Variance (<span id="legendWarningCount">0</span>)</span>
+            <span class="health-legend-item health-legend-clickable-item" data-filter="bad" role="button" tabindex="0"><span class="health-dot health-needs-attention"></span>Critical (<span id="legendCriticalCount">0</span>)</span>
+            <span class="health-legend-item health-legend-clickable-item" data-filter="noforecast" role="button" tabindex="0"><span class="health-dot health-grey"></span>No Forecast (<span id="legendNoForecastCount">0</span>)</span>
+          </div>
+        </div>
+        <div class="health-stats health-stats-clickable">
+          <div class="health-stat health-stat-good" data-filter="good" role="button" tabindex="0">
+            <div class="health-stat-value" id="healthGoodCount">0</div>
+            <div class="health-stat-label">On Track</div>
+            <div class="health-stat-percent" id="healthGoodPercent">0%</div>
+          </div>
+          <div class="health-stat health-stat-warning" data-filter="warning" role="button" tabindex="0">
+            <div class="health-stat-value" id="healthWarningCount">0</div>
+            <div class="health-stat-label">Minor Variance</div>
+            <div class="health-stat-percent" id="healthWarningPercent">0%</div>
+          </div>
+          <div class="health-stat health-stat-critical" data-filter="bad" role="button" tabindex="0">
+            <div class="health-stat-value" id="healthCriticalCount">0</div>
+            <div class="health-stat-label">Critical</div>
+            <div class="health-stat-percent" id="healthCriticalPercent">0%</div>
+          </div>
+          <div class="health-stat health-stat-grey" data-filter="noforecast" role="button" tabindex="0">
+            <div class="health-stat-value" id="healthNoForecastCount">0</div>
+            <div class="health-stat-label">No Forecast</div>
+            <div class="health-stat-percent" id="healthNoForecastPercent">0%</div>
+          </div>
+        </div>
+      </div>
+      <div class="health-issues" id="healthIssues"></div>
+    </div>
 
     <div class="top-summary">
       <div class="summary-card">
@@ -40,13 +92,16 @@
         <div class="progress-bar"><div class="progress-fill" id="reviewProgress"></div></div>
       </div>
       <div class="summary-card">
-        <div class="card-title">RAG Status</div>
-        <div class="rag-grid">
-          <div class="rag-pill rag-red" role="button" tabindex="0" data-filter="bad"><span id="ragRed">0</span><small>Red</small></div>
-          <div class="rag-pill rag-amber" role="button" tabindex="0" data-filter="warning"><span id="ragAmber">0</span><small>Amber</small></div>
-          <div class="rag-pill rag-green" role="button" tabindex="0" data-filter="good"><span id="ragGreen">0</span><small>Green</small></div>
+        <div class="card-title">Work Order Activity</div>
+        <div class="card-value">
+          <span id="workOrderCount">0</span>
+          <span class="card-sub">work orders</span>
         </div>
-        <p class="rag-explainer">RAG is derived from the absolute variance ratio versus forecast: &gt;50% is red, &gt;10% is amber, otherwise green.</p>
+        <div class="card-meta" id="workOrderMeta">0 units complete</div>
+        <ul class="work-order-breakdown" id="workOrderBreakdown">
+          <li><span>Flagged</span><strong id="workOrderFlagged">0</strong></li>
+          <li><span>Amended</span><strong id="workOrderAmended">0</strong></li>
+        </ul>
       </div>
       <div class="summary-card">
         <div class="card-title">Comments</div>
@@ -67,20 +122,17 @@
         <span class="helper-text" id="reviewStageHelper"></span>
       </div>
       <div class="control-group">
-        <label>Forecast status</label>
-        <span class="helper-text" id="forecastStatusMessage"></span>
+        <label for="dashboardPlanVersion">Plan version</label>
+        <select id="dashboardPlanVersion" onchange="handleDashboardPlanVersionChange()">
+          <option value="v0">Plan v0</option>
+          <option value="v1">Plan v1 (Updated)</option>
+        </select>
+        <span class="helper-text">Use 'Initialize v1 from v0' in Forecast Builder to populate v1</span>
       </div>
       <div class="control-group">
-        <label for="viewMode">View mode</label>
-        <select id="viewMode" onchange="render()">
-          <option value="actual">Show Work Done Only</option>
-          <option value="forecast">Show Work Done &amp; Forecast</option>
-        </select>
-      </div>
-      <div class="control-group" id="forecastCutoffGroup">
-        <label for="forecastCutoff">Work done cutoff</label>
+        <label for="forecastCutoff">Forecast starts after</label>
         <select id="forecastCutoff" onchange="render()">
-          <option value="auto">Auto (latest work done period)</option>
+          <option value="auto">Auto (latest work done)</option>
           <option value="P1">Period 1</option>
           <option value="P2">Period 2</option>
           <option value="P3">Period 3</option>
@@ -95,6 +147,7 @@
           <option value="P12">Period 12</option>
           <option value="P13">Period 13</option>
         </select>
+        <span class="helper-text">Periods after this use forecast values</span>
       </div>
       <div class="control-group">
         <label for="wgFilter">Work group set</label>
@@ -103,6 +156,12 @@
         </select>
       </div>
       <div class="control-group">
+        <label for="engineerFilter">Engineer</label>
+        <select id="engineerFilter" onchange="onEngineerFilterChange()">
+          <option value="all">All Engineers</option>
+        </select>
+      </div>
+      <div class="control-group" id="groupFilterContainer" style="display: none;">
         <label for="groupFilter">Group filter</label>
         <select id="groupFilter" onchange="render()">
           <option value="all">All Standard Jobs</option>
@@ -112,14 +171,28 @@
         <label for="varianceFilter">Variance filter</label>
         <select id="varianceFilter" onchange="render()">
           <option value="all">Show All</option>
-          <option value="warning">Show Ambers</option>
-          <option value="bad">Show Reds</option>
+          <option value="good">Show On Track (Green)</option>
+          <option value="warning">Show Minor Variance (Amber)</option>
+          <option value="bad">Show Critical (Red)</option>
+          <option value="noforecast">Show No Forecast (Grey)</option>
           <option value="variance">Show Any Variances</option>
-          <option value="good">Show Greens</option>
         </select>
       </div>
-      <input type="search" id="search" placeholder="Search..." oninput="render()">
-      <button type="button" class="group-action-button" onclick="openGroupModal()">Manage Groups</button>
+      <div class="control-group">
+        <label for="hideZeroVolume">
+          <input type="checkbox" id="hideZeroVolume" onchange="render()" style="margin-right: 8px; width: auto;">
+          Hide zero volume cards
+        </label>
+        <span class="helper-text">Hide jobs with 0 forecast AND 0 work done</span>
+      </div>
+      <div class="control-group">
+        <label for="search">Search</label>
+        <input type="search" id="search" placeholder="Search..." oninput="render()">
+      </div>
+      <div class="control-group">
+        <label>&nbsp;</label>
+        <button type="button" class="group-action-button" onclick="openGroupModal()">Manage Groups</button>
+      </div>
     </div>
 
     <div id="jobs"></div>
@@ -150,6 +223,8 @@
         </div>
         <p class="helper-text">Required columns: Standard Job Number, Comment Type, Comment</p>
         <button type="button" onclick="exportComments()">Export Comments</button>
+        <button type="button" onclick="exportWorkGroupJobSummary()" style="margin-top: 10px;">Export Work Group Job Summary</button>
+        <button type="button" onclick="exportForecastSummary()" style="margin-top: 10px;">Export Forecast Summary (All Jobs)</button>
       </div>
     </div>
   </div>
@@ -213,54 +288,58 @@
       <aside class="forecast-sidebar">
         <div class="forecast-card">
           <h4>Forecast context</h4>
-          <div class="control-group">
-            <label for="forecastEditorYear">Financial year</label>
-            <select id="forecastEditorYear"></select>
-          </div>
-          <div class="control-group">
-            <label for="forecastEditorPlan">Plan version</label>
-            <select id="forecastEditorPlan"></select>
-          </div>
-          <div class="control-group">
-            <label for="forecastEditorWorkGroup">Work group set</label>
-            <select id="forecastEditorWorkGroup"></select>
-          </div>
-          <small>Forecasts are FY-wide and persist across RF stages (RF3, RF6, RF9, RF11).</small>
-        </div>
-        <div class="forecast-card">
-          <h4>Current status</h4>
-          <div>
-            <div class="forecast-stat" id="forecastEditorJobCount">0</div>
-            <small>Jobs configured</small>
-          </div>
-          <div>
-            <div class="forecast-stat" id="forecastEditorTotalVolume">0</div>
-            <small>Total volume across periods</small>
-          </div>
-          <div>
-            <div class="forecast-stat" id="forecastEditorRowCount">0</div>
-            <small>Rows in edit table</small>
+          <div class="control-row">
+            <div class="control-group control-group--half">
+              <label for="forecastEditorYear">Year</label>
+              <select id="forecastEditorYear"></select>
+            </div>
+            <div class="control-group control-group--half">
+              <label for="forecastEditorPlan">Plan</label>
+              <select id="forecastEditorPlan"></select>
+            </div>
           </div>
         </div>
+
         <div class="forecast-card">
-          <h4>Quick actions</h4>
+          <h4>Current Work Group</h4>
+          <div class="current-wg-display" id="currentWorkGroupDisplay">
+            <span class="current-wg-none">No work group selected</span>
+          </div>
+          <div class="wg-stats">
+            <div class="wg-stat">
+              <span class="wg-stat-value" id="forecastEditorJobCount">0</span>
+              <span class="wg-stat-label">Jobs</span>
+            </div>
+            <div class="wg-stat">
+              <span class="wg-stat-value" id="forecastEditorTotalVolume">0</span>
+              <span class="wg-stat-label">Volume</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="forecast-card forecast-card--workgroups-large">
+          <div class="wg-selector-header">
+            <h4>Work Groups</h4>
+            <div class="wg-filter-tabs">
+              <button type="button" class="wg-filter-tab active" data-filter="all">All</button>
+              <button type="button" class="wg-filter-tab" data-filter="without-data">Todo</button>
+              <button type="button" class="wg-filter-tab" data-filter="with-data">Done</button>
+            </div>
+          </div>
+          <input type="search" id="workGroupSearch" class="wg-search" placeholder="Search work groups...">
+          <div class="wg-selector-list" id="workGroupSelectorList">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <div class="forecast-card">
+          <h4>Actions</h4>
           <div class="forecast-action-list">
             <button type="button" onclick="addForecastEditorRow()">+ Add Row</button>
-            <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear Table</button>
-            <button type="button" class="group-action-button" onclick="downloadForecastEditorExport()">Export Forecast JSON</button>
-            <button type="button" class="group-action-button" onclick="downloadForecastFile()">Save Forecast File</button>
-            <button type="button" class="group-action-button" onclick="triggerForecastFileUpload()">Load Forecast File</button>
-            <input type="file" id="forecastFileInput" accept="application/json" class="is-hidden" onchange="loadForecastFile(event)">
+            <button type="button" class="group-action-button" onclick="openCopyActualsModal()" id="copyActualsBtn">Copy from Work Done</button>
+            <button type="button" class="primary-button" onclick="initializeV1FromV0Explicit()" id="initV1Btn" title="Copy all jobs from Plan v0 to Plan v1">Init v1 from v0</button>
+            <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear</button>
           </div>
-        </div>
-        <div class="forecast-card">
-          <h4>Tips</h4>
-          <ul class="forecast-tips">
-            <li>Use the job number list to auto-fill description and unit.</li>
-            <li>Forecast values are stored per FY and RF stage.</li>
-            <li>Use “Save Forecast File” to share forecasts with another PC.</li>
-            <li>Remember to export after updating the FY-wide library.</li>
-          </ul>
         </div>
       </aside>
       <main class="forecast-main">
@@ -270,13 +349,21 @@
             <p class="forecast-editor-meta" id="forecastEditorSummary"></p>
           </div>
           <div class="forecast-toolbar">
-            <input type="search" id="forecastEditorSearch" placeholder="Search job number..." oninput="filterForecastEditorTable()">
+            <div class="forecast-toolbar-left">
+              <button type="button" id="undoButton" class="icon-button" title="Undo (Ctrl+Z)" disabled>
+                <span>↶</span> Undo
+              </button>
+              <button type="button" id="redoButton" class="icon-button" title="Redo (Ctrl+Y)" disabled>
+                <span>↷</span> Redo
+              </button>
+            </div>
+            <input type="search" id="forecastEditorSearch" placeholder="Search job number...">
           </div>
         </div>
         <form id="forecastEditorForm" class="forecast-editor-form">
           <div class="forecast-editor-table">
             <label>Standard job forecast table</label>
-            <p class="helper-text">Paste a block of P1–P13 values from Excel directly into the table. Row totals and the footer total update automatically.</p>
+            <p class="helper-text">Copy rows from Excel (job numbers + P1–P13 values) and paste directly into the table. Click on the first cell where you want to paste, then paste. Rows are auto-created and totals update automatically.</p>
             <div class="forecast-editor-table-wrapper">
               <table class="forecast-table" id="forecastEditorTable"></table>
             </div>
@@ -291,6 +378,158 @@
     </div>
   </div>
 
+  <div class="container page is-hidden" id="baselinePage">
+    <div class="forecast-page-header">
+      <div class="forecast-page-title">
+        <div class="forecast-page-icon">BL</div>
+        <div>
+          <h1>Baseline Management</h1>
+          <p class="subtitle">Set prior submission values for Standard Jobs that apply across all financial years</p>
+        </div>
+      </div>
+      <div class="forecast-page-actions">
+        <button class="group-action-button" onclick="closeBaselinePage()">Back to Dashboard</button>
+        <button class="primary-button" type="button" onclick="saveBaselineChanges()">Save All Changes</button>
+      </div>
+    </div>
+    <div class="forecast-page-layout">
+      <aside class="forecast-sidebar">
+        <div class="forecast-card">
+          <h4>About Prior Submissions</h4>
+          <p class="helper-text">Prior submissions are total values per Standard Job that apply across all financial years. They appear as evenly distributed cumulative lines on graphs.</p>
+          <p class="helper-text" style="margin-top: 12px;">Example: A prior submission of 1300 over 13 periods = 100 per period cumulative.</p>
+        </div>
+        <div class="forecast-card">
+          <h4>Current status</h4>
+          <div>
+            <div class="forecast-stat" id="baselineJobCount">0</div>
+            <small>Jobs with prior submissions</small>
+          </div>
+          <div>
+            <div class="forecast-stat" id="baselineTotalValue">0</div>
+            <small>Total prior submission value</small>
+          </div>
+        </div>
+        <div class="forecast-card">
+          <h4>Quick actions</h4>
+          <div class="forecast-action-list">
+            <button type="button" class="group-action-button" onclick="exportBaselineDataFile()">Export Prior Submissions</button>
+            <button type="button" class="group-action-button" onclick="triggerBaselineImport()">Import Prior Submissions</button>
+            <input type="file" id="baselineFileInput" accept="application/json" class="is-hidden" onchange="handleBaselineImport(event)">
+            <button type="button" class="group-action-button" onclick="clearAllBaselines()">Clear All Prior Submissions</button>
+          </div>
+        </div>
+        <div class="forecast-card">
+          <h4>Tips</h4>
+          <ul class="forecast-tips">
+            <li>Prior submissions appear on breakdown graphs as reference lines</li>
+            <li>Values are distributed evenly across all periods</li>
+            <li>Enter 0 or leave empty to remove a prior submission</li>
+            <li>Export prior submissions to share with other users</li>
+          </ul>
+        </div>
+      </aside>
+      <main class="forecast-main">
+        <div class="forecast-main-header">
+          <div>
+            <h3>Standard Job Prior Submissions</h3>
+            <p class="helper-text">Set total prior submission values for each Standard Job</p>
+          </div>
+          <div class="forecast-toolbar">
+            <input type="search" id="baselineSearch" placeholder="Search job number or description...">
+          </div>
+        </div>
+        <div class="baseline-table-wrapper">
+          <table class="forecast-table" id="baselineTable">
+            <thead>
+              <tr>
+                <th>Job Number</th>
+                <th>Description</th>
+                <th>Unit</th>
+                <th>Prior Submission Value</th>
+                <th>Per Period</th>
+              </tr>
+            </thead>
+            <tbody id="baselineTableBody"></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div id="copyActualsModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Copy from Work Done</h2>
+        <button class="close" onclick="closeCopyActualsModal()">&times;</button>
+      </div>
+      <p class="helper-text">Copy actual work done values into the forecast. This will replace forecast values with actuals for the selected jobs and periods.</p>
+
+      <form id="copyActualsForm" onsubmit="handleCopyActuals(event)">
+        <div class="control-group">
+          <label for="copyActualsPeriod">Copy actuals through period</label>
+          <select id="copyActualsPeriod" required>
+            <option value="">Select period...</option>
+            <option value="P1">P1</option>
+            <option value="P2">P2</option>
+            <option value="P3">P3</option>
+            <option value="P4">P4</option>
+            <option value="P5">P5</option>
+            <option value="P6">P6</option>
+            <option value="P7">P7</option>
+            <option value="P8">P8</option>
+            <option value="P9">P9</option>
+            <option value="P10">P10</option>
+            <option value="P11">P11</option>
+            <option value="P12">P12</option>
+            <option value="P13">P13</option>
+          </select>
+          <span class="helper-text">Periods after this will keep forecast values</span>
+        </div>
+
+        <div class="control-group">
+          <label for="copyActualsJobSelection">Apply to jobs</label>
+          <select id="copyActualsJobSelection" required onchange="updateCopyActualsJobList()">
+            <option value="all">All jobs with work done in this work group</option>
+            <option value="current">Only jobs currently in forecast table</option>
+            <option value="select">Select specific jobs...</option>
+          </select>
+        </div>
+
+        <div class="control-group is-hidden" id="copyActualsJobListGroup">
+          <label>Select jobs to update</label>
+          <div id="copyActualsJobList" class="checkbox-list"></div>
+        </div>
+
+        <div class="control-group">
+          <p class="helper-text" id="copyActualsPreview" style="background: #f0f9ff; padding: 12px; border-radius: 4px; margin-top: 12px;"></p>
+        </div>
+
+        <div class="comment-actions">
+          <button type="submit" class="primary-button">Copy Actuals</button>
+          <button type="button" class="group-action-button" onclick="closeCopyActualsModal()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="importConflictsModal" class="modal">
+    <div class="modal-content modal-content--wide">
+      <div class="modal-header">
+        <h2>Import Forecast - Resolve Conflicts</h2>
+        <button class="close" onclick="closeImportConflictsModal()">&times;</button>
+      </div>
+      <p class="helper-text">The uploaded forecast has conflicts with your current data. Choose which values to keep.</p>
+
+      <div id="importConflictsList" class="import-conflicts-list"></div>
+
+      <div class="comment-actions" style="margin-top: 20px;">
+        <button type="button" class="primary-button" onclick="applyImportConflictResolution()">Apply Selected Values</button>
+        <button type="button" class="group-action-button" onclick="closeImportConflictsModal()">Cancel Import</button>
+      </div>
+    </div>
+  </div>
+
   <div id="breakdown" class="modal">
     <div class="modal-content modal-content--wide">
       <div class="modal-header">
@@ -301,7 +540,16 @@
         <button class="close" onclick="closeBreakdown()">&times;</button>
       </div>
       <p class="helper-text" id="breakdownModeNote"></p>
-      
+
+      <div class="breakdown-controls" style="display: flex; gap: 16px; align-items: center; margin-bottom: 16px; padding: 12px; background: #f5f5f5; border-radius: 4px;">
+        <label style="font-weight: 500;">Compare against:</label>
+        <select id="breakdownPlanVersion" onchange="handleBreakdownPlanVersionChange()" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; background: white;">
+          <option value="v0">Plan v0</option>
+          <option value="v1">Plan v1 (Updated)</option>
+          <option value="both">Both (v0 & v1)</option>
+        </select>
+      </div>
+
       <div class="breakdown-section">
         <div class="discipline-header">
           <h3>Cumulative Progress</h3>
@@ -313,10 +561,32 @@
       </div>
 
       <div class="breakdown-section">
-        <h3>Work Group Performance by Period</h3>
-        <div style="overflow-x: auto;">
-          <table class="wg-table" id="wgTable"></table>
+        <div class="discipline-header">
+          <h3>Work Group Performance by Period</h3>
+          <div class="header-actions">
+            <label style="font-size: 0.85rem; margin-right: 4px;">Display:</label>
+            <select id="wgDisplayMode" onchange="handleWgDisplayModeChange()" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 0.85rem; margin-right: 12px;">
+              <option value="variance">Variance</option>
+              <option value="forecast">Forecast</option>
+            </select>
+            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('wgTableContainer', this)">Collapse</button>
+          </div>
         </div>
+        <div class="collapsible-content" id="wgTableContainer">
+          <div style="overflow-x: auto;">
+            <table class="wg-table" id="wgTable"></table>
+          </div>
+        </div>
+      </div>
+
+      <div class="breakdown-section" id="forecastCommentsSection" style="display: none;">
+        <div class="discipline-header">
+          <h3>Forecast Comments</h3>
+          <div class="header-actions">
+            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('forecastCommentsContainer', this)">Collapse</button>
+          </div>
+        </div>
+        <div class="collapsible-content" id="forecastCommentsContainer"></div>
       </div>
 
       <div class="breakdown-section">
@@ -411,13 +681,177 @@
     </div>
   </div>
 
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="close" onclick="closeSettings()">&times;</button>
+      </div>
+      <div class="settings-content">
+        <div class="settings-section">
+          <h3>Backend API Configuration</h3>
+          <p class="helper-text">Configure your Render backend API to sync forecasts across all devices.</p>
+
+          <div class="file-input-group">
+            <label for="apiBaseUrlInput">Backend API URL</label>
+            <input type="url" id="apiBaseUrlInput" placeholder="https://your-app.onrender.com" style="width: 100%;">
+            <small>Example: https://annual-plan-review-backend.onrender.com</small>
+          </div>
+
+          <div class="settings-row">
+            <label class="wo-flag-toggle">
+              <input type="checkbox" id="apiEnabledToggle">
+              <span>Enable Backend API</span>
+            </label>
+          </div>
+
+          <div class="settings-status" id="settingsStatus"></div>
+
+          <div class="settings-actions">
+            <button class="secondary-button" onclick="testApiConnection()">Test Connection</button>
+            <button class="primary-button" onclick="saveSettings()">Save Settings</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Current Status</h3>
+          <div class="status-grid">
+            <div class="status-item">
+              <span class="status-label">API Status:</span>
+              <span class="status-value" id="apiStatusValue">Unknown</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Backend URL:</span>
+              <span class="status-value" id="apiUrlValue">Not configured</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Database:</span>
+              <span class="status-value" id="databaseValue">Unknown</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Instructions</h3>
+          <ol class="settings-instructions">
+            <li>Enter your Render backend URL (find it in your Render dashboard)</li>
+            <li>Click "Test Connection" to verify it's working</li>
+            <li>Enable "Enable Backend API" checkbox</li>
+            <li>Click "Save Settings"</li>
+            <li>Configure the same settings on all your PCs</li>
+          </ol>
+          <p class="helper-text"><strong>Important:</strong> All PCs must use the same backend URL to share forecasts.</p>
+        </div>
+
+        <div class="settings-section">
+          <h3>Data Management</h3>
+          <p class="helper-text">Import and export forecast data and comments.</p>
+
+          <div class="settings-data-actions">
+            <div class="data-action-group">
+              <h4>Forecast Export</h4>
+              <div class="export-selectors" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                <div class="file-input-group" style="flex: 1; min-width: 120px;">
+                  <label for="exportFySelect">Financial Year</label>
+                  <select id="exportFySelect" style="width: 100%;">
+                    <option value="">Select FY...</option>
+                  </select>
+                </div>
+                <div class="file-input-group" style="flex: 1; min-width: 100px;">
+                  <label for="exportPlanSelect">Plan Version</label>
+                  <select id="exportPlanSelect" style="width: 100%;">
+                    <option value="">Select...</option>
+                    <option value="v0">v0 (Original)</option>
+                    <option value="v1">v1 (Updated)</option>
+                  </select>
+                </div>
+                <div class="file-input-group" style="flex: 2; min-width: 200px;">
+                  <label for="exportWorkGroupSelect">Work Group</label>
+                  <select id="exportWorkGroupSelect" style="width: 100%;">
+                    <option value="">Select Work Group...</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="secondary-button" onclick="downloadSettingsForecastExport()">📥 Export Forecast JSON</button>
+                <button class="secondary-button" onclick="downloadSettingsExcelExport()">📊 Export Excel Template</button>
+              </div>
+            </div>
+
+            <div class="data-action-group" style="margin-top: 16px;">
+              <h4>Forecast Import</h4>
+              <button class="secondary-button" onclick="triggerForecastFileUpload()">📤 Import Forecast</button>
+              <input type="file" id="forecastFileInput" accept="application/json" class="is-hidden" onchange="loadForecastFile(event)">
+            </div>
+
+            <div class="data-action-group" style="margin-top: 16px;">
+              <h4>Comments</h4>
+              <button class="secondary-button" onclick="downloadComments()">📥 Export Comments</button>
+              <button class="secondary-button" onclick="triggerCommentFileUpload()">📤 Import Comments</button>
+              <input type="file" id="commentFileInput" accept="application/json" class="is-hidden" onchange="loadCommentFile(event)">
+            </div>
+          </div>
+
+          <p class="helper-text" style="margin-top: 16px;"><strong>Tip:</strong> Export data as backup or to transfer between systems.</p>
+        </div>
+
+        <div class="settings-section">
+          <h3>Clear All Forecast Data</h3>
+          <p class="helper-text">Permanently delete all forecast data for a specific financial year and plan version.</p>
+
+          <div class="clear-all-controls">
+            <div class="file-input-group">
+              <label for="clearAllFySelect">Financial Year</label>
+              <select id="clearAllFySelect" style="width: 100%;">
+                <option value="">Select FY...</option>
+              </select>
+            </div>
+
+            <div class="file-input-group">
+              <label for="clearAllVersionSelect">Plan Version</label>
+              <select id="clearAllVersionSelect" style="width: 100%;">
+                <option value="">Select Version...</option>
+                <option value="v0">v0 (Original)</option>
+                <option value="v1">v1 (Updated)</option>
+                <option value="both">Both v0 and v1</option>
+              </select>
+            </div>
+
+            <button class="danger-button" onclick="clearAllForecastData()" style="margin-top: 12px;">
+              Clear All Data
+            </button>
+          </div>
+
+          <p class="helper-text" style="margin-top: 12px; color: #c00;"><strong>Warning:</strong> This action cannot be undone. Make sure to export your data first if needed.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+  <!-- Utilities -->
+  <script src="utils.js"></script>
+  <script src="ui-feedback.js"></script>
+  <script src="undo-redo.js"></script>
+  <!-- Data -->
   <script src="work-group-sets-data.js"></script>
+  <script src="work-group-utils.js"></script>
+  <script src="engineer-data.js"></script>
   <script src="standard-jobs-data.js"></script>
   <script src="forecast-library.js"></script>
+  <!-- Backend API integration -->
+  <script src="api-client.js"></script>
+  <script src="data-migration.js"></script>
   <!-- Forecast modules (must load before app.js) -->
+  <script src="forecast-globals.js"></script>
   <script src="forecast-storage.js"></script>
   <script src="forecast-state.js"></script>
   <script src="forecast-editor.js"></script>
+  <script src="baseline-storage.js"></script>
+  <script src="baseline-page.js"></script>
   <script src="app.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

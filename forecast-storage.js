@@ -4,26 +4,34 @@
  */
 
 const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
-const FORECAST_PERIODS = Array.from({ length: 13 }, (_, i) => `P${i + 1}`);
-const FORECAST_SERVER_API_BASE = '/api/forecast';
+
+// ========== V1 Overrides Lock Mechanism ==========
+// Prevents race conditions when concurrent async operations modify v1 overrides
+// Each year has its own operation queue to serialize read-modify-write cycles
+
+const v1OverridesOperationQueue = new Map(); // year -> Promise (tail of queue)
 
 /**
- * Build storage payload for localStorage/server persistence
+ * Execute an operation on v1 overrides with serialized access
+ * Operations for the same year are queued to prevent race conditions
+ * @param {string} year - Fiscal year
+ * @param {Function} operation - Async function to execute
+ * @returns {Promise} - Result of the operation
  */
-function buildForecastStoragePayload(forecastData, rowCount) {
-  return {
-    data: serializeForecastData(forecastData || new Map()),
-    rowCount: rowCount ?? null,
-    savedAt: new Date().toISOString()
-  };
-}
+async function withV1OverridesLock(year, operation) {
+  // Get the current tail of the queue (or resolved promise if empty)
+  const previousOp = v1OverridesOperationQueue.get(year) || Promise.resolve();
 
-/**
- * Server persistence only works when running over http(s)
- */
-function isServerPersistenceAvailable() {
-  const protocol = window?.location?.protocol || '';
-  return protocol === 'http:' || protocol === 'https:';
+  // Create our operation that waits for previous, then runs
+  const ourOp = previousOp
+    .catch(() => {}) // Don't let previous errors block our operation
+    .then(() => operation());
+
+  // Update the queue tail to our operation (ignore errors for chaining)
+  v1OverridesOperationQueue.set(year, ourOp.catch(() => {}));
+
+  // Return our operation's result (will throw if operation throws)
+  return ourOp;
 }
 
 /**
@@ -33,6 +41,62 @@ function isServerPersistenceAvailable() {
 function getForecastStorageKey(year, planVersion) {
   if (!year || !planVersion) return FORECAST_STORAGE_KEY;
   return `${FORECAST_STORAGE_KEY}:${year}:${planVersion}`;
+}
+
+/**
+ * Deep clone a single job entry (periods, wgs, comments)
+ * Uses structuredClone if available, otherwise manual deep copy
+ * @param {Object} jobEntry - Job entry with periods, wgs, comments
+ * @returns {Object} - Deep cloned job entry
+ */
+function deepCloneJobEntry(jobEntry) {
+  if (!jobEntry || typeof jobEntry !== 'object') {
+    return { periods: {}, wgs: {}, comments: {} };
+  }
+
+  // Try structuredClone first (modern browsers, Node 17+)
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(jobEntry);
+    } catch {
+      // Fall through to manual clone if structuredClone fails
+    }
+  }
+
+  // Manual deep clone for the known forecast data shape
+  // This is faster than JSON.parse(JSON.stringify()) for simple structures
+
+  // Clone periods: { P1: number, ..., P13: number }
+  const periods = {};
+  if (jobEntry.periods && typeof jobEntry.periods === 'object') {
+    Object.keys(jobEntry.periods).forEach(key => {
+      periods[key] = jobEntry.periods[key];
+    });
+  }
+
+  // Clone wgs: { [workGroup]: { P1: number, ..., P13: number } }
+  const wgs = {};
+  if (jobEntry.wgs && typeof jobEntry.wgs === 'object') {
+    Object.keys(jobEntry.wgs).forEach(wgName => {
+      const wgData = jobEntry.wgs[wgName];
+      if (wgData && typeof wgData === 'object') {
+        wgs[wgName] = {};
+        Object.keys(wgData).forEach(periodKey => {
+          wgs[wgName][periodKey] = wgData[periodKey];
+        });
+      }
+    });
+  }
+
+  // Clone comments: { [workGroup]: string }
+  const comments = {};
+  if (jobEntry.comments && typeof jobEntry.comments === 'object') {
+    Object.keys(jobEntry.comments).forEach(key => {
+      comments[key] = jobEntry.comments[key];
+    });
+  }
+
+  return { periods, wgs, comments };
 }
 
 /**
@@ -48,13 +112,15 @@ function serializeForecastData(forecastMap) {
 }
 
 /**
- * Hydrate stored object back to Map
+ * Hydrate stored object back to Map with deep cloning
+ * Ensures no shared references between the source and the returned Map
  */
 function hydrateForecastData(rawData) {
   const output = new Map();
   Object.entries(rawData || {}).forEach(([key, value]) => {
     if (value && typeof value === 'object') {
-      output.set(key, value);
+      // Deep clone to prevent shared references with source data
+      output.set(key, deepCloneJobEntry(value));
     }
   });
   return output;
@@ -62,17 +128,14 @@ function hydrateForecastData(rawData) {
 
 /**
  * Deep clone forecast data Map
+ * Creates a completely independent copy with no shared references
  */
 function cloneForecastData(forecastMap) {
   const cloned = new Map();
   if (!forecastMap) return cloned;
   forecastMap.forEach((value, key) => {
-    const periods = value?.periods ? { ...value.periods } : {};
-    const wgs = {};
-    Object.entries(value?.wgs || {}).forEach(([wg, data]) => {
-      wgs[wg] = { ...data };
-    });
-    cloned.set(key, { periods, wgs });
+    // Use the deep clone helper for consistent behavior
+    cloned.set(key, deepCloneJobEntry(value));
   });
   return cloned;
 }
@@ -118,6 +181,175 @@ function loadForecastFromStorage(year, planVersion) {
 }
 
 /**
+ * Load forecast from storage or API (async version)
+ * Returns: { data: Map, rowCount: number, savedAt: string } or null
+ */
+async function loadForecastFromStorageAsync(year, planVersion) {
+  // Try API first if enabled
+  if (window.isApiEnabled && window.isApiEnabled() && window.loadForecastFromApi) {
+    try {
+      const apiData = await window.loadForecastFromApi(year, planVersion);
+      if (apiData) {
+        // Cache in localStorage for offline access
+        saveForecastToStorage(apiData.data, apiData.rowCount, year, planVersion);
+        return apiData;
+      }
+    } catch (err) {
+      console.warn('Failed to load from API, falling back to localStorage:', err);
+    }
+  }
+
+  // Fall back to localStorage
+  return loadForecastFromStorage(year, planVersion);
+}
+
+/**
+ * Get v1 overrides storage key (tracks which jobs have been explicitly edited in v1)
+ */
+function getV1OverridesKey(year) {
+  return `${FORECAST_STORAGE_KEY}:${year}:v1-overrides`;
+}
+
+/**
+ * Load v1 overrides (job numbers that have been explicitly edited in v1)
+ */
+function loadV1Overrides(year) {
+  try {
+    const raw = localStorage.getItem(getV1OverridesKey(year));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    console.warn('Failed to load v1 overrides:', err);
+    return new Set();
+  }
+}
+
+/**
+ * Load v1 overrides from storage or API (async version)
+ */
+async function loadV1OverridesAsync(year) {
+  // Try API first if enabled
+  if (window.isApiEnabled && window.isApiEnabled() && window.loadV1OverridesFromApi) {
+    try {
+      const apiData = await window.loadV1OverridesFromApi(year);
+      if (apiData && apiData.size > 0) {
+        // Cache in localStorage
+        saveV1Overrides(year, apiData);
+        return apiData;
+      }
+    } catch (err) {
+      console.warn('Failed to load v1 overrides from API, falling back to localStorage:', err);
+    }
+  }
+
+  // Fall back to localStorage
+  return loadV1Overrides(year);
+}
+
+/**
+ * Save v1 overrides
+ */
+function saveV1Overrides(year, overridesSet) {
+  try {
+    const arr = Array.from(overridesSet);
+    localStorage.setItem(getV1OverridesKey(year), JSON.stringify(arr));
+  } catch (err) {
+    console.warn('Failed to save v1 overrides:', err);
+  }
+}
+
+/**
+ * Save v1 overrides to storage and API (async version)
+ */
+async function saveV1OverridesAsync(year, overridesSet) {
+  // Save to localStorage first (always)
+  saveV1Overrides(year, overridesSet);
+
+  // Also save to API if enabled
+  if (window.isApiEnabled && window.isApiEnabled() && window.saveV1OverridesToApi) {
+    try {
+      await window.saveV1OverridesToApi(year, overridesSet);
+    } catch (err) {
+      console.warn('Failed to save v1 overrides to API (data saved locally):', err);
+    }
+  }
+}
+
+/**
+ * Add job numbers to v1 overrides (marks them as explicitly edited in v1)
+ * Note: For use in async contexts, prefer addToV1OverridesAsync to avoid race conditions
+ */
+function addToV1Overrides(year, jobNumbers) {
+  const overrides = loadV1Overrides(year);
+  jobNumbers.forEach(jn => overrides.add(jn));
+  saveV1Overrides(year, overrides);
+}
+
+/**
+ * Add job numbers to v1 overrides with serialized access (async version)
+ * Uses a per-year queue to prevent race conditions when called concurrently
+ * @param {string} year - Fiscal year
+ * @param {Array} jobNumbers - Job numbers to add
+ * @returns {Promise<void>}
+ */
+async function addToV1OverridesAsync(year, jobNumbers) {
+  if (!jobNumbers || jobNumbers.length === 0) return;
+
+  return withV1OverridesLock(year, async () => {
+    // Load current overrides (use async version for API support)
+    const overrides = await loadV1OverridesAsync(year);
+
+    // Add new job numbers
+    jobNumbers.forEach(jn => overrides.add(jn));
+
+    // Save atomically (to both localStorage and API if enabled)
+    await saveV1OverridesAsync(year, overrides);
+  });
+}
+
+/**
+ * Remove job numbers from v1 overrides (allows them to inherit from v0 again)
+ * Note: For use in async contexts, prefer removeFromV1OverridesAsync to avoid race conditions
+ */
+function removeFromV1Overrides(year, jobNumbers) {
+  const overrides = loadV1Overrides(year);
+  jobNumbers.forEach(jn => overrides.delete(jn));
+  saveV1Overrides(year, overrides);
+}
+
+/**
+ * Remove job numbers from v1 overrides with serialized access (async version)
+ * Uses a per-year queue to prevent race conditions when called concurrently
+ * @param {string} year - Fiscal year
+ * @param {Array} jobNumbers - Job numbers to remove
+ * @returns {Promise<void>}
+ */
+async function removeFromV1OverridesAsync(year, jobNumbers) {
+  if (!jobNumbers || jobNumbers.length === 0) return;
+
+  return withV1OverridesLock(year, async () => {
+    // Load current overrides (use async version for API support)
+    const overrides = await loadV1OverridesAsync(year);
+
+    // Remove job numbers
+    jobNumbers.forEach(jn => overrides.delete(jn));
+
+    // Save atomically (to both localStorage and API if enabled)
+    await saveV1OverridesAsync(year, overrides);
+  });
+}
+
+/**
+ * Check if v0 changes would overwrite v1 edits
+ * Returns array of job numbers that have v1 overrides
+ */
+function checkV0ConflictsWithV1(year, jobNumbers) {
+  const overrides = loadV1Overrides(year);
+  return jobNumbers.filter(jn => overrides.has(jn));
+}
+
+/**
  * Save forecast to localStorage
  */
 function saveForecastToStorage(forecastData, rowCount, year, planVersion) {
@@ -139,57 +371,22 @@ function saveForecastToStorage(forecastData, rowCount, year, planVersion) {
 }
 
 /**
- * Load forecast from server-side storage
- * Uses sync XHR so existing synchronous app flow does not need to be refactored
+ * Save forecast to storage and API (async version)
  */
-function loadForecastFromServer(year, planVersion) {
-  try {
-    if (!year || !planVersion) return null;
-    if (!isServerPersistenceAvailable()) return null;
+async function saveForecastToStorageAsync(forecastData, rowCount, year, planVersion) {
+  // Save to localStorage first (always)
+  const localSuccess = saveForecastToStorage(forecastData, rowCount, year, planVersion);
 
-    const url = `${FORECAST_SERVER_API_BASE}/${encodeURIComponent(year)}/${encodeURIComponent(planVersion)}`;
-    const request = new XMLHttpRequest();
-    request.open('GET', url, false);
-    request.send();
-
-    if (request.status !== 200) return null;
-
-    const parsed = JSON.parse(request.responseText || '{}');
-    const hydrated = hydrateForecastData(parsed.data);
-    if (!hydrated.size) return null;
-
-    return {
-      data: hydrated,
-      rowCount: parsed.rowCount ?? hydrated.size,
-      savedAt: parsed.savedAt || null,
-      source: 'server'
-    };
-  } catch (err) {
-    console.warn('Failed to load forecast from server:', err);
-    return null;
+  // Also save to API if enabled
+  if (window.isApiEnabled && window.isApiEnabled() && window.saveForecastToApi) {
+    try {
+      await window.saveForecastToApi(forecastData, rowCount, year, planVersion);
+    } catch (err) {
+      console.warn('Failed to save to API (data saved locally):', err);
+    }
   }
-}
 
-/**
- * Save forecast to server-side storage (async fire-and-forget)
- */
-function saveForecastToServerAsync(payload, year, planVersion) {
-  try {
-    if (!year || !planVersion || !payload) return;
-    if (!isServerPersistenceAvailable()) return;
-    if (typeof fetch !== 'function') return;
-
-    const url = `${FORECAST_SERVER_API_BASE}/${encodeURIComponent(year)}/${encodeURIComponent(planVersion)}`;
-    fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).catch(err => {
-      console.warn('Failed to save forecast to server:', err);
-    });
-  } catch (err) {
-    console.warn('Failed to queue forecast save to server:', err);
-  }
+  return localSuccess;
 }
 
 /**
@@ -220,6 +417,80 @@ function loadForecastFromLibrary(year, planVersion) {
 }
 
 /**
+ * Load forecast from GitHub URL (async)
+ * Fetches forecast JSON from configured GitHub raw URL
+ */
+async function loadForecastFromGitHub(year, planVersion) {
+  try {
+    if (!year || !planVersion) return null;
+    if (typeof window.GITHUB_FORECAST_URLS === 'undefined') return null;
+
+    // Check if URL is configured for this year/version
+    const url = window.GITHUB_FORECAST_URLS?.[year]?.[planVersion];
+    if (!url) return null;
+
+    console.log(`Fetching forecast from GitHub: ${year} ${planVersion}...`);
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.warn(`GitHub fetch failed (${response.status}): ${url}`);
+      return null;
+    }
+
+    const json = await response.json();
+    if (!json || typeof json !== 'object') {
+      console.warn('Invalid JSON from GitHub:', url);
+      return null;
+    }
+
+    // Handle two possible formats:
+    // 1. Full export format: { forecasts: { [year]: { [planVersion]: { data, rowCount } } } }
+    // 2. Direct format: { data: {...}, rowCount: N }
+    let forecastData, rowCount;
+
+    if (json.forecasts?.[year]?.[planVersion]) {
+      // Full export format
+      forecastData = json.forecasts[year][planVersion].data;
+      rowCount = json.forecasts[year][planVersion].rowCount;
+    } else if (json.data) {
+      // Direct format
+      forecastData = json.data;
+      rowCount = json.rowCount;
+    } else {
+      console.warn('Unrecognized forecast format from GitHub:', url);
+      return null;
+    }
+
+    const hydrated = hydrateForecastData(forecastData);
+    if (!hydrated.size) return null;
+
+    console.log(`✓ Loaded forecast from GitHub: ${year} ${planVersion} (${hydrated.size} jobs)`);
+
+    return {
+      data: hydrated,
+      rowCount: rowCount ?? hydrated.size,
+      source: 'github'
+    };
+  } catch (err) {
+    console.warn('Failed to load forecast from GitHub:', err);
+    return null;
+  }
+}
+
+/**
+ * Load forecast from library with GitHub support (async)
+ * Tries GitHub first, then falls back to FORECAST_LIBRARY global
+ */
+async function loadForecastFromLibraryAsync(year, planVersion) {
+  // Try GitHub first if configured
+  const githubData = await loadForecastFromGitHub(year, planVersion);
+  if (githubData) return githubData;
+
+  // Fall back to local FORECAST_LIBRARY
+  return loadForecastFromLibrary(year, planVersion);
+}
+
+/**
  * Get forecast data from storage or library (storage takes precedence)
  */
 function getForecastSnapshot(year, planVersion) {
@@ -231,6 +502,21 @@ function getForecastSnapshot(year, planVersion) {
 
   // Fall back to library
   return loadForecastFromLibrary(year, planVersion);
+}
+
+/**
+ * Get forecast data from storage/API, GitHub, or library (async version)
+ * Priority: API (if enabled) > localStorage > GitHub > FORECAST_LIBRARY
+ */
+async function getForecastSnapshotAsync(year, planVersion) {
+  if (!year || !planVersion) return null;
+
+  // Try API/localStorage (API checked first if enabled)
+  const cached = await loadForecastFromStorageAsync(year, planVersion);
+  if (cached) return cached;
+
+  // Try GitHub or library
+  return await loadForecastFromLibraryAsync(year, planVersion);
 }
 
 /**
@@ -361,6 +647,15 @@ function getForecastWorkGroupData(forecastData, jobNumber, workGroup) {
 }
 
 /**
+ * Get forecast comment for a specific job and work group
+ */
+function getForecastComment(forecastData, jobNumber, workGroup) {
+  if (!forecastData || !jobNumber || !workGroup) return '';
+  const job = forecastData.get(jobNumber);
+  return job?.comments?.[workGroup] || '';
+}
+
+/**
  * Update forecast data for a work group
  * This merges work group data and recalculates period totals
  */
@@ -374,23 +669,32 @@ function updateForecastWorkGroup(forecastData, rows, workGroup) {
 
     // Get or create job entry
     if (!forecastData.has(jobNumber)) {
-      forecastData.set(jobNumber, { periods: {}, wgs: {} });
+      forecastData.set(jobNumber, { periods: {}, wgs: {}, comments: {} });
     }
     const job = forecastData.get(jobNumber);
 
+    // Ensure comments object exists
+    if (!job.comments) job.comments = {};
+
     // Update work group data
     job.wgs[workGroup] = {};
-    FORECAST_PERIODS.forEach(period => {
+    window.FORECAST_PERIODS.forEach(period => {
       const value = Number(row.volumes?.[period] || 0);
-      if (value) {
-        job.wgs[workGroup][period] = value;
-      }
+      // Save all values including 0
+      job.wgs[workGroup][period] = value;
     });
+
+    // Save comment for this work group
+    if (row.comment) {
+      job.comments[workGroup] = row.comment;
+    } else {
+      delete job.comments[workGroup];
+    }
 
     // Recalculate period totals from all work groups
     const totals = {};
     Object.values(job.wgs).forEach(wgData => {
-      FORECAST_PERIODS.forEach(period => {
+      window.FORECAST_PERIODS.forEach(period => {
         totals[period] = (totals[period] || 0) + (Number(wgData?.[period]) || 0);
       });
     });
@@ -408,10 +712,15 @@ function cleanForecastData(forecastData) {
 
   const toDelete = [];
   forecastData.forEach((job, jobNumber) => {
-    const hasData = Object.values(job.wgs || {}).some(wgData => {
-      return FORECAST_PERIODS.some(period => Number(wgData?.[period] || 0) !== 0);
+    const hasVolumes = Object.values(job.wgs || {}).some(wgData => {
+      return window.FORECAST_PERIODS.some(period => {
+        const val = wgData?.[period];
+        return val !== undefined && val !== null && val !== '';
+      });
     });
-    if (!hasData) {
+    const hasComments = job.comments && Object.keys(job.comments).length > 0;
+
+    if (!hasVolumes && !hasComments) {
       toDelete.push(jobNumber);
     }
   });
@@ -419,3 +728,168 @@ function cleanForecastData(forecastData) {
   toDelete.forEach(jobNumber => forecastData.delete(jobNumber));
   return forecastData;
 }
+
+/**
+ * Clear all forecast data for a specific year and version
+ * @param {string} year - Financial year (e.g., "FY2024")
+ * @param {string} version - Plan version ("v0", "v1", or "both")
+ * @returns {Object} - Result with success status and details
+ */
+function clearAllForecastDataForYear(year, version) {
+  if (!year || !version) {
+    return { success: false, error: 'Year and version are required' };
+  }
+
+  const cleared = [];
+  const errors = [];
+
+  const versionsToDelete = version === 'both' ? ['v0', 'v1'] : [version];
+
+  versionsToDelete.forEach(ver => {
+    try {
+      // Clear forecast data
+      const forecastKey = getForecastStorageKey(year, ver);
+      localStorage.removeItem(forecastKey);
+      cleared.push(forecastKey);
+
+      // Clear v1 overrides if deleting v1
+      if (ver === 'v1') {
+        const overridesKey = getV1OverridesKey(year);
+        localStorage.removeItem(overridesKey);
+        cleared.push(overridesKey);
+      }
+    } catch (err) {
+      errors.push({ version: ver, error: err.message });
+    }
+  });
+
+  // Also clear the migration flag so data starts fresh
+  localStorage.removeItem('forecastMigrationV2_workGroupNormalization');
+
+  console.log(`Cleared forecast data for ${year} ${version}:`, cleared);
+
+  return {
+    success: errors.length === 0,
+    cleared,
+    errors: errors.length > 0 ? errors : null
+  };
+}
+
+/**
+ * DEV ONLY: Sanity check that deep cloning produces independent copies
+ * Run in browser console: window.__verifyForecastDeepClone()
+ * @returns {{ passed: boolean, details: string[] }}
+ */
+function __verifyForecastDeepClone() {
+  const details = [];
+  let passed = true;
+
+  // Create test data
+  const testData = {
+    '123456': {
+      periods: { P1: 100, P2: 200 },
+      wgs: {
+        'WorkGroup A': { P1: 50, P2: 100 },
+        'WorkGroup B': { P1: 50, P2: 100 }
+      },
+      comments: { 'WorkGroup A': 'Test comment' }
+    }
+  };
+
+  // Test hydrateForecastData
+  const hydrated1 = hydrateForecastData(testData);
+  const hydrated2 = hydrateForecastData(testData);
+
+  // Mutate hydrated1 and verify hydrated2 is unaffected
+  const job1 = hydrated1.get('123456');
+  job1.periods.P1 = 999;
+  job1.wgs['WorkGroup A'].P1 = 999;
+  job1.comments['WorkGroup A'] = 'MUTATED';
+
+  const job2 = hydrated2.get('123456');
+  if (job2.periods.P1 === 999) {
+    details.push('FAIL: hydrateForecastData - periods reference shared');
+    passed = false;
+  } else {
+    details.push('PASS: hydrateForecastData - periods independent');
+  }
+
+  if (job2.wgs['WorkGroup A'].P1 === 999) {
+    details.push('FAIL: hydrateForecastData - wgs reference shared');
+    passed = false;
+  } else {
+    details.push('PASS: hydrateForecastData - wgs independent');
+  }
+
+  if (job2.comments['WorkGroup A'] === 'MUTATED') {
+    details.push('FAIL: hydrateForecastData - comments reference shared');
+    passed = false;
+  } else {
+    details.push('PASS: hydrateForecastData - comments independent');
+  }
+
+  // Test cloneForecastData
+  const original = hydrateForecastData({
+    '789': { periods: { P1: 10 }, wgs: { 'WG': { P1: 10 } }, comments: {} }
+  });
+  const cloned = cloneForecastData(original);
+
+  // Mutate clone and verify original unaffected
+  const clonedJob = cloned.get('789');
+  clonedJob.periods.P1 = 999;
+  clonedJob.wgs['WG'].P1 = 999;
+
+  const originalJob = original.get('789');
+  if (originalJob.periods.P1 === 999) {
+    details.push('FAIL: cloneForecastData - periods reference shared');
+    passed = false;
+  } else {
+    details.push('PASS: cloneForecastData - periods independent');
+  }
+
+  if (originalJob.wgs['WG'].P1 === 999) {
+    details.push('FAIL: cloneForecastData - wgs reference shared');
+    passed = false;
+  } else {
+    details.push('PASS: cloneForecastData - wgs independent');
+  }
+
+  console.log('Deep clone verification:', passed ? 'ALL PASSED' : 'FAILED');
+  details.forEach(d => console.log('  ' + d));
+
+  return { passed, details };
+}
+
+// Expose functions globally for cross-module access
+window.getForecastStorageKey = getForecastStorageKey;
+window.serializeForecastData = serializeForecastData;
+window.hydrateForecastData = hydrateForecastData;
+window.cloneForecastData = cloneForecastData;
+window.loadForecastFromStorage = loadForecastFromStorage;
+window.loadForecastFromStorageAsync = loadForecastFromStorageAsync;
+window.saveForecastToStorage = saveForecastToStorage;
+window.saveForecastToStorageAsync = saveForecastToStorageAsync;
+window.loadForecastFromLibrary = loadForecastFromLibrary;
+window.loadForecastFromGitHub = loadForecastFromGitHub;
+window.loadForecastFromLibraryAsync = loadForecastFromLibraryAsync;
+window.getForecastSnapshot = getForecastSnapshot;
+window.getForecastSnapshotAsync = getForecastSnapshotAsync;
+window.initializeV1FromV0 = initializeV1FromV0;
+window.exportForecastFile = exportForecastFile;
+window.importForecastFile = importForecastFile;
+window.getForecastPeriodsForJob = getForecastPeriodsForJob;
+window.getForecastWorkGroupData = getForecastWorkGroupData;
+window.getForecastComment = getForecastComment;
+window.updateForecastWorkGroup = updateForecastWorkGroup;
+window.cleanForecastData = cleanForecastData;
+window.loadV1Overrides = loadV1Overrides;
+window.loadV1OverridesAsync = loadV1OverridesAsync;
+window.saveV1Overrides = saveV1Overrides;
+window.saveV1OverridesAsync = saveV1OverridesAsync;
+window.addToV1Overrides = addToV1Overrides;
+window.addToV1OverridesAsync = addToV1OverridesAsync;
+window.removeFromV1Overrides = removeFromV1Overrides;
+window.removeFromV1OverridesAsync = removeFromV1OverridesAsync;
+window.checkV0ConflictsWithV1 = checkV0ConflictsWithV1;
+window.clearAllForecastDataForYear = clearAllForecastDataForYear;
+window.__verifyForecastDeepClone = __verifyForecastDeepClone; // DEV ONLY sanity check
