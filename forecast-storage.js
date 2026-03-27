@@ -5,6 +5,26 @@
 
 const FORECAST_STORAGE_KEY = 'aprForecastDataV1';
 const FORECAST_PERIODS = Array.from({ length: 13 }, (_, i) => `P${i + 1}`);
+const FORECAST_SERVER_API_BASE = '/api/forecast';
+
+/**
+ * Build storage payload for localStorage/server persistence
+ */
+function buildForecastStoragePayload(forecastData, rowCount) {
+  return {
+    data: serializeForecastData(forecastData || new Map()),
+    rowCount: rowCount ?? null,
+    savedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Server persistence only works when running over http(s)
+ */
+function isServerPersistenceAvailable() {
+  const protocol = window?.location?.protocol || '';
+  return protocol === 'http:' || protocol === 'https:';
+}
 
 /**
  * Generate localStorage key for a forecast
@@ -64,7 +84,21 @@ function cloneForecastData(forecastMap) {
 function loadForecastFromStorage(year, planVersion) {
   try {
     const raw = localStorage.getItem(getForecastStorageKey(year, planVersion));
-    if (!raw) return null;
+    if (!raw) {
+      const serverSnapshot = loadForecastFromServer(year, planVersion);
+      if (!serverSnapshot) return null;
+
+      // Warm local cache for faster future loads
+      localStorage.setItem(
+        getForecastStorageKey(year, planVersion),
+        JSON.stringify({
+          data: serializeForecastData(serverSnapshot.data),
+          rowCount: serverSnapshot.rowCount,
+          savedAt: serverSnapshot.savedAt || new Date().toISOString()
+        })
+      );
+      return serverSnapshot;
+    }
 
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return null;
@@ -93,17 +127,68 @@ function saveForecastToStorage(forecastData, rowCount, year, planVersion) {
       return false;
     }
 
-    const payload = {
-      data: serializeForecastData(forecastData || new Map()),
-      rowCount: rowCount ?? null,
-      savedAt: new Date().toISOString()
-    };
+    const payload = buildForecastStoragePayload(forecastData, rowCount);
 
     localStorage.setItem(getForecastStorageKey(year, planVersion), JSON.stringify(payload));
+    saveForecastToServerAsync(payload, year, planVersion);
     return true;
   } catch (err) {
     console.warn('Failed to save forecast to storage:', err);
     return false;
+  }
+}
+
+/**
+ * Load forecast from server-side storage
+ * Uses sync XHR so existing synchronous app flow does not need to be refactored
+ */
+function loadForecastFromServer(year, planVersion) {
+  try {
+    if (!year || !planVersion) return null;
+    if (!isServerPersistenceAvailable()) return null;
+
+    const url = `${FORECAST_SERVER_API_BASE}/${encodeURIComponent(year)}/${encodeURIComponent(planVersion)}`;
+    const request = new XMLHttpRequest();
+    request.open('GET', url, false);
+    request.send();
+
+    if (request.status !== 200) return null;
+
+    const parsed = JSON.parse(request.responseText || '{}');
+    const hydrated = hydrateForecastData(parsed.data);
+    if (!hydrated.size) return null;
+
+    return {
+      data: hydrated,
+      rowCount: parsed.rowCount ?? hydrated.size,
+      savedAt: parsed.savedAt || null,
+      source: 'server'
+    };
+  } catch (err) {
+    console.warn('Failed to load forecast from server:', err);
+    return null;
+  }
+}
+
+/**
+ * Save forecast to server-side storage (async fire-and-forget)
+ */
+function saveForecastToServerAsync(payload, year, planVersion) {
+  try {
+    if (!year || !planVersion || !payload) return;
+    if (!isServerPersistenceAvailable()) return;
+    if (typeof fetch !== 'function') return;
+
+    const url = `${FORECAST_SERVER_API_BASE}/${encodeURIComponent(year)}/${encodeURIComponent(planVersion)}`;
+    fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => {
+      console.warn('Failed to save forecast to server:', err);
+    });
+  } catch (err) {
+    console.warn('Failed to queue forecast save to server:', err);
   }
 }
 
