@@ -20,11 +20,74 @@ class DatabaseServicePG {
       console.error('Unexpected error on idle client', err);
     });
 
-    this.ready = this.ensureExtraTables();
+    this.ready = this.ensureSchema();
     console.log('PostgreSQL database service initialized');
   }
 
-  async ensureExtraTables() {
+  async ensureSchema() {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS forecasts (
+        id SERIAL PRIMARY KEY,
+        job_number VARCHAR(50) NOT NULL,
+        work_group VARCHAR(50) NOT NULL,
+        fiscal_year VARCHAR(10) NOT NULL,
+        plan_version VARCHAR(10) NOT NULL,
+        period VARCHAR(10) NOT NULL,
+        value DECIMAL(15, 2) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await this.pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_forecasts_job
+      ON forecasts(job_number, fiscal_year, plan_version)
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS forecast_comments (
+        id SERIAL PRIMARY KEY,
+        job_number VARCHAR(50) NOT NULL,
+        work_group VARCHAR(50) NOT NULL,
+        fiscal_year VARCHAR(10) NOT NULL,
+        plan_version VARCHAR(10) NOT NULL,
+        comment TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(job_number, work_group, fiscal_year, plan_version)
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS job_comments (
+        id VARCHAR(100) PRIMARY KEY,
+        job_number VARCHAR(50) NOT NULL,
+        category VARCHAR(50),
+        text TEXT NOT NULL,
+        timestamp VARCHAR(50),
+        fiscal_year VARCHAR(10),
+        rf_stage VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS baselines (
+        job_number VARCHAR(50) PRIMARY KEY,
+        total_value DECIMAL(15, 2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS v1_overrides (
+        id SERIAL PRIMARY KEY,
+        job_number VARCHAR(50) NOT NULL,
+        fiscal_year VARCHAR(10) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(job_number, fiscal_year)
+      )
+    `);
+    await this.pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_v1_overrides
+      ON v1_overrides(job_number, fiscal_year)
+    `);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS public_groups (
         id VARCHAR(100) PRIMARY KEY,
@@ -54,6 +117,7 @@ class DatabaseServicePG {
    * @param {Object} forecastData - { periods: {...}, wgs: {...}, comments: {...} }
    */
   async saveForecast(jobNumber, fiscalYear, planVersion, forecastData) {
+    await this.ready;
     const client = await this.pool.connect();
 
     try {
@@ -105,6 +169,7 @@ class DatabaseServicePG {
    * @returns {Object} - Structured forecast data
    */
   async getForecastData(fiscalYear, planVersion) {
+    await this.ready;
     const forecastsResult = await this.pool.query(
       `SELECT * FROM forecasts
        WHERE fiscal_year = $1 AND plan_version = $2
@@ -170,6 +235,7 @@ class DatabaseServicePG {
    * @param {string} planVersion
    */
   async getForecastByJob(jobNumber, fiscalYear, planVersion) {
+    await this.ready;
     const forecastsResult = await this.pool.query(
       `SELECT * FROM forecasts
        WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3
@@ -220,6 +286,7 @@ class DatabaseServicePG {
    * @param {Object} comment - { id, jobNumber, category, text, timestamp, fy, rf }
    */
   async saveJobComment(comment) {
+    await this.ready;
     await this.pool.query(
       `INSERT INTO job_comments (id, job_number, category, text, timestamp, fiscal_year, rf_stage)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -238,6 +305,7 @@ class DatabaseServicePG {
    * @param {Array<Object>} comments - Array of comment objects
    */
   async saveAllJobComments(comments) {
+    await this.ready;
     if (!Array.isArray(comments) || comments.length === 0) return;
 
     const ids = comments.map(comment => comment.id);
@@ -266,6 +334,7 @@ class DatabaseServicePG {
    * @param {string} jobNumber
    */
   async getJobComments(jobNumber) {
+    await this.ready;
     const result = await this.pool.query(
       'SELECT * FROM job_comments WHERE job_number = $1 ORDER BY timestamp DESC',
       [jobNumber]
@@ -286,6 +355,7 @@ class DatabaseServicePG {
    * Get all job comments
    */
   async getAllJobComments() {
+    await this.ready;
     const result = await this.pool.query(
       'SELECT * FROM job_comments ORDER BY timestamp DESC'
     );
@@ -315,6 +385,7 @@ class DatabaseServicePG {
    * @param {string} commentId
    */
   async deleteJobComment(commentId) {
+    await this.ready;
     await this.pool.query(
       'DELETE FROM job_comments WHERE id = $1',
       [commentId]
@@ -329,6 +400,7 @@ class DatabaseServicePG {
    * @param {number} totalValue
    */
   async saveBaseline(jobNumber, totalValue) {
+    await this.ready;
     await this.pool.query(
       `INSERT INTO baselines (job_number, total_value, updated_at)
        VALUES ($1, $2, CURRENT_TIMESTAMP)
@@ -344,6 +416,7 @@ class DatabaseServicePG {
    * @param {string} jobNumber
    */
   async getBaseline(jobNumber) {
+    await this.ready;
     const result = await this.pool.query(
       'SELECT total_value FROM baselines WHERE job_number = $1',
       [jobNumber]
@@ -355,6 +428,7 @@ class DatabaseServicePG {
    * Get all baselines
    */
   async getAllBaselines() {
+    await this.ready;
     const result = await this.pool.query('SELECT * FROM baselines');
     const baselines = {};
     result.rows.forEach(row => {
@@ -368,6 +442,7 @@ class DatabaseServicePG {
    * @param {string} jobNumber
    */
   async deleteBaseline(jobNumber) {
+    await this.ready;
     await this.pool.query(
       'DELETE FROM baselines WHERE job_number = $1',
       [jobNumber]
@@ -379,6 +454,7 @@ class DatabaseServicePG {
    * @param {Object} baselines - { jobNumber: totalValue, ... }
    */
   async saveAllBaselines(baselines) {
+    await this.ready;
     const client = await this.pool.connect();
 
     try {
@@ -411,6 +487,7 @@ class DatabaseServicePG {
    * @param {string} planVersion
    */
   async saveAllForecasts(data, fiscalYear, planVersion) {
+    await this.ready;
     const client = await this.pool.connect();
 
     try {
@@ -499,6 +576,7 @@ class DatabaseServicePG {
    * @param {string} fiscalYear
    */
   async saveAllV1Overrides(jobNumbers, fiscalYear) {
+    await this.ready;
     if (jobNumbers.length === 0) return;
 
     const client = await this.pool.connect();
@@ -533,6 +611,7 @@ class DatabaseServicePG {
    * @param {string} fiscalYear
    */
   async addV1Override(jobNumber, fiscalYear) {
+    await this.ready;
     await this.pool.query(
       `INSERT INTO v1_overrides (job_number, fiscal_year)
        VALUES ($1, $2)
@@ -546,6 +625,7 @@ class DatabaseServicePG {
    * @param {string} fiscalYear
    */
   async getV1Overrides(fiscalYear) {
+    await this.ready;
     const result = await this.pool.query(
       'SELECT job_number FROM v1_overrides WHERE fiscal_year = $1',
       [fiscalYear]
@@ -559,6 +639,7 @@ class DatabaseServicePG {
    * @param {string} fiscalYear
    */
   async removeV1Override(jobNumber, fiscalYear) {
+    await this.ready;
     await this.pool.query(
       'DELETE FROM v1_overrides WHERE job_number = $1 AND fiscal_year = $2',
       [jobNumber, fiscalYear]
@@ -645,6 +726,7 @@ class DatabaseServicePG {
   // ========== Utility ==========
 
   async ping() {
+    await this.ready;
     const result = await this.pool.query('SELECT 1 AS ok');
     return result.rows[0]?.ok === 1;
   }
