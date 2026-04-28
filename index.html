@@ -207,12 +207,22 @@
       <p class="helper-text" id="uploadModeNote"></p>
       <div class="file-input-group">
         <label>Work Done (must have "Detail" sheet)</label>
+        <div class="row-input">
+          <label for="workDoneFySelect">Financial Year:</label>
+          <select id="workDoneFySelect"></select>
+        </div>
+        <label class="row-input" style="margin-top: 6px;">
+          <input type="checkbox" id="clearWorkDoneForFyBeforeUpload" checked style="width: auto; margin-right: 8px;">
+          Clear existing Work Done for selected FY before upload
+        </label>
         <input type="file" id="wFile" accept=".xlsx,.xls" onchange="loadWorkDone(event)">
         <div class="row-input">
           <label>Header row:</label>
           <input type="number" id="wRow" value="2" min="1">
         </div>
         <p class="helper-text">Try 1, 2, or 3 if not loading</p>
+        <button type="button" class="secondary" onclick="clearWorkDoneForSelectedFy()" style="margin-top: 6px;">Clear Work Done (Selected FY)</button>
+        <button type="button" class="danger-button" onclick="clearAllWorkDoneSnapshots()" style="margin-top: 6px;">Clear All Work Done (Server + Local)</button>
       </div>
       <div class="file-input-group">
         <label>Comments Upload</label>
@@ -251,6 +261,13 @@
         <div class="file-input-group">
           <label for="groupDesc">Group Description</label>
           <input type="text" id="groupDesc" placeholder="Group description" required>
+        </div>
+        <div class="file-input-group">
+          <label for="groupScope">Group Visibility</label>
+          <select id="groupScope">
+            <option value="private">Private (only on this browser)</option>
+            <option value="public">Public (shared via server)</option>
+          </select>
         </div>
         <div class="file-input-group">
           <label class="row-input">

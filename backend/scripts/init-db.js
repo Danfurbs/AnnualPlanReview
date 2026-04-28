@@ -80,12 +80,30 @@ db.exec(`
     UNIQUE(job_number, fiscal_year)
   );
 
+  -- Shared public standard-job groups
+  CREATE TABLE IF NOT EXISTS public_groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    roll_up INTEGER DEFAULT 0,
+    job_numbers_json TEXT NOT NULL,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Work done snapshots by fiscal year
+  CREATE TABLE IF NOT EXISTS work_done_snapshots (
+    fiscal_year TEXT PRIMARY KEY,
+    data_json TEXT NOT NULL,
+    uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
   -- Indexes for better query performance
   CREATE INDEX IF NOT EXISTS idx_forecasts_job ON forecasts(job_number);
   CREATE INDEX IF NOT EXISTS idx_forecasts_fy_version ON forecasts(fiscal_year, plan_version);
   CREATE INDEX IF NOT EXISTS idx_forecast_comments_job ON forecast_comments(job_number);
   CREATE INDEX IF NOT EXISTS idx_job_comments_job ON job_comments(job_number);
   CREATE INDEX IF NOT EXISTS idx_job_comments_fy ON job_comments(fiscal_year);
+  CREATE INDEX IF NOT EXISTS idx_public_groups_updated_at ON public_groups(updated_at);
 `);
 
 console.log('Database initialized successfully!');

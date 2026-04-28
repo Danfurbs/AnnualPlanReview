@@ -6,6 +6,7 @@
 
     // UI state (not in modules)
     let groupStore = [];
+    let publicGroupStore = [];
     let editingGroupId = null;
     let currentChart = null;
     let currentWorkOrders = [];
@@ -30,6 +31,8 @@
 
     // Group management (not in modules)
     const GROUP_STORAGE_KEY = 'aprGroupStoreV1';
+    const WORK_DONE_STORAGE_KEY = 'aprWorkDoneByYearV1';
+    let workDoneUploadedAt = null;
 
     // Breakdown plan version preference
     const BREAKDOWN_PLAN_VERSION_KEY = 'aprBreakdownPlanVersionV1';
@@ -206,6 +209,8 @@
       }
       updateReviewContextDisplay();
       updateContextControls();
+      refreshWorkDoneYearSelector();
+      await loadWorkDoneStoreAsync(currentFinancialYear);
       fData = null;
       const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
@@ -270,6 +275,8 @@
       }
       updateReviewContextDisplay();
       updateContextControls();
+      refreshWorkDoneYearSelector();
+      await loadWorkDoneStoreAsync(currentFinancialYear);
       fData = null;
       const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
@@ -397,11 +404,15 @@
       localStorage.setItem(WORK_ORDER_AMENDMENTS_KEY, JSON.stringify(workOrderAmendments));
     }
 
+    function getAllGroups() {
+      return [...publicGroupStore, ...groupStore];
+    }
+
     function loadGroupStore() {
       try {
         const raw = localStorage.getItem(GROUP_STORAGE_KEY);
         const parsed = raw ? JSON.parse(raw) : [];
-        groupStore = Array.isArray(parsed) ? parsed : [];
+        groupStore = Array.isArray(parsed) ? parsed.map(group => ({ ...group, scope: 'private' })) : [];
       } catch (err) {
         console.warn('Failed to load group store:', err);
         groupStore = [];
@@ -411,6 +422,151 @@
     function saveGroupStore() {
       localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(groupStore));
     }
+
+    async function loadGroupStoreAsync() {
+      loadGroupStore();
+      if (window.isApiEnabled && window.isApiEnabled() && window.loadPublicGroupsFromApi) {
+        try {
+          const publicGroups = await window.loadPublicGroupsFromApi();
+          publicGroupStore = Array.isArray(publicGroups) ? publicGroups : [];
+        } catch (err) {
+          console.warn('Failed to load public groups from API:', err);
+          publicGroupStore = [];
+        }
+      }
+    }
+
+    function serializeWorkDoneMap(workDoneMap) {
+      if (!(workDoneMap instanceof Map)) return {};
+      return Object.fromEntries(workDoneMap.entries());
+    }
+
+    function hydrateWorkDoneMap(rawData) {
+      const map = new Map();
+      Object.entries(rawData || {}).forEach(([jobNumber, payload]) => {
+        map.set(jobNumber, payload || { periods: {}, wgs: {}, workOrders: [] });
+      });
+      return map;
+    }
+
+    function loadWorkDoneFromLocal(year) {
+      try {
+        const raw = localStorage.getItem(WORK_DONE_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        const entry = parsed?.[year];
+        if (!entry) return null;
+        return {
+          data: hydrateWorkDoneMap(entry.data || {}),
+          uploadedAt: entry.uploadedAt || null
+        };
+      } catch (err) {
+        console.warn('Failed to load local work done store:', err);
+        return null;
+      }
+    }
+
+    function saveWorkDoneToLocal(year, mapData, uploadedAt) {
+      try {
+        const raw = localStorage.getItem(WORK_DONE_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        parsed[year] = {
+          uploadedAt: uploadedAt || new Date().toISOString(),
+          data: serializeWorkDoneMap(mapData)
+        };
+        localStorage.setItem(WORK_DONE_STORAGE_KEY, JSON.stringify(parsed));
+      } catch (err) {
+        console.warn('Failed to save local work done store:', err);
+      }
+    }
+
+    async function loadWorkDoneStoreAsync(year) {
+      if (!year) return;
+      const local = loadWorkDoneFromLocal(year);
+      if (local) {
+        window.wData = local.data;
+        workDoneUploadedAt = local.uploadedAt;
+      }
+      if (window.isApiEnabled && window.isApiEnabled() && window.loadWorkDoneFromApi) {
+        try {
+          const apiPayload = await window.loadWorkDoneFromApi(year);
+          if (apiPayload?.data && Object.keys(apiPayload.data).length > 0) {
+            window.wData = hydrateWorkDoneMap(apiPayload.data);
+            workDoneUploadedAt = apiPayload.uploadedAt || workDoneUploadedAt;
+            saveWorkDoneToLocal(year, window.wData, workDoneUploadedAt);
+          }
+        } catch (err) {
+          console.warn('Failed to load work done from API:', err);
+        }
+      }
+    }
+
+    function getSelectedWorkDoneYear() {
+      return document.getElementById('workDoneFySelect')?.value || currentFinancialYear;
+    }
+
+    function refreshWorkDoneYearSelector() {
+      const select = document.getElementById('workDoneFySelect');
+      if (!select) return;
+      const options = getFinancialYearOptions ? getFinancialYearOptions() : [currentFinancialYear];
+      const safeOptions = options.filter(Boolean);
+      select.innerHTML = safeOptions.map(year => `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`).join('');
+      const selected = getSelectedWorkDoneYear();
+      if (safeOptions.includes(selected)) {
+        select.value = selected;
+      } else if (currentFinancialYear && safeOptions.includes(currentFinancialYear)) {
+        select.value = currentFinancialYear;
+      } else if (safeOptions.length) {
+        select.value = safeOptions[0];
+      }
+    }
+
+    function removeWorkDoneFromLocal(year) {
+      try {
+        const raw = localStorage.getItem(WORK_DONE_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        delete parsed[year];
+        localStorage.setItem(WORK_DONE_STORAGE_KEY, JSON.stringify(parsed));
+      } catch (err) {
+        console.warn('Failed to remove local work done snapshot:', err);
+      }
+    }
+
+    function clearAllWorkDoneFromLocal() {
+      localStorage.setItem(WORK_DONE_STORAGE_KEY, JSON.stringify({}));
+    }
+
+    async function clearWorkDoneForSelectedFy() {
+      const year = getSelectedWorkDoneYear();
+      if (!year) {
+        alert('Please select a financial year.');
+        return;
+      }
+      if (!confirm(`Clear work done snapshot for ${year}?`)) return;
+      removeWorkDoneFromLocal(year);
+      if (window.isApiEnabled && window.isApiEnabled() && window.deleteWorkDoneForYearFromApi) {
+        await window.deleteWorkDoneForYearFromApi(year);
+      }
+      if (year === currentFinancialYear) {
+        window.wData = null;
+        workDoneUploadedAt = null;
+        render();
+      }
+      alert(`Work done cleared for ${year}.`);
+    }
+    window.clearWorkDoneForSelectedFy = clearWorkDoneForSelectedFy;
+
+    async function clearAllWorkDoneSnapshots() {
+      if (!confirm('Clear ALL work done snapshots from local cache and server?')) return;
+      clearAllWorkDoneFromLocal();
+      if (window.isApiEnabled && window.isApiEnabled() && window.clearAllWorkDoneFromApi) {
+        await window.clearAllWorkDoneFromApi();
+      }
+      window.wData = null;
+      workDoneUploadedAt = null;
+      render();
+      alert('All work done snapshots cleared.');
+    }
+    window.clearAllWorkDoneSnapshots = clearAllWorkDoneSnapshots;
 
     function getGroupName(group) {
       const name = group.name ? String(group.name).trim() : '';
@@ -450,15 +606,16 @@
       const container = document.getElementById('groupFilterContainer');
       if (!select) return;
       const current = select.value || 'all';
+      const allGroups = getAllGroups();
       const options = [
         '<option value="all">All Standard Jobs</option>',
-        ...groupStore.map(group => `<option value="${escapeHtml(group.id)}">${escapeHtml(getGroupName(group))}</option>`)
+        ...allGroups.map(group => `<option value="${escapeHtml(group.id)}">${escapeHtml(getGroupName(group))}${group.scope === 'public' ? ' (Public)' : ''}</option>`)
       ];
       select.innerHTML = options.join('');
-      select.value = groupStore.some(group => group.id === current) ? current : 'all';
+      select.value = allGroups.some(group => group.id === current) ? current : 'all';
       // Show/hide group filter container based on whether groups exist
       if (container) {
-        container.style.display = groupStore.length > 0 ? 'flex' : 'none';
+        container.style.display = allGroups.length > 0 ? 'flex' : 'none';
       }
     }
 
@@ -493,15 +650,16 @@
     function renderGroupList() {
       const list = document.getElementById('groupList');
       if (!list) return;
-      if (!groupStore.length) {
+      const allGroups = getAllGroups();
+      if (!allGroups.length) {
         list.innerHTML = '<p class="group-help">No groups created yet.</p>';
         return;
       }
-      list.innerHTML = groupStore.map(group => `
+      list.innerHTML = allGroups.map(group => `
         <div class="group-item">
           <div>
             <h4>${escapeHtml(getGroupName(group))}</h4>
-            <p>${escapeHtml(group.jobNumbers.join(', '))} • Unit: ${escapeHtml(getGroupUnitLabel(group))}${group.rollUp ? ' • Roll Up' : ''}</p>
+            <p>${escapeHtml(group.jobNumbers.join(', '))} • Unit: ${escapeHtml(getGroupUnitLabel(group))}${group.rollUp ? ' • Roll Up' : ''} • ${group.scope === 'public' ? 'Public' : 'Private'}</p>
           </div>
           <div class="group-item-actions">
             <button type="button" class="group-action-button" data-group-edit="${escapeHtml(group.id)}">Edit</button>
@@ -599,6 +757,11 @@
       editingGroupId = null;
       document.getElementById('groupModalTitle').textContent = 'Create Group';
       document.getElementById('groupSubmit').textContent = 'Save Group';
+      const scopeInput = document.getElementById('groupScope');
+      if (scopeInput) {
+        scopeInput.disabled = false;
+        scopeInput.value = 'private';
+      }
       const searchInput = document.getElementById('groupJobSearch');
       if (searchInput) searchInput.value = '';
       renderGroupJobTable({ filterText: '', selectedJobs: [] });
@@ -610,7 +773,7 @@
       if (!modal) return;
       resetGroupForm();
       if (groupId) {
-        const group = groupStore.find(entry => entry.id === groupId);
+        const group = getAllGroups().find(entry => entry.id === groupId);
         if (group) {
           editingGroupId = groupId;
           document.getElementById('groupModalTitle').textContent = 'Edit Group';
@@ -618,12 +781,17 @@
           document.getElementById('groupName').value = group.name || '';
           document.getElementById('groupDesc').value = group.description || '';
           document.getElementById('groupRollup').checked = Boolean(group.rollUp);
+          const scopeInput = document.getElementById('groupScope');
+          if (scopeInput) {
+            scopeInput.value = group.scope || 'private';
+            scopeInput.disabled = true;
+          }
         }
       }
       renderGroupList();
       renderGroupJobTable({
         filterText: document.getElementById('groupJobSearch')?.value || '',
-        selectedJobs: groupId ? groupStore.find(entry => entry.id === groupId)?.jobNumbers || [] : []
+        selectedJobs: groupId ? getAllGroups().find(entry => entry.id === groupId)?.jobNumbers || [] : []
       });
       updateGroupRollupHelp();
       modal.classList.add('open');
@@ -633,24 +801,32 @@
       document.getElementById('groupModal').classList.remove('open');
     }
 
-    function deleteGroup(groupId) {
-      const group = groupStore.find(entry => entry.id === groupId);
+    async function deleteGroup(groupId) {
+      const group = getAllGroups().find(entry => entry.id === groupId);
       if (!group) return;
       const confirmed = confirm(`Delete group "${getGroupName(group)}"?`);
       if (!confirmed) return;
-      groupStore = groupStore.filter(entry => entry.id !== groupId);
-      saveGroupStore();
+      if (group.scope === 'public') {
+        if (window.isApiEnabled && window.isApiEnabled() && window.deletePublicGroupFromApi) {
+          await window.deletePublicGroupFromApi(groupId);
+        }
+        publicGroupStore = publicGroupStore.filter(entry => entry.id !== groupId);
+      } else {
+        groupStore = groupStore.filter(entry => entry.id !== groupId);
+        saveGroupStore();
+      }
       updateGroupFilterOptions();
       renderGroupList();
       render();
     }
 
-    function handleGroupSubmit(event) {
+    async function handleGroupSubmit(event) {
       event.preventDefault();
       const name = document.getElementById('groupName').value.trim();
       const jobNumbers = getSelectedGroupJobNumbers();
       const description = document.getElementById('groupDesc').value.trim();
       const rollUp = document.getElementById('groupRollup').checked;
+      const scope = document.getElementById('groupScope')?.value || 'private';
       if (!jobNumbers.length) {
         alert('Please enter at least one Standard Job Number.');
         return;
@@ -667,15 +843,34 @@
         name,
         jobNumbers: Array.from(new Set(jobNumbers)),
         description,
-        rollUp
+        rollUp,
+        scope
       };
 
-      if (editingGroupId) {
-        groupStore = groupStore.map(entry => (entry.id === editingGroupId ? groupPayload : entry));
+      if (scope === 'public') {
+        if (!(window.isApiEnabled && window.isApiEnabled() && window.savePublicGroupToApi)) {
+          alert('Public groups require API mode.');
+          return;
+        }
+        const saved = await window.savePublicGroupToApi(groupPayload);
+        if (!saved) {
+          alert('Failed to save public group.');
+          return;
+        }
+        const next = { ...saved, scope: 'public' };
+        if (editingGroupId) {
+          publicGroupStore = publicGroupStore.map(entry => (entry.id === editingGroupId ? next : entry));
+        } else {
+          publicGroupStore.unshift(next);
+        }
       } else {
-        groupStore.push(groupPayload);
+        if (editingGroupId) {
+          groupStore = groupStore.map(entry => (entry.id === editingGroupId ? groupPayload : entry));
+        } else {
+          groupStore.push(groupPayload);
+        }
+        saveGroupStore();
       }
-      saveGroupStore();
       updateGroupFilterOptions();
       renderGroupList();
       render();
@@ -828,7 +1023,8 @@
       loadReviewStore();
       initializeForecastContext();  // Load forecast context from localStorage
       loadWorkOrderAmendments();
-      loadGroupStore();
+      await loadGroupStoreAsync();
+      refreshWorkDoneYearSelector();
       loadBreakdownPlanVersion();
       loadWgDisplayMode();
       const stageDisplay = document.getElementById('reviewStageDisplay');
@@ -864,6 +1060,8 @@
       }
       if (currentFinancialYear && currentReviewStage) {
         currentPlanVersion = getPreferredPlanVersion(currentFinancialYear);
+        refreshWorkDoneYearSelector();
+        await loadWorkDoneStoreAsync(currentFinancialYear);
         const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
         if (forecastCache) {
           fData = forecastCache.data;
@@ -1009,7 +1207,7 @@
       const forecast = Math.abs(varianceData.f || 0);
       const rawVariance = varianceData.v || 0;
       const absVariance = Math.abs(rawVariance);
-      const variancePercent = forecast > 0 ? (absVariance / forecast) * 100 : 0;
+      const variancePercent = forecast > 0 ? (absVariance / forecast) * 100 : (absVariance !== 0 ? 100 : 0);
       const isOverdelivering = rawVariance > 0;
 
       if (variancePercent >= 50) {
@@ -1071,7 +1269,7 @@
           return;
         }
 
-        const variancePercent = forecast > 0 ? (variance / forecast) * 100 : 0;
+        const variancePercent = forecast > 0 ? (variance / forecast) * 100 : (variance !== 0 ? 100 : 0);
 
         if (variancePercent < 10) {
           goodCount++;
@@ -1400,6 +1598,19 @@
       const file = e.target.files[0];
       if (!file) return;
       try {
+        const selectedYear = getSelectedWorkDoneYear();
+        if (!selectedYear) {
+          alert('Please select the financial year for this Work Done upload.');
+          return;
+        }
+        const clearBeforeUpload = Boolean(document.getElementById('clearWorkDoneForFyBeforeUpload')?.checked);
+        if (clearBeforeUpload) {
+          removeWorkDoneFromLocal(selectedYear);
+          if (window.isApiEnabled && window.isApiEnabled() && window.deleteWorkDoneForYearFromApi) {
+            await window.deleteWorkDoneForYearFromApi(selectedYear);
+          }
+        }
+
         const ab = await file.arrayBuffer();
         const wb = XLSX.read(ab);
         if (!wb.Sheets['Detail']) {
@@ -1493,6 +1704,21 @@
           };
           job.workOrders.push(workOrder);
         });
+
+        workDoneUploadedAt = new Date().toISOString();
+        saveWorkDoneToLocal(selectedYear, window.wData, workDoneUploadedAt);
+        if (window.isApiEnabled && window.isApiEnabled() && window.saveWorkDoneToApi && selectedYear) {
+          const uploadedAt = await window.saveWorkDoneToApi(selectedYear, serializeWorkDoneMap(window.wData));
+          if (uploadedAt) {
+            workDoneUploadedAt = uploadedAt;
+            saveWorkDoneToLocal(selectedYear, window.wData, workDoneUploadedAt);
+          }
+        }
+
+        if (selectedYear !== currentFinancialYear) {
+          await loadWorkDoneStoreAsync(currentFinancialYear);
+          alert(`Work Done uploaded for ${selectedYear}. Current dashboard remains on ${currentFinancialYear}.`);
+        }
         
         updateWorkGroupFilterOptions();
         render();
@@ -1884,7 +2110,7 @@
 
     function getWorkOrdersForGroup(groupId) {
       if (!groupId) return [];
-      const group = groupStore.find(entry => entry.id === groupId);
+      const group = getAllGroups().find(entry => entry.id === groupId);
       if (!group) return [];
       return group.jobNumbers.flatMap(jobNumber => window.wData?.get(jobNumber)?.workOrders || []);
     }
@@ -2170,7 +2396,7 @@
         baseJobs.push(job);
       });
       const groupFilter = document.getElementById('groupFilter')?.value || 'all';
-      const activeGroup = groupStore.find(group => group.id === groupFilter);
+      const activeGroup = getAllGroups().find(group => group.id === groupFilter);
 
       const search = document.getElementById('search')?.value.toLowerCase() || '';
       const period = document.getElementById('period')?.value || 'all';
@@ -2223,7 +2449,7 @@
       };
 
       const baseFiltered = baseJobs.filter(job => filterByGroup(job) && filterByEngineer(job) && filterBySearch(job));
-      const rollupJobs = groupStore
+      const rollupJobs = getAllGroups()
         .filter(group => group.rollUp)
         .map(group => buildGroupRollupJob(group, baseJobs))
         .filter(Boolean);
@@ -2473,7 +2699,8 @@
     function updateModalModeNotes(maxWorkDonePeriod, cutoffValue) {
       const cutoffLabel = cutoffValue === 'auto' ? 'Auto' : 'Selected';
       const periodLabel = maxWorkDonePeriod > 0 ? `Period ${maxWorkDonePeriod}` : 'Period N/A';
-      const message = `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining. Forecasts are managed in the Forecast Builder.`;
+      const uploadedLabel = workDoneUploadedAt ? ` Work Done uploaded: ${new Date(workDoneUploadedAt).toLocaleString()}.` : '';
+      const message = `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining. Forecasts are managed in the Forecast Builder.${uploadedLabel}`;
       const uploadNote = document.getElementById('uploadModeNote');
       const breakdownNote = document.getElementById('breakdownModeNote');
       if (uploadNote) uploadNote.textContent = message;
@@ -2753,7 +2980,7 @@
       // For group rollups, aggregate baselines from all jobs in the group
       let baselineCumulative;
       if (job.isGroupRollup) {
-        const group = groupStore.find(g => g.id === job.groupId);
+        const group = getAllGroups().find(g => g.id === job.groupId);
         baselineCumulative = group ? getGroupBaselineCumulative(group.jobNumbers, 13) : Array(13).fill(0);
       } else {
         baselineCumulative = getBaselineCumulative(job.jn, 13);

@@ -28,6 +28,22 @@ class DatabaseService {
   }
 
   prepareStatements() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS public_groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        roll_up INTEGER DEFAULT 0,
+        job_numbers_json TEXT NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS work_done_snapshots (
+        fiscal_year TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL,
+        uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // Forecast statements
     this.stmts = {
       insertForecast: this.db.prepare(`
@@ -123,6 +139,38 @@ class DatabaseService {
 
       deleteV1Override: this.db.prepare(`
         DELETE FROM v1_overrides WHERE job_number = ? AND fiscal_year = ?
+      `),
+
+      upsertPublicGroup: this.db.prepare(`
+        INSERT OR REPLACE INTO public_groups
+        (id, name, description, roll_up, job_numbers_json, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `),
+
+      getPublicGroups: this.db.prepare(`
+        SELECT * FROM public_groups ORDER BY updated_at DESC
+      `),
+
+      deletePublicGroup: this.db.prepare(`
+        DELETE FROM public_groups WHERE id = ?
+      `),
+
+      upsertWorkDoneSnapshot: this.db.prepare(`
+        INSERT OR REPLACE INTO work_done_snapshots
+        (fiscal_year, data_json, uploaded_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+      `),
+
+      getWorkDoneSnapshot: this.db.prepare(`
+        SELECT * FROM work_done_snapshots WHERE fiscal_year = ?
+      `),
+
+      deleteWorkDoneSnapshot: this.db.prepare(`
+        DELETE FROM work_done_snapshots WHERE fiscal_year = ?
+      `),
+
+      clearAllWorkDoneSnapshots: this.db.prepare(`
+        DELETE FROM work_done_snapshots
       `)
     };
   }
@@ -473,6 +521,56 @@ class DatabaseService {
    */
   removeV1Override(jobNumber, fiscalYear) {
     this.stmts.deleteV1Override.run(jobNumber, fiscalYear);
+  }
+
+  getPublicGroups() {
+    return this.stmts.getPublicGroups.all().map(row => ({
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      rollUp: Boolean(row.roll_up),
+      jobNumbers: JSON.parse(row.job_numbers_json || '[]'),
+      scope: 'public'
+    }));
+  }
+
+  savePublicGroup(group) {
+    const id = group.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    this.stmts.upsertPublicGroup.run(
+      id,
+      group.name || 'Unnamed Group',
+      group.description || '',
+      group.rollUp ? 1 : 0,
+      JSON.stringify(group.jobNumbers || [])
+    );
+    return { ...group, id, scope: 'public' };
+  }
+
+  deletePublicGroup(groupId) {
+    this.stmts.deletePublicGroup.run(groupId);
+  }
+
+  saveWorkDoneData(fiscalYear, data) {
+    this.stmts.upsertWorkDoneSnapshot.run(fiscalYear, JSON.stringify(data || {}));
+    const row = this.stmts.getWorkDoneSnapshot.get(fiscalYear);
+    return row?.uploaded_at || new Date().toISOString();
+  }
+
+  getWorkDoneData(fiscalYear) {
+    const row = this.stmts.getWorkDoneSnapshot.get(fiscalYear);
+    if (!row) return null;
+    return {
+      data: JSON.parse(row.data_json || '{}'),
+      uploadedAt: row.uploaded_at
+    };
+  }
+
+  deleteWorkDoneData(fiscalYear) {
+    this.stmts.deleteWorkDoneSnapshot.run(fiscalYear);
+  }
+
+  clearAllWorkDoneData() {
+    this.stmts.clearAllWorkDoneSnapshots.run();
   }
 
   // ========== Utility ==========

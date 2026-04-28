@@ -91,10 +91,14 @@ app.get('/api/health/db', async (req, res) => {
 const forecastRoutes = require('./routes/forecasts')(db);
 const baselineRoutes = require('./routes/baselines')(db);
 const commentRoutes = require('./routes/comments')(db);
+const groupRoutes = require('./routes/groups')(db);
+const workDoneRoutes = require('./routes/work-done')(db);
 
 app.use('/api/forecasts', forecastRoutes);
 app.use('/api/baselines', baselineRoutes);
 app.use('/api/comments', commentRoutes);
+app.use('/api/groups', groupRoutes);
+app.use('/api/work-done', workDoneRoutes);
 
 // Fallback route for SPA - serve index.html for any non-API routes
 app.get('*', (req, res) => {

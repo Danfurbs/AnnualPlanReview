@@ -636,6 +636,90 @@ async function deleteCommentFromApi(commentId) {
   }
 }
 
+async function loadPublicGroupsFromApi() {
+  if (!isApiEnabled()) return [];
+  try {
+    const response = await apiRequest('/groups');
+    return response.success && Array.isArray(response.data) ? response.data : [];
+  } catch (err) {
+    console.warn('Failed to load public groups from API:', err);
+    return [];
+  }
+}
+
+async function savePublicGroupToApi(group) {
+  if (!isApiEnabled()) return null;
+  try {
+    const response = await apiRequest('/groups', {
+      method: 'POST',
+      body: group
+    });
+    return response.success ? response.data : null;
+  } catch (err) {
+    console.error('Failed to save public group:', err);
+    return null;
+  }
+}
+
+async function deletePublicGroupFromApi(groupId) {
+  if (!isApiEnabled()) return false;
+  try {
+    const response = await apiRequest(`/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+    return response.success === true;
+  } catch (err) {
+    console.error('Failed to delete public group:', err);
+    return false;
+  }
+}
+
+async function loadWorkDoneFromApi(year) {
+  if (!isApiEnabled()) return null;
+  try {
+    const response = await apiRequest(`/work-done/${year}`);
+    if (!response.success) return null;
+    return { data: response.data || {}, uploadedAt: response.uploadedAt || null };
+  } catch (err) {
+    console.warn('Failed to load work done from API:', err);
+    return null;
+  }
+}
+
+async function saveWorkDoneToApi(year, data) {
+  if (!isApiEnabled()) return null;
+  try {
+    const response = await apiRequest(`/work-done/${year}`, {
+      method: 'POST',
+      body: { data }
+    });
+    return response.success ? (response.uploadedAt || new Date().toISOString()) : null;
+  } catch (err) {
+    console.error('Failed to save work done to API:', err);
+    return null;
+  }
+}
+
+async function deleteWorkDoneForYearFromApi(year) {
+  if (!isApiEnabled()) return false;
+  try {
+    const response = await apiRequest(`/work-done/${year}`, { method: 'DELETE' });
+    return response.success === true;
+  } catch (err) {
+    console.error('Failed to delete work done for fiscal year:', err);
+    return false;
+  }
+}
+
+async function clearAllWorkDoneFromApi() {
+  if (!isApiEnabled()) return false;
+  try {
+    const response = await apiRequest('/work-done', { method: 'DELETE' });
+    return response.success === true;
+  } catch (err) {
+    console.error('Failed to clear all work done snapshots:', err);
+    return false;
+  }
+}
+
 // ========== Health Check ==========
 
 /**
@@ -671,3 +755,10 @@ window.loadJobCommentsFromApi = loadJobCommentsFromApi;
 window.saveCommentToApi = saveCommentToApi;
 window.saveCommentsToApi = saveCommentsToApi;
 window.deleteCommentFromApi = deleteCommentFromApi;
+window.loadPublicGroupsFromApi = loadPublicGroupsFromApi;
+window.savePublicGroupToApi = savePublicGroupToApi;
+window.deletePublicGroupFromApi = deletePublicGroupFromApi;
+window.loadWorkDoneFromApi = loadWorkDoneFromApi;
+window.saveWorkDoneToApi = saveWorkDoneToApi;
+window.deleteWorkDoneForYearFromApi = deleteWorkDoneForYearFromApi;
+window.clearAllWorkDoneFromApi = clearAllWorkDoneFromApi;
