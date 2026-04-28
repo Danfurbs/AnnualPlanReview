@@ -8,6 +8,7 @@ require('dotenv').config();
 
 const INIT_DB_MAX_RETRIES = Number(process.env.INIT_DB_MAX_RETRIES || 8);
 const INIT_DB_RETRY_DELAY_MS = Number(process.env.INIT_DB_RETRY_DELAY_MS || 3000);
+const INIT_DB_STRICT = process.env.INIT_DB_STRICT === 'true';
 
 function shouldRetry(error) {
   const retryableCodes = new Set([
@@ -157,6 +158,11 @@ async function initializeDatabase() {
       console.error(`❌ Error initializing database on attempt ${attempt}:`, error.message || error);
       await pool.end();
       if (!retry) {
+        if (shouldRetry(error) && !INIT_DB_STRICT) {
+          console.warn('⚠️ PostgreSQL init skipped after retries due to transient DNS/connectivity issue.');
+          console.warn('⚠️ Service startup will attempt schema initialization via backend runtime connection.');
+          return;
+        }
         process.exit(1);
       }
       console.log(`Retrying in ${INIT_DB_RETRY_DELAY_MS}ms...`);
