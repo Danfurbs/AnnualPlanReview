@@ -22,9 +22,82 @@ class DatabaseService {
 
     this.db = new Database(dbPath);
     this.db.pragma('foreign_keys = ON');
+    this.ensureSchema();
 
     // Prepare common statements for better performance
     this.prepareStatements();
+  }
+
+  ensureSchema() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS forecasts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_number TEXT NOT NULL,
+        work_group TEXT NOT NULL,
+        fiscal_year TEXT NOT NULL,
+        plan_version TEXT NOT NULL,
+        period TEXT NOT NULL,
+        value REAL NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(job_number, work_group, fiscal_year, plan_version, period)
+      );
+      CREATE TABLE IF NOT EXISTS forecast_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_number TEXT NOT NULL,
+        work_group TEXT NOT NULL,
+        fiscal_year TEXT NOT NULL,
+        plan_version TEXT NOT NULL,
+        comment TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(job_number, work_group, fiscal_year, plan_version)
+      );
+      CREATE TABLE IF NOT EXISTS job_comments (
+        id TEXT PRIMARY KEY,
+        job_number TEXT NOT NULL,
+        category TEXT NOT NULL,
+        text TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        fiscal_year TEXT NOT NULL,
+        rf_stage TEXT NOT NULL,
+        root_cause TEXT,
+        corrective_action TEXT,
+        owner TEXT,
+        due_date TEXT,
+        evidence_links_json TEXT,
+        delivery_unit TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS baselines (
+        job_number TEXT PRIMARY KEY,
+        total_value REAL NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS v1_overrides (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_number TEXT NOT NULL,
+        fiscal_year TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(job_number, fiscal_year)
+      );
+    `);
+
+    this.ensureColumn('job_comments', 'root_cause', 'TEXT');
+    this.ensureColumn('job_comments', 'corrective_action', 'TEXT');
+    this.ensureColumn('job_comments', 'owner', 'TEXT');
+    this.ensureColumn('job_comments', 'due_date', 'TEXT');
+    this.ensureColumn('job_comments', 'evidence_links_json', 'TEXT');
+    this.ensureColumn('job_comments', 'delivery_unit', 'TEXT');
+  }
+
+  ensureColumn(tableName, columnName, columnType) {
+    const columns = this.db.prepare(`PRAGMA table_info(${tableName})`).all();
+    const exists = columns.some(column => column.name === columnName);
+    if (!exists) {
+      this.db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`);
+    }
   }
 
   prepareStatements() {
@@ -68,6 +141,10 @@ class DatabaseService {
         DELETE FROM forecasts
         WHERE job_number = ? AND fiscal_year = ? AND plan_version = ?
       `),
+      deleteForecastCommentsByJob: this.db.prepare(`
+        DELETE FROM forecast_comments
+        WHERE job_number = ? AND fiscal_year = ? AND plan_version = ?
+      `),
 
       // Forecast comments
       insertForecastComment: this.db.prepare(`
@@ -89,8 +166,8 @@ class DatabaseService {
       // Job comments
       insertJobComment: this.db.prepare(`
         INSERT OR REPLACE INTO job_comments
-        (id, job_number, category, text, timestamp, fiscal_year, rf_stage)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        (id, job_number, category, text, timestamp, fiscal_year, rf_stage, root_cause, corrective_action, owner, due_date, evidence_links_json, delivery_unit)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `),
 
       getJobComments: this.db.prepare(`
@@ -190,6 +267,7 @@ class DatabaseService {
 
       // Delete existing forecast data for this job
       this.stmts.deleteForecastsByJob.run(jobNumber, fiscalYear, planVersion);
+      this.stmts.deleteForecastCommentsByJob.run(jobNumber, fiscalYear, planVersion);
 
       // Insert forecast values for each work group and period
       for (const [workGroup, periods] of Object.entries(wgs)) {
@@ -314,7 +392,13 @@ class DatabaseService {
       comment.text,
       comment.timestamp,
       comment.fy,
-      comment.rf
+      comment.rf,
+      comment.rootCause || null,
+      comment.correctiveAction || null,
+      comment.owner || null,
+      comment.dueDate || null,
+      JSON.stringify(Array.isArray(comment.evidenceLinks) ? comment.evidenceLinks : []),
+      comment.deliveryUnit || null
     );
   }
 
@@ -334,7 +418,13 @@ class DatabaseService {
           comment.text,
           comment.timestamp,
           comment.fy,
-          comment.rf
+          comment.rf,
+          comment.rootCause || null,
+          comment.correctiveAction || null,
+          comment.owner || null,
+          comment.dueDate || null,
+          JSON.stringify(Array.isArray(comment.evidenceLinks) ? comment.evidenceLinks : []),
+          comment.deliveryUnit || null
         );
       }
     });
@@ -347,15 +437,7 @@ class DatabaseService {
    * @param {string} jobNumber
    */
   getJobComments(jobNumber) {
-    return this.stmts.getJobComments.all(jobNumber).map(row => ({
-      id: row.id,
-      jobNumber: row.job_number,
-      category: row.category,
-      text: row.text,
-      timestamp: row.timestamp,
-      fy: row.fiscal_year,
-      rf: row.rf_stage
-    }));
+    return this.stmts.getJobComments.all(jobNumber).map(row => this.mapJobCommentRow(row));
   }
 
   /**
@@ -370,13 +452,7 @@ class DatabaseService {
         commentStore[row.job_number] = [];
       }
       commentStore[row.job_number].push({
-        id: row.id,
-        jobNumber: row.job_number,
-        category: row.category,
-        text: row.text,
-        timestamp: row.timestamp,
-        fy: row.fiscal_year,
-        rf: row.rf_stage
+        ...this.mapJobCommentRow(row)
       });
     });
 
@@ -458,6 +534,7 @@ class DatabaseService {
 
         // Delete existing forecast data for this job
         this.stmts.deleteForecastsByJob.run(jobNumber, fiscalYear, planVersion);
+        this.stmts.deleteForecastCommentsByJob.run(jobNumber, fiscalYear, planVersion);
 
         // Insert forecast values for each work group and period
         for (const [workGroup, periods] of Object.entries(wgs || {})) {
@@ -478,6 +555,34 @@ class DatabaseService {
     });
 
     saveTransaction(data);
+  }
+
+  mapJobCommentRow(row) {
+    return {
+      id: row.id,
+      jobNumber: row.job_number,
+      category: row.category,
+      text: row.text,
+      timestamp: row.timestamp,
+      fy: row.fiscal_year,
+      rf: row.rf_stage,
+      rootCause: row.root_cause || '',
+      correctiveAction: row.corrective_action || '',
+      owner: row.owner || '',
+      dueDate: row.due_date || '',
+      evidenceLinks: this.parseEvidenceLinks(row.evidence_links_json),
+      deliveryUnit: row.delivery_unit || ''
+    };
+  }
+
+  parseEvidenceLinks(raw) {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
   }
 
   /**

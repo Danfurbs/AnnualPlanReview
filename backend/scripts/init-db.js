@@ -60,6 +60,12 @@ db.exec(`
     timestamp TEXT NOT NULL,
     fiscal_year TEXT NOT NULL,
     rf_stage TEXT NOT NULL,
+    root_cause TEXT,
+    corrective_action TEXT,
+    owner TEXT,
+    due_date TEXT,
+    evidence_links_json TEXT,
+    delivery_unit TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 

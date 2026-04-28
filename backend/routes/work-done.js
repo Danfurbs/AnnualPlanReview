@@ -1,10 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const { isValidFiscalYear, isPlainObject } = require('./validators');
 
 module.exports = (db) => {
   router.get('/:fiscalYear', async (req, res) => {
     try {
       const { fiscalYear } = req.params;
+      if (!isValidFiscalYear(fiscalYear)) {
+        return res.status(400).json({ success: false, error: 'Invalid fiscal year format' });
+      }
       const payload = await db.getWorkDoneData(fiscalYear);
       res.json({ success: true, data: payload?.data || {}, uploadedAt: payload?.uploadedAt || null });
     } catch (error) {
@@ -17,7 +21,10 @@ module.exports = (db) => {
     try {
       const { fiscalYear } = req.params;
       const { data } = req.body || {};
-      if (!data || typeof data !== 'object') {
+      if (!isValidFiscalYear(fiscalYear)) {
+        return res.status(400).json({ success: false, error: 'Invalid fiscal year format' });
+      }
+      if (!isPlainObject(data)) {
         return res.status(400).json({ success: false, error: 'Missing work done data payload' });
       }
       const uploadedAt = await db.saveWorkDoneData(fiscalYear, data);
@@ -31,6 +38,9 @@ module.exports = (db) => {
   router.delete('/:fiscalYear', async (req, res) => {
     try {
       const { fiscalYear } = req.params;
+      if (!isValidFiscalYear(fiscalYear)) {
+        return res.status(400).json({ success: false, error: 'Invalid fiscal year format' });
+      }
       await db.deleteWorkDoneData(fiscalYear);
       res.json({ success: true });
     } catch (error) {

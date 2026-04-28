@@ -64,9 +64,21 @@ class DatabaseServicePG {
         timestamp VARCHAR(50),
         fiscal_year VARCHAR(10),
         rf_stage VARCHAR(50),
+        root_cause TEXT,
+        corrective_action TEXT,
+        owner VARCHAR(120),
+        due_date VARCHAR(50),
+        evidence_links_json JSONB DEFAULT '[]'::jsonb,
+        delivery_unit VARCHAR(120),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS root_cause TEXT`);
+    await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS corrective_action TEXT`);
+    await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS owner VARCHAR(120)`);
+    await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS due_date VARCHAR(50)`);
+    await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS evidence_links_json JSONB DEFAULT '[]'::jsonb`);
+    await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS delivery_unit VARCHAR(120)`);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS baselines (
         job_number VARCHAR(50) PRIMARY KEY,
@@ -128,6 +140,10 @@ class DatabaseServicePG {
       // Delete existing forecast data for this job
       await client.query(
         'DELETE FROM forecasts WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3',
+        [jobNumber, fiscalYear, planVersion]
+      );
+      await client.query(
+        'DELETE FROM forecast_comments WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3',
         [jobNumber, fiscalYear, planVersion]
       );
 
@@ -288,15 +304,21 @@ class DatabaseServicePG {
   async saveJobComment(comment) {
     await this.ready;
     await this.pool.query(
-      `INSERT INTO job_comments (id, job_number, category, text, timestamp, fiscal_year, rf_stage)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO job_comments (id, job_number, category, text, timestamp, fiscal_year, rf_stage, root_cause, corrective_action, owner, due_date, evidence_links_json, delivery_unit)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13)
        ON CONFLICT (id) DO UPDATE SET
          category = EXCLUDED.category,
          text = EXCLUDED.text,
          timestamp = EXCLUDED.timestamp,
          fiscal_year = EXCLUDED.fiscal_year,
-         rf_stage = EXCLUDED.rf_stage`,
-      [comment.id, comment.jobNumber, comment.category, comment.text, comment.timestamp, comment.fy, comment.rf]
+         rf_stage = EXCLUDED.rf_stage,
+         root_cause = EXCLUDED.root_cause,
+         corrective_action = EXCLUDED.corrective_action,
+         owner = EXCLUDED.owner,
+         due_date = EXCLUDED.due_date,
+         evidence_links_json = EXCLUDED.evidence_links_json,
+         delivery_unit = EXCLUDED.delivery_unit`,
+      [comment.id, comment.jobNumber, comment.category, comment.text, comment.timestamp, comment.fy, comment.rf, comment.rootCause || null, comment.correctiveAction || null, comment.owner || null, comment.dueDate || null, JSON.stringify(Array.isArray(comment.evidenceLinks) ? comment.evidenceLinks : []), comment.deliveryUnit || null]
     );
   }
 
@@ -315,17 +337,29 @@ class DatabaseServicePG {
     const timestamps = comments.map(comment => comment.timestamp);
     const fiscalYears = comments.map(comment => comment.fy);
     const rfStages = comments.map(comment => comment.rf);
+    const rootCauses = comments.map(comment => comment.rootCause || null);
+    const correctiveActions = comments.map(comment => comment.correctiveAction || null);
+    const owners = comments.map(comment => comment.owner || null);
+    const dueDates = comments.map(comment => comment.dueDate || null);
+    const evidenceLinks = comments.map(comment => JSON.stringify(Array.isArray(comment.evidenceLinks) ? comment.evidenceLinks : []));
+    const deliveryUnits = comments.map(comment => comment.deliveryUnit || null);
 
     await this.pool.query(
-      `INSERT INTO job_comments (id, job_number, category, text, timestamp, fiscal_year, rf_stage)
-       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[], $6::text[], $7::text[])
+      `INSERT INTO job_comments (id, job_number, category, text, timestamp, fiscal_year, rf_stage, root_cause, corrective_action, owner, due_date, evidence_links_json, delivery_unit)
+       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[], $11::text[], $12::jsonb[], $13::text[])
        ON CONFLICT (id) DO UPDATE SET
          category = EXCLUDED.category,
          text = EXCLUDED.text,
          timestamp = EXCLUDED.timestamp,
          fiscal_year = EXCLUDED.fiscal_year,
-         rf_stage = EXCLUDED.rf_stage`,
-      [ids, jobNumbers, categories, texts, timestamps, fiscalYears, rfStages]
+         rf_stage = EXCLUDED.rf_stage,
+         root_cause = EXCLUDED.root_cause,
+         corrective_action = EXCLUDED.corrective_action,
+         owner = EXCLUDED.owner,
+         due_date = EXCLUDED.due_date,
+         evidence_links_json = EXCLUDED.evidence_links_json,
+         delivery_unit = EXCLUDED.delivery_unit`,
+      [ids, jobNumbers, categories, texts, timestamps, fiscalYears, rfStages, rootCauses, correctiveActions, owners, dueDates, evidenceLinks, deliveryUnits]
     );
   }
 
@@ -340,15 +374,7 @@ class DatabaseServicePG {
       [jobNumber]
     );
 
-    return result.rows.map(row => ({
-      id: row.id,
-      jobNumber: row.job_number,
-      category: row.category,
-      text: row.text,
-      timestamp: row.timestamp,
-      fy: row.fiscal_year,
-      rf: row.rf_stage
-    }));
+    return result.rows.map(row => this.mapJobCommentRow(row));
   }
 
   /**
@@ -367,13 +393,7 @@ class DatabaseServicePG {
         commentStore[row.job_number] = [];
       }
       commentStore[row.job_number].push({
-        id: row.id,
-        jobNumber: row.job_number,
-        category: row.category,
-        text: row.text,
-        timestamp: row.timestamp,
-        fy: row.fiscal_year,
-        rf: row.rf_stage
+        ...this.mapJobCommentRow(row)
       });
     });
 
@@ -733,6 +753,24 @@ class DatabaseServicePG {
 
   async close() {
     await this.pool.end();
+  }
+
+  mapJobCommentRow(row) {
+    return {
+      id: row.id,
+      jobNumber: row.job_number,
+      category: row.category,
+      text: row.text,
+      timestamp: row.timestamp,
+      fy: row.fiscal_year,
+      rf: row.rf_stage,
+      rootCause: row.root_cause || '',
+      correctiveAction: row.corrective_action || '',
+      owner: row.owner || '',
+      dueDate: row.due_date || '',
+      evidenceLinks: Array.isArray(row.evidence_links_json) ? row.evidence_links_json : [],
+      deliveryUnit: row.delivery_unit || ''
+    };
   }
 }
 

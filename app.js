@@ -37,6 +37,8 @@
     // Breakdown plan version preference
     const BREAKDOWN_PLAN_VERSION_KEY = 'aprBreakdownPlanVersionV1';
     let breakdownPlanVersion = 'v0'; // Default to v0
+    const DELIVERY_UNIT_KEY = 'aprDeliveryUnitV1';
+    let currentDeliveryUnit = localStorage.getItem(DELIVERY_UNIT_KEY) || 'all';
 
     function loadBreakdownPlanVersion() {
       const saved = localStorage.getItem(BREAKDOWN_PLAN_VERSION_KEY);
@@ -192,11 +194,20 @@
       }
     }
 
-    async function setReviewContext(stage, year, { persist = true } = {}) {
+    function getDeliveryUnitOptions() {
+      const values = new Set(['all']);
+      window.stdJobs.forEach(job => {
+        if (job?.mnt) values.add(job.mnt);
+      });
+      return Array.from(values);
+    }
+
+    async function setReviewContext(stage, year, { persist = true, deliveryUnit = currentDeliveryUnit } = {}) {
       if (!REVIEW_STAGES.includes(stage)) return;
       currentReviewStage = stage;
       currentFinancialYear = year || currentFinancialYear;
       currentPlanVersion = getPreferredPlanVersion(currentFinancialYear);
+      currentDeliveryUnit = deliveryUnit || 'all';
       requiresContextSelection = false;
       if (persist) {
         localStorage.setItem(REVIEW_STAGE_KEY, stage);
@@ -206,6 +217,7 @@
         if (currentPlanVersion) {
           localStorage.setItem(PLAN_VERSION_KEY, currentPlanVersion);
         }
+        localStorage.setItem(DELIVERY_UNIT_KEY, currentDeliveryUnit);
       }
       updateReviewContextDisplay();
       updateContextControls();
@@ -235,7 +247,8 @@
       if (reviewStageHelper) {
         const stageLabel = currentReviewStage || 'RF';
         const yearLabel = currentFinancialYear || 'FY';
-        reviewStageHelper.textContent = `Current selection: ${yearLabel} ${stageLabel}.`;
+        const duLabel = currentDeliveryUnit === 'all' ? 'All Delivery Units' : currentDeliveryUnit;
+        reviewStageHelper.textContent = `Current selection: ${yearLabel} ${stageLabel} • ${duLabel}.`;
       }
       const planDisplay = document.getElementById('planVersionDisplay');
       if (planDisplay) {
@@ -257,12 +270,13 @@
       return String(value || '').trim();
     }
 
-    async function setForecastContext(stage, year, planVersion, { persist = true } = {}) {
+    async function setForecastContext(stage, year, planVersion, { persist = true, deliveryUnit = currentDeliveryUnit } = {}) {
       if (!REVIEW_STAGES.includes(stage)) return;
       if (planVersion && !PLAN_VERSIONS.some(plan => plan.id === planVersion)) return;
       currentReviewStage = stage;
       currentFinancialYear = year || currentFinancialYear;
       currentPlanVersion = planVersion || currentPlanVersion;
+      currentDeliveryUnit = deliveryUnit || 'all';
       requiresContextSelection = false;
       if (persist) {
         localStorage.setItem(REVIEW_STAGE_KEY, stage);
@@ -272,6 +286,7 @@
         if (currentPlanVersion) {
           localStorage.setItem(PLAN_VERSION_KEY, currentPlanVersion);
         }
+        localStorage.setItem(DELIVERY_UNIT_KEY, currentDeliveryUnit);
       }
       updateReviewContextDisplay();
       updateContextControls();
@@ -310,6 +325,12 @@
         fySelect.innerHTML = options.map(year => `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`).join('');
         fySelect.value = options.includes(currentFinancialYear) ? currentFinancialYear : options[0] || '';
       }
+      const duSelect = document.getElementById('deliveryUnitSelect');
+      if (duSelect) {
+        const duOptions = getDeliveryUnitOptions();
+        duSelect.innerHTML = duOptions.map(unit => `<option value="${escapeHtml(unit)}">${unit === 'all' ? 'All Delivery Units' : escapeHtml(unit)}</option>`).join('');
+        duSelect.value = duOptions.includes(currentDeliveryUnit) ? currentDeliveryUnit : 'all';
+      }
       const grid = document.getElementById('stageSelectionGrid');
       if (grid && !grid.childElementCount) {
         grid.innerHTML = REVIEW_STAGES
@@ -318,11 +339,12 @@
         grid.querySelectorAll('[data-stage]').forEach(button => {
           button.addEventListener('click', () => {
             const selectedYear = document.getElementById('financialYearSelect')?.value || '';
+            const selectedDeliveryUnit = document.getElementById('deliveryUnitSelect')?.value || 'all';
             if (!selectedYear) {
               alert('Please choose a financial year.');
               return;
             }
-            setReviewContext(button.dataset.stage, selectedYear);
+            setReviewContext(button.dataset.stage, selectedYear, { deliveryUnit: selectedDeliveryUnit });
           });
         });
       }
@@ -962,7 +984,7 @@
       });
     }
 
-    async function addJobComment(jobNumber, category, value) {
+    async function addJobComment(jobNumber, category, value, details = {}) {
       const trimmed = value.trim();
       if (!trimmed) return;
       if (!commentStore[jobNumber]) commentStore[jobNumber] = [];
@@ -972,7 +994,13 @@
         text: trimmed,
         timestamp: new Date().toISOString(),
         fy: currentFinancialYear,
-        rf: currentReviewStage
+        rf: currentReviewStage,
+        rootCause: String(details.rootCause || '').trim(),
+        correctiveAction: String(details.correctiveAction || '').trim(),
+        owner: String(details.owner || '').trim(),
+        dueDate: String(details.dueDate || '').trim(),
+        evidenceLinks: Array.isArray(details.evidenceLinks) ? details.evidenceLinks : [],
+        deliveryUnit: currentDeliveryUnit === 'all' ? '' : currentDeliveryUnit
       };
       commentStore[jobNumber].unshift(newComment);
 
@@ -1768,7 +1796,13 @@
             text,
             timestamp: new Date().toISOString(),
             fy,
-            rf
+            rf,
+            rootCause: String(r['Root Cause'] || '').trim(),
+            correctiveAction: String(r['Corrective Action'] || '').trim(),
+            owner: String(r['Owner'] || '').trim(),
+            dueDate: String(r['Due Date'] || '').trim(),
+            evidenceLinks: String(r['Evidence Links'] || '').split(/\n|,/).map(link => link.trim()).filter(Boolean),
+            deliveryUnit: String(r['Delivery Unit'] || '').trim()
           });
           added += 1;
         });
@@ -1799,7 +1833,13 @@
             'Comment Type': entry.category,
             'Comment': entry.text,
             'Financial Year': entry.fy || '',
-            'Review Stage': entry.rf || ''
+            'Review Stage': entry.rf || '',
+            'Root Cause': entry.rootCause || '',
+            'Corrective Action': entry.correctiveAction || '',
+            'Owner': entry.owner || '',
+            'Due Date': entry.dueDate || '',
+            'Evidence Links': Array.isArray(entry.evidenceLinks) ? entry.evidenceLinks.join('\n') : '',
+            'Delivery Unit': entry.deliveryUnit || ''
           });
         });
       });
@@ -1808,7 +1848,7 @@
         return;
       }
       const ws = XLSX.utils.json_to_sheet(rows, {
-        header: ['Standard Job Number', 'Comment Type', 'Comment', 'Financial Year', 'Review Stage']
+        header: ['Standard Job Number', 'Comment Type', 'Comment', 'Financial Year', 'Review Stage', 'Root Cause', 'Corrective Action', 'Owner', 'Due Date', 'Evidence Links', 'Delivery Unit']
       });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Comments');
@@ -2342,6 +2382,7 @@
           disc: meta?.disc || 'Unknown', 
           desc: meta?.desc || `Job ${jn}`, 
           unit: meta?.unit || 'Unit not specified',
+          mnt: meta?.mnt || '',
           periods:{}, 
           tot:{f:0,a:0,v:0},
           wgs: {}
@@ -2428,6 +2469,7 @@
       };
 
       const engineerWorkGroups = getSelectedEngineerWorkGroups();
+      const filterByDeliveryUnit = (job) => currentDeliveryUnit === 'all' || job.mnt === currentDeliveryUnit;
       const filterByEngineer = (job) => {
         // If no engineer selected, show all jobs
         if (!engineerWorkGroups || engineerWorkGroups.length === 0) return true;
@@ -2448,12 +2490,12 @@
         return Object.values(wgData.periods || {}).some(periodData => periodData.f !== 0 || periodData.a !== 0);
       };
 
-      const baseFiltered = baseJobs.filter(job => filterByGroup(job) && filterByEngineer(job) && filterBySearch(job));
+      const baseFiltered = baseJobs.filter(job => filterByGroup(job) && filterByDeliveryUnit(job) && filterByEngineer(job) && filterBySearch(job));
       const rollupJobs = getAllGroups()
         .filter(group => group.rollUp)
         .map(group => buildGroupRollupJob(group, baseJobs))
         .filter(Boolean);
-      const rollupFiltered = rollupJobs.filter(job => filterByGroup(job) && filterByEngineer(job) && filterBySearch(job));
+      const rollupFiltered = rollupJobs.filter(job => filterByGroup(job) && filterByDeliveryUnit(job) && filterByEngineer(job) && filterBySearch(job));
 
       const applyVarianceFilter = (job) => {
         const displayData = getJobDisplayData(job);
@@ -2721,6 +2763,48 @@
       return jobData.wgs?.[wgFilter] || null;
     }
 
+    function getForecastPeriodsForGroup(jobNumbers, wgFilter, planVersion) {
+      const snapshot = getForecastSnapshot(currentFinancialYear, planVersion);
+      if (!snapshot || !Array.isArray(jobNumbers) || !jobNumbers.length) return null;
+
+      const totals = {};
+      for (let i = 1; i <= 13; i++) {
+        totals[`P${i}`] = 0;
+      }
+
+      let hasData = false;
+      const normalizedWgFilter = wgFilter && wgFilter !== 'all'
+        ? normalizeWorkGroupSet(wgFilter)
+        : null;
+
+      jobNumbers.forEach(jobNumber => {
+        const jobData = snapshot.data.get(jobNumber);
+        if (!jobData) return;
+
+        if (!normalizedWgFilter) {
+          Object.entries(jobData.periods || {}).forEach(([period, value]) => {
+            if (period in totals) {
+              totals[period] += Number(value) || 0;
+              hasData = true;
+            }
+          });
+          return;
+        }
+
+        Object.entries(jobData.wgs || {}).forEach(([wgName, wgPeriods]) => {
+          if (normalizeWorkGroupSet(wgName) !== normalizedWgFilter) return;
+          Object.entries(wgPeriods || {}).forEach(([period, value]) => {
+            if (period in totals) {
+              totals[period] += Number(value) || 0;
+              hasData = true;
+            }
+          });
+        });
+      });
+
+      return hasData ? totals : null;
+    }
+
     function openForecastComparison() {
       if (!currentFinancialYear || !currentReviewStage) {
         openStageModal();
@@ -2918,8 +3002,16 @@
       let cumV0 = 0, cumV1 = 0;
       const cumActual = [];
       const cumPlanV0 = [], cumPlanV1 = [];
-      const v0Periods = getForecastPeriodsForJob(job.jn, wgFilter, 'v0');
-      const v1Periods = getForecastPeriodsForJob(job.jn, wgFilter, 'v1');
+      const rollupGroup = job.isGroupRollup
+        ? getAllGroups().find(group => group.id === job.groupId)
+        : null;
+      const rollupJobNumbers = rollupGroup?.jobNumbers || [];
+      const v0Periods = job.isGroupRollup
+        ? getForecastPeriodsForGroup(rollupJobNumbers, wgFilter, 'v0')
+        : getForecastPeriodsForJob(job.jn, wgFilter, 'v0');
+      const v1Periods = job.isGroupRollup
+        ? getForecastPeriodsForGroup(rollupJobNumbers, wgFilter, 'v1')
+        : getForecastPeriodsForJob(job.jn, wgFilter, 'v1');
       
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
@@ -3331,18 +3423,44 @@
       currentCommentJob = job.jn;
       const commentType = document.getElementById('commentType');
       const commentText = document.getElementById('commentText');
+      const commentRootCause = document.getElementById('commentRootCause');
+      const commentCorrectiveAction = document.getElementById('commentCorrectiveAction');
+      const commentOwner = document.getElementById('commentOwner');
+      const commentDueDate = document.getElementById('commentDueDate');
+      const commentEvidenceLinks = document.getElementById('commentEvidenceLinks');
       const commentAdd = document.getElementById('commentAdd');
       if (!commentType.options.length) {
         commentType.innerHTML = COMMENT_CATEGORIES.map(category => `<option value="${category}">${category}</option>`).join('');
       }
       commentText.value = '';
+      if (commentRootCause) commentRootCause.value = '';
+      if (commentCorrectiveAction) commentCorrectiveAction.value = '';
+      if (commentOwner) commentOwner.value = '';
+      if (commentDueDate) commentDueDate.value = '';
+      if (commentEvidenceLinks) commentEvidenceLinks.value = '';
       commentAdd.onclick = () => {
-        addJobComment(job.jn, commentType.value, commentText.value);
+        const evidenceLinks = (commentEvidenceLinks?.value || '')
+          .split('\n')
+          .map(link => link.trim())
+          .filter(Boolean);
+        addJobComment(job.jn, commentType.value, commentText.value, {
+          rootCause: commentRootCause?.value || '',
+          correctiveAction: commentCorrectiveAction?.value || '',
+          owner: commentOwner?.value || '',
+          dueDate: commentDueDate?.value || '',
+          evidenceLinks
+        });
         commentText.value = '';
+        if (commentRootCause) commentRootCause.value = '';
+        if (commentCorrectiveAction) commentCorrectiveAction.value = '';
+        if (commentOwner) commentOwner.value = '';
+        if (commentDueDate) commentDueDate.value = '';
+        if (commentEvidenceLinks) commentEvidenceLinks.value = '';
         renderCommentsTable(job.jn);
         render();
       };
       renderCommentsTable(job.jn);
+      renderReconciliationSection(job);
       
       breakdownModal.classList.add('open');
       if (options.scrollTop && modalContent) {
@@ -3372,6 +3490,14 @@
             <span class="comment-meta">${formatTimestamp(entry.timestamp)}</span>
           </div>
           <div class="comment-body">${escapeHtml(entry.text)}</div>
+          ${(entry.rootCause || entry.correctiveAction || entry.owner || entry.dueDate) ? `
+            <div class="comment-body"><strong>Root cause:</strong> ${escapeHtml(entry.rootCause || '—')}</div>
+            <div class="comment-body"><strong>Corrective action:</strong> ${escapeHtml(entry.correctiveAction || '—')}</div>
+            <div class="comment-body"><strong>Owner:</strong> ${escapeHtml(entry.owner || '—')} &nbsp; <strong>Due:</strong> ${escapeHtml(entry.dueDate || '—')}</div>
+          ` : ''}
+          ${Array.isArray(entry.evidenceLinks) && entry.evidenceLinks.length ? `
+            <div class="comment-body"><strong>Evidence:</strong> ${entry.evidenceLinks.map(link => `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link)}</a>`).join('<br>')}</div>
+          ` : ''}
           <div class="comment-actions">
             <button type="button" class="comment-delete" data-id="${entry.id}">Delete</button>
           </div>
@@ -3385,6 +3511,70 @@
           render();
         });
       });
+    }
+
+    function renderReconciliationSection(job) {
+      const table = document.getElementById('reconciliationTable');
+      const trend = document.getElementById('reconciliationTrend');
+      const exportButton = document.getElementById('reconciliationExport');
+      if (!table || !trend) return;
+
+      const rows = [];
+      const totals = { plan: 0, forecast: 0, actual: 0, variance: 0 };
+      for (let i = 1; i <= 13; i++) {
+        const key = `P${i}`;
+        const entry = job.periods?.[key] || { f: 0, a: 0, v: 0 };
+        const plan = Number(entry.f) || 0;
+        const forecast = Number(entry.f) || 0;
+        const actual = Number(entry.a) || 0;
+        const variance = Number(entry.v) || 0;
+        totals.plan += plan;
+        totals.forecast += forecast;
+        totals.actual += actual;
+        totals.variance += variance;
+        rows.push({ period: key, plan, forecast, actual, variance });
+      }
+
+      table.innerHTML = `
+        <thead>
+          <tr><th>Period</th><th>Plan</th><th>Forecast</th><th>Actual</th><th>Variance</th></tr>
+        </thead>
+        <tbody>
+          ${rows.map(row => `<tr><td>${row.period}</td><td>${row.plan.toFixed(2)}</td><td>${row.forecast.toFixed(2)}</td><td>${row.actual.toFixed(2)}</td><td>${row.variance.toFixed(2)}</td></tr>`).join('')}
+          <tr><th>Total</th><th>${totals.plan.toFixed(2)}</th><th>${totals.forecast.toFixed(2)}</th><th>${totals.actual.toFixed(2)}</th><th>${totals.variance.toFixed(2)}</th></tr>
+        </tbody>
+      `;
+
+      const maxValue = Math.max(1, ...rows.flatMap(row => [Math.abs(row.forecast), Math.abs(row.actual)]));
+      trend.innerHTML = rows.map(row => `
+        <div class="breakdown-row">
+          <span>${row.period}</span>
+          <span style="display:inline-flex; align-items:center; gap:8px; min-width: 220px;">
+            <span style="display:inline-block; height:8px; background:#3b82f6; width:${(Math.abs(row.forecast) / maxValue) * 120}px;"></span>
+            <span style="display:inline-block; height:8px; background:#10b981; width:${(Math.abs(row.actual) / maxValue) * 120}px;"></span>
+          </span>
+        </div>
+      `).join('');
+
+      if (exportButton) {
+        exportButton.onclick = () => {
+          const csvRows = [
+            ['Period', 'Plan', 'Forecast', 'Actual', 'Variance'],
+            ...rows.map(row => [row.period, row.plan, row.forecast, row.actual, row.variance]),
+            ['Total', totals.plan, totals.forecast, totals.actual, totals.variance]
+          ];
+          const csv = csvRows.map(row => row.join(',')).join('\n');
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${job.jn}-reconciliation-${currentFinancialYear}-${currentReviewStage}.csv`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        };
+      }
     }
 
     function formatTimestamp(value) {

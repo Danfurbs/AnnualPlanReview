@@ -93,6 +93,12 @@ async function initializeDatabase() {
         timestamp VARCHAR(50),
         fiscal_year VARCHAR(10),
         rf_stage VARCHAR(50),
+        root_cause TEXT,
+        corrective_action TEXT,
+        owner VARCHAR(120),
+        due_date VARCHAR(50),
+        evidence_links_json JSONB DEFAULT '[]'::jsonb,
+        delivery_unit VARCHAR(120),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
       `);

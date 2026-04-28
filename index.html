@@ -650,12 +650,29 @@
             <div class="comment-form-row">
               <select id="commentType"></select>
             </div>
+            <div class="comment-form-row">
+              <input id="commentOwner" type="text" placeholder="Owner">
+              <input id="commentDueDate" type="date">
+            </div>
+            <textarea id="commentRootCause" placeholder="Root cause"></textarea>
+            <textarea id="commentCorrectiveAction" placeholder="Corrective action"></textarea>
+            <textarea id="commentEvidenceLinks" placeholder="Evidence links (one URL per line)"></textarea>
             <textarea id="commentText" placeholder="Enter your commentary..."></textarea>
             <div class="comment-actions">
               <button type="button" id="commentAdd">Add Comment</button>
             </div>
           </div>
         </div>
+      </div>
+      <div class="breakdown-section">
+        <h3>Period Reconciliation (Plan / Forecast / Actual / Variance)</h3>
+        <div class="comment-actions" style="justify-content: flex-start;">
+          <button type="button" class="secondary" id="reconciliationExport">Export Reconciliation CSV</button>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="wg-table" id="reconciliationTable"></table>
+        </div>
+        <div id="reconciliationTrend"></div>
       </div>
     </div>
   </div>
@@ -670,6 +687,10 @@
         <div class="file-input-group">
           <label for="financialYearSelect">Financial year</label>
           <select id="financialYearSelect"></select>
+        </div>
+        <div class="file-input-group">
+          <label for="deliveryUnitSelect">Delivery unit</label>
+          <select id="deliveryUnitSelect"></select>
         </div>
         <div class="stage-selection-grid" id="stageSelectionGrid"></div>
       </div>
