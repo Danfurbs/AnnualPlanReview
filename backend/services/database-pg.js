@@ -20,7 +20,28 @@ class DatabaseServicePG {
       console.error('Unexpected error on idle client', err);
     });
 
+    this.ready = this.ensureExtraTables();
     console.log('PostgreSQL database service initialized');
+  }
+
+  async ensureExtraTables() {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS public_groups (
+        id VARCHAR(100) PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        roll_up BOOLEAN DEFAULT FALSE,
+        job_numbers_json JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS work_done_snapshots (
+        fiscal_year VARCHAR(10) PRIMARY KEY,
+        data_json JSONB NOT NULL,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
   }
 
   // ========== Forecast Operations ==========
@@ -542,6 +563,83 @@ class DatabaseServicePG {
       'DELETE FROM v1_overrides WHERE job_number = $1 AND fiscal_year = $2',
       [jobNumber, fiscalYear]
     );
+  }
+
+  async getPublicGroups() {
+    await this.ready;
+    const result = await this.pool.query(
+      'SELECT * FROM public_groups ORDER BY updated_at DESC'
+    );
+    return result.rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      rollUp: Boolean(row.roll_up),
+      jobNumbers: Array.isArray(row.job_numbers_json) ? row.job_numbers_json : [],
+      scope: 'public'
+    }));
+  }
+
+  async savePublicGroup(group) {
+    await this.ready;
+    const id = group.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    await this.pool.query(
+      `INSERT INTO public_groups (id, name, description, roll_up, job_numbers_json, updated_at)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         description = EXCLUDED.description,
+         roll_up = EXCLUDED.roll_up,
+         job_numbers_json = EXCLUDED.job_numbers_json,
+         updated_at = CURRENT_TIMESTAMP`,
+      [id, group.name || 'Unnamed Group', group.description || '', Boolean(group.rollUp), JSON.stringify(group.jobNumbers || [])]
+    );
+    return { ...group, id, scope: 'public' };
+  }
+
+  async deletePublicGroup(groupId) {
+    await this.ready;
+    await this.pool.query('DELETE FROM public_groups WHERE id = $1', [groupId]);
+  }
+
+  async saveWorkDoneData(fiscalYear, data) {
+    await this.ready;
+    const result = await this.pool.query(
+      `INSERT INTO work_done_snapshots (fiscal_year, data_json, uploaded_at)
+       VALUES ($1, $2::jsonb, CURRENT_TIMESTAMP)
+       ON CONFLICT (fiscal_year) DO UPDATE SET
+         data_json = EXCLUDED.data_json,
+         uploaded_at = CURRENT_TIMESTAMP
+       RETURNING uploaded_at`,
+      [fiscalYear, JSON.stringify(data || {})]
+    );
+    return result.rows[0]?.uploaded_at || new Date().toISOString();
+  }
+
+  async getWorkDoneData(fiscalYear) {
+    await this.ready;
+    const result = await this.pool.query(
+      'SELECT data_json, uploaded_at FROM work_done_snapshots WHERE fiscal_year = $1',
+      [fiscalYear]
+    );
+    if (!result.rows.length) return null;
+    return {
+      data: result.rows[0].data_json || {},
+      uploadedAt: result.rows[0].uploaded_at
+    };
+  }
+
+  async deleteWorkDoneData(fiscalYear) {
+    await this.ready;
+    await this.pool.query(
+      'DELETE FROM work_done_snapshots WHERE fiscal_year = $1',
+      [fiscalYear]
+    );
+  }
+
+  async clearAllWorkDoneData() {
+    await this.ready;
+    await this.pool.query('DELETE FROM work_done_snapshots');
   }
 
   // ========== Utility ==========

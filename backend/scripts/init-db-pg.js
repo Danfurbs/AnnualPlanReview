@@ -101,6 +101,27 @@ async function initializeDatabase() {
     `);
     console.log('✓ Created index on v1_overrides');
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public_groups (
+        id VARCHAR(100) PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        roll_up BOOLEAN DEFAULT FALSE,
+        job_numbers_json JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✓ Created public_groups table');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS work_done_snapshots (
+        fiscal_year VARCHAR(10) PRIMARY KEY,
+        data_json JSONB NOT NULL,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✓ Created work_done_snapshots table');
+
     console.log('\n✅ Database initialization complete!');
     console.log('All tables created successfully.\n');
 
