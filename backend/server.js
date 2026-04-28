@@ -46,12 +46,12 @@ function parseCorsOrigin(value) {
 
 const corsOptions = {
   origin: parseCorsOrigin(CORS_ORIGIN),
-  credentials: true,
+  credentials: parseCorsOrigin(CORS_ORIGIN) === '*' ? false : true,
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions)); // Enable CORS for all routes
-app.use(bodyParser.json({ limit: '50mb' })); // Parse JSON bodies (increased limit for bulk data)
-app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
+app.use(bodyParser.json({ limit: '5mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev')); // HTTP request logging
 
 // Serve static files from parent directory (frontend)

@@ -5,17 +5,46 @@
 
 const express = require('express');
 const router = express.Router();
+const {
+  isValidJobNumber,
+  isValidFiscalYear,
+  isNonEmptyString,
+  isPlainObject,
+  isNullOrUndefined
+} = require('./validators');
 
-function isValidJobNumber(value) {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= 100;
-}
+const VALID_RF_STAGE = new Set(['RF3', 'RF6', 'RF9', 'RF11', 'IME']);
 
 function hasRequiredCommentFields(comment) {
   const requiredFields = ['id', 'jobNumber', 'category', 'text', 'timestamp', 'fy', 'rf'];
-  if (!comment || typeof comment !== 'object' || Array.isArray(comment)) {
+  if (!isPlainObject(comment)) {
     return requiredFields;
   }
-  return requiredFields.filter(field => !comment[field]);
+  return requiredFields.filter(field => isNullOrUndefined(comment[field]) || (typeof comment[field] === 'string' && comment[field].trim() === ''));
+}
+
+function normalizeEvidenceLinks(comment) {
+  if (!Array.isArray(comment.evidenceLinks)) return [];
+  return comment.evidenceLinks
+    .map(link => String(link || '').trim())
+    .filter(Boolean);
+}
+
+function validateCommentShape(comment) {
+  if (!isNonEmptyString(comment.id || '', 100)) return 'Invalid comment id';
+  if (!isValidJobNumber(comment.jobNumber)) return 'Invalid job number format';
+  if (!isNonEmptyString(comment.category || '', 50)) return 'Category is required (max 50 chars)';
+  if (!isNonEmptyString(comment.text || '', 5000)) return 'Comment text is required (max 5000 chars)';
+  if (!isValidFiscalYear(comment.fy || '')) return 'Invalid fiscal year';
+  if (!VALID_RF_STAGE.has(comment.rf)) return 'Invalid review stage';
+  if (comment.owner !== undefined && !isNonEmptyString(comment.owner || '', 120)) return 'Owner must be <= 120 chars when provided';
+  if (comment.rootCause !== undefined && String(comment.rootCause).length > 2000) return 'Root cause must be <= 2000 chars';
+  if (comment.correctiveAction !== undefined && String(comment.correctiveAction).length > 2000) return 'Corrective action must be <= 2000 chars';
+  if (comment.dueDate !== undefined && String(comment.dueDate).length > 30) return 'Due date must be <= 30 chars';
+  const links = normalizeEvidenceLinks(comment);
+  if (links.length > 20) return 'Maximum 20 evidence links per comment';
+  if (!links.every(link => /^https?:\/\//i.test(link))) return 'Evidence links must start with http:// or https://';
+  return null;
 }
 
 module.exports = (db) => {
@@ -92,6 +121,14 @@ module.exports = (db) => {
           error: 'Invalid job number format'
         });
       }
+      const validationError = validateCommentShape(comment);
+      if (validationError) {
+        return res.status(400).json({
+          success: false,
+          error: validationError
+        });
+      }
+      comment.evidenceLinks = normalizeEvidenceLinks(comment);
 
       await db.saveJobComment(comment);
 
@@ -153,6 +190,14 @@ module.exports = (db) => {
               error: `Comment jobNumber mismatch for ${jobNumber}: received ${comment.jobNumber}`
             });
           }
+          const validationError = validateCommentShape(comment);
+          if (validationError) {
+            return res.status(400).json({
+              success: false,
+              error: `Job ${jobNumber}: ${validationError}`
+            });
+          }
+          comment.evidenceLinks = normalizeEvidenceLinks(comment);
           commentsToSave.push(comment);
           count++;
         }

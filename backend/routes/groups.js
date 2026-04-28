@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { isValidJobNumber, isNonEmptyString } = require('./validators');
 
 module.exports = (db) => {
   router.get('/', async (req, res) => {
@@ -15,8 +16,14 @@ module.exports = (db) => {
   router.post('/', async (req, res) => {
     try {
       const group = req.body || {};
+      if (!isNonEmptyString(group.name || '', 120)) {
+        return res.status(400).json({ success: false, error: 'Group name is required and must be <= 120 characters' });
+      }
       if (!Array.isArray(group.jobNumbers) || group.jobNumbers.length === 0) {
         return res.status(400).json({ success: false, error: 'jobNumbers must be a non-empty array' });
+      }
+      if (!group.jobNumbers.every(isValidJobNumber)) {
+        return res.status(400).json({ success: false, error: 'Each job number must be a non-empty string <= 100 characters' });
       }
       const saved = await db.savePublicGroup(group);
       res.json({ success: true, data: saved });

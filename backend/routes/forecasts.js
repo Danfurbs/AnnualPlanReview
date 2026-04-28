@@ -4,24 +4,14 @@
 
 const express = require('express');
 const router = express.Router();
-
-function isValidFiscalYear(value) {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= 20;
-}
-
-function isValidPlanVersion(value) {
-  return typeof value === 'string' && /^v\d+$/.test(value);
-}
-
-function isValidJobNumber(value) {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= 100;
-}
+const {
+  isValidFiscalYear,
+  isValidPlanVersion,
+  isValidJobNumber,
+  isPlainObject
+} = require('./validators');
 
 const VALID_PERIOD_KEYS = new Set(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11', 'P12', 'P13']);
-
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
 
 function isFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value);
