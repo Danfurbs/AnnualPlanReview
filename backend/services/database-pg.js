@@ -142,6 +142,7 @@ class DatabaseServicePG {
         'DELETE FROM forecasts WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3',
         [jobNumber, fiscalYear, planVersion]
       );
+      // Remove stale comments for this job/version before reinserting current workgroup rows
       await client.query(
         'DELETE FROM forecast_comments WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3',
         [jobNumber, fiscalYear, planVersion]
@@ -558,10 +559,9 @@ class DatabaseServicePG {
         const values = forecastValues.map(v => v[5]);
 
         await client.query(
-          `INSERT INTO forecasts (job_number, work_group, fiscal_year, plan_version, period, value, updated_at)
-           SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::numeric[],
-                                (SELECT array_agg(CURRENT_TIMESTAMP) FROM generate_series(1, $7)))`,
-          [jobNums, workGroups, fiscalYears, planVersions, periods, values, forecastValues.length]
+          `INSERT INTO forecasts (job_number, work_group, fiscal_year, plan_version, period, value)
+           SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::numeric[])`,
+          [jobNums, workGroups, fiscalYears, planVersions, periods, values]
         );
       }
 
@@ -574,10 +574,9 @@ class DatabaseServicePG {
         const comments = commentValues.map(v => v[4]);
 
         await client.query(
-          `INSERT INTO forecast_comments (job_number, work_group, fiscal_year, plan_version, comment, updated_at)
-           SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
-                                (SELECT array_agg(CURRENT_TIMESTAMP) FROM generate_series(1, $6)))`,
-          [jobNums, workGroups, fiscalYears, planVersions, comments, commentValues.length]
+          `INSERT INTO forecast_comments (job_number, work_group, fiscal_year, plan_version, comment)
+           SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[])`,
+          [jobNums, workGroups, fiscalYears, planVersions, comments]
         );
       }
 

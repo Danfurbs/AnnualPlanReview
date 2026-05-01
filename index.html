@@ -130,23 +130,23 @@
         <span class="helper-text">Use 'Initialize v1 from v0' in Forecast Builder to populate v1</span>
       </div>
       <div class="control-group">
-        <label for="forecastCutoff">Forecast starts after</label>
-        <select id="forecastCutoff" onchange="render()">
-          <option value="auto">Auto (latest work done)</option>
-          <option value="P1">Period 1</option>
-          <option value="P2">Period 2</option>
-          <option value="P3">Period 3</option>
-          <option value="P4">Period 4</option>
-          <option value="P5">Period 5</option>
-          <option value="P6">Period 6</option>
-          <option value="P7">Period 7</option>
-          <option value="P8">Period 8</option>
-          <option value="P9">Period 9</option>
-          <option value="P10">Period 10</option>
-          <option value="P11">Period 11</option>
-          <option value="P12">Period 12</option>
-          <option value="P13">Period 13</option>
-        </select>
+        <label>Forecast starts after</label>
+        <div id="forecastCutoffTimeline" class="cutoff-timeline" role="radiogroup" aria-label="Forecast cutoff timeline">
+          <button type="button" class="cutoff-chip active" data-value="auto">Auto</button>
+          <button type="button" class="cutoff-chip" data-value="P1">P1</button>
+          <button type="button" class="cutoff-chip" data-value="P2">P2</button>
+          <button type="button" class="cutoff-chip" data-value="P3">P3</button>
+          <button type="button" class="cutoff-chip" data-value="P4">P4</button>
+          <button type="button" class="cutoff-chip" data-value="P5">P5</button>
+          <button type="button" class="cutoff-chip" data-value="P6">P6</button>
+          <button type="button" class="cutoff-chip" data-value="P7">P7</button>
+          <button type="button" class="cutoff-chip" data-value="P8">P8</button>
+          <button type="button" class="cutoff-chip" data-value="P9">P9</button>
+          <button type="button" class="cutoff-chip" data-value="P10">P10</button>
+          <button type="button" class="cutoff-chip" data-value="P11">P11</button>
+          <button type="button" class="cutoff-chip" data-value="P12">P12</button>
+          <button type="button" class="cutoff-chip" data-value="P13">P13</button>
+        </div>
         <span class="helper-text">Periods after this use forecast values</span>
       </div>
       <div class="control-group">
@@ -174,6 +174,8 @@
           <option value="good">Show On Track (Green)</option>
           <option value="warning">Show Minor Variance (Amber)</option>
           <option value="bad">Show Critical (Red)</option>
+          <option value="over">Show Over Delivered</option>
+          <option value="under">Show Under Delivered</option>
           <option value="noforecast">Show No Forecast (Grey)</option>
           <option value="variance">Show Any Variances</option>
         </select>
@@ -650,29 +652,12 @@
             <div class="comment-form-row">
               <select id="commentType"></select>
             </div>
-            <div class="comment-form-row">
-              <input id="commentOwner" type="text" placeholder="Owner">
-              <input id="commentDueDate" type="date">
-            </div>
-            <textarea id="commentRootCause" placeholder="Root cause"></textarea>
-            <textarea id="commentCorrectiveAction" placeholder="Corrective action"></textarea>
-            <textarea id="commentEvidenceLinks" placeholder="Evidence links (one URL per line)"></textarea>
             <textarea id="commentText" placeholder="Enter your commentary..."></textarea>
             <div class="comment-actions">
               <button type="button" id="commentAdd">Add Comment</button>
             </div>
           </div>
         </div>
-      </div>
-      <div class="breakdown-section">
-        <h3>Period Reconciliation (Plan / Forecast / Actual / Variance)</h3>
-        <div class="comment-actions" style="justify-content: flex-start;">
-          <button type="button" class="secondary" id="reconciliationExport">Export Reconciliation CSV</button>
-        </div>
-        <div style="overflow-x: auto;">
-          <table class="wg-table" id="reconciliationTable"></table>
-        </div>
-        <div id="reconciliationTrend"></div>
       </div>
     </div>
   </div>

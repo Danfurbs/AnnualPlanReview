@@ -86,6 +86,12 @@
     .job-variance-value { font-size: 15px; font-weight: 700; color: #1e293b; }
     .job-variance-value.variance-negative { color: #ef4444; }
     .job-variance-value.variance-positive { color: #22c55e; }
+    .job-progress-bar-wrap { margin-top: 8px; }
+    .job-progress-bar { position: relative; display: flex; width: 100%; height: 10px; border-radius: 999px; overflow: hidden; background: #e5e7eb; }
+    .job-progress-actual { height: 100%; background: #3b82f6; }
+    .job-progress-under { height: 100%; background: #d1d5db; }
+    .job-progress-overflow { height: 100%; background: #ef4444; }
+    .job-progress-plan-marker { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #111827; opacity: 0.75; }
     .job-progress-bar { width: 100%; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 4px; position: relative; }
     .job-progress-actual { height: 100%; background: #3b82f6; float: left; }
     .job-progress-forecast { height: 100%; background: #cbd5e0; float: left; }
@@ -202,7 +208,7 @@
     .breakdown-section { margin-top: 20px; }
     .breakdown-section h3 { margin-bottom: 12px; font-size: 16px; color: #2d3748; }
     .wg-table { width: 100%; border-collapse: collapse; min-width: 760px; }
-    .wg-table thead th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; }
+    .wg-table thead th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; position: sticky; top: 0; z-index: 3; }
     .wg-table thead th:first-child { text-align: left; }
     .wg-table tbody td { padding: 10px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: right; }
     .wg-table tbody td:first-child { text-align: left; color: #2d3748; }
@@ -1279,3 +1285,8 @@
   font-size: 14px;
   font-weight: 700;
 }
+
+.cutoff-timeline { display:flex; flex-wrap:wrap; gap:6px; }
+.cutoff-chip { border:1px solid #cbd5e1; background:#fff; border-radius:999px; padding:4px 8px; font-size:11px; cursor:pointer; }
+.cutoff-chip.active { background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
+.wo-table tfoot th { position: sticky; bottom: 0; background: #f8fafc; z-index: 2; }
