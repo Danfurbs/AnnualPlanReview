@@ -44,9 +44,12 @@ function parseCorsOrigin(value) {
   return origins.length === 1 ? origins[0] : origins;
 }
 
+const parsedCorsOrigin = parseCorsOrigin(CORS_ORIGIN);
+const allowCredentials = parsedCorsOrigin !== '*';
+
 const corsOptions = {
-  origin: parseCorsOrigin(CORS_ORIGIN),
-  credentials: parseCorsOrigin(CORS_ORIGIN) === '*' ? false : true,
+  origin: parsedCorsOrigin,
+  credentials: allowCredentials,
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions)); // Enable CORS for all routes

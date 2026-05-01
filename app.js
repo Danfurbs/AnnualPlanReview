@@ -13,6 +13,8 @@
     let currentWorkOrderWorkGroup = 'all';
     let lastForecastRowCount = null;
     let requiresContextSelection = true;
+    let disciplineCollapseState = {};
+    let currentForecastCutoff = 'auto';
 
     // Comment-related (not in modules)
     const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11', 'IME'];
@@ -465,10 +467,19 @@
 
     function hydrateWorkDoneMap(rawData) {
       const map = new Map();
-      Object.entries(rawData || {}).forEach(([jobNumber, payload]) => {
+      for (const [jobNumber, payload] of Object.entries(rawData || {})) {
         map.set(jobNumber, payload || { periods: {}, wgs: {}, workOrders: [] });
-      });
+      }
       return map;
+    }
+
+    async function runInChunks(items, handler, chunkSize = 300) {
+      for (let i = 0; i < items.length; i += chunkSize) {
+        const chunk = items.slice(i, i + chunkSize);
+        chunk.forEach(handler);
+        // Yield so large uploads don't freeze the UI
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
     }
 
     function loadWorkDoneFromLocal(year) {
@@ -971,6 +982,9 @@
       if (updatedJob) {
         showBreakdown(updatedJob, { scrollTop: false });
       }
+      if (document.getElementById('breakdown')?.classList.contains('show')) {
+        renderBreakdownWorkGroupTable();
+      }
       return true;
     }
 
@@ -1054,6 +1068,8 @@
       await loadGroupStoreAsync();
       refreshWorkDoneYearSelector();
       loadBreakdownPlanVersion();
+    try { disciplineCollapseState = JSON.parse(localStorage.getItem('aprDisciplineCollapseStateV1') || '{}'); } catch { disciplineCollapseState = {}; }
+    initForecastCutoffTimeline();
       loadWgDisplayMode();
       const stageDisplay = document.getElementById('reviewStageDisplay');
       if (stageDisplay && window.currentReviewStage) stageDisplay.textContent = window.currentReviewStage;
@@ -1185,11 +1201,20 @@
     }
 
     function getVarianceStatus(pd) {
-      const variance = pd?.v || 0;
-      const forecast = pd?.f || 0;
-      const ratio = forecast ? Math.abs(variance / forecast) : (variance !== 0 ? 1 : 0);
+      const variance = Number(pd?.v || 0);
+      const forecast = Number(pd?.f || 0);
+      const actual = Number(pd?.a || 0);
+      const hasNoForecast = forecast === 0;
+      if (hasNoForecast) {
+        return {
+          status: actual === 0 ? 'good' : 'noforecast',
+          hasVariance: variance !== 0,
+          hasNoForecast: true
+        };
+      }
+      const ratio = Math.abs(variance / forecast);
       const status = ratio > 0.5 ? 'bad' : ratio > 0.1 ? 'warning' : 'good';
-      return { status, hasVariance: variance !== 0 };
+      return { status, hasVariance: variance !== 0, hasNoForecast: false };
     }
 
     function escapeHtml(value) {
@@ -1582,7 +1607,7 @@
         fData = new Map();
         let matched = 0;
         lastForecastRowCount = rows.length;
-        rows.forEach(r => {
+        await runInChunks(rows, r => {
           // Try multiple column names for forecast
           let jn = String(r['Standard Job'] || r['STD_JOB_NO'] || r['Standard Job No'] || '').trim();
           if (jn.includes('.')) jn = jn.split('.').pop();
@@ -1652,7 +1677,7 @@
         let matched = 0;
         let sampleUnmatched = [];
         
-        rows.forEach(r => {
+        await runInChunks(rows, r => {
           const jobText = r['Standard Job Number & Desc'] || r['Standard Job No'] || '';
           const jn = extractJob(jobText);
           
@@ -2155,6 +2180,28 @@
       return group.jobNumbers.flatMap(jobNumber => window.wData?.get(jobNumber)?.workOrders || []);
     }
 
+
+    function getForecastCutoffValue() {
+      const timeline = document.getElementById('forecastCutoffTimeline');
+      if (timeline) {
+        const active = timeline.querySelector('.cutoff-chip.active');
+        return active?.dataset?.value || currentForecastCutoff || 'auto';
+      }
+      return currentForecastCutoff || 'auto';
+    }
+
+    function initForecastCutoffTimeline() {
+      const timeline = document.getElementById('forecastCutoffTimeline');
+      if (!timeline) return;
+      const chips = Array.from(timeline.querySelectorAll('.cutoff-chip'));
+      const apply = (val) => {
+        currentForecastCutoff = val || 'auto';
+        chips.forEach(ch => ch.classList.toggle('active', ch.dataset.value === currentForecastCutoff));
+      };
+      chips.forEach(ch => ch.addEventListener('click', () => { apply(ch.dataset.value); render(); }));
+      apply(currentForecastCutoff);
+    }
+
     function renderWorkOrders() {
       const table = document.getElementById('woTable');
       if (!table) return;
@@ -2333,7 +2380,7 @@
         dashboardPlanVersionSelect.value = currentPlanVersion;
       }
       // Always show work done and forecast (no view mode toggle)
-      const cutoffValue = document.getElementById('forecastCutoff')?.value || 'auto';
+      const cutoffValue = getForecastCutoffValue();
       const varianceFilter = document.getElementById('varianceFilter')?.value || 'all';
       const maxWorkDonePeriod = (() => {
         if (cutoffValue === 'auto') return getMaxWorkDonePeriod();
@@ -2439,8 +2486,15 @@
       const groupFilter = document.getElementById('groupFilter')?.value || 'all';
       const activeGroup = getAllGroups().find(group => group.id === groupFilter);
 
+      const normalizePeriodKey = (value) => {
+        if (!value || value === 'all') return value;
+        const numeric = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
+        if (Number.isNaN(numeric)) return String(value).toUpperCase();
+        return `P${numeric}`;
+      };
+
       const search = document.getElementById('search')?.value.toLowerCase() || '';
-      const period = document.getElementById('period')?.value || 'all';
+      const period = normalizePeriodKey(document.getElementById('period')?.value || 'all');
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
       const reviewStage = currentReviewStage;
       const getJobDisplayData = (job) => {
@@ -2500,13 +2554,12 @@
       const applyVarianceFilter = (job) => {
         const displayData = getJobDisplayData(job);
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
-        const { status, hasVariance } = getVarianceStatus(pd);
-        const forecast = pd.f || 0;
-        const actual = pd.a || 0;
-        const hasNoForecast = forecast === 0 && actual === 0;
+        const { status, hasVariance, hasNoForecast } = getVarianceStatus(pd);
         if (varianceFilter === 'all') return true;
         if (varianceFilter === 'variance') return hasVariance;
         if (varianceFilter === 'noforecast') return hasNoForecast;
+        if (varianceFilter === 'over') return pd.v > 0;
+        if (varianceFilter === 'under') return pd.v < 0;
         // For good/warning/bad filters, exclude jobs with no forecast
         if (hasNoForecast) return false;
         return status === varianceFilter;
@@ -2537,7 +2590,11 @@
       });
 
       const cont = document.getElementById('jobs');
-      cont.innerHTML = '';
+      if (!fData || !fData.size) {
+        cont.innerHTML = `<div class="discipline-section"><h3>No forecast loaded for ${currentFinancialYear} ${currentPlanVersion}</h3><p>Upload a forecast file or build one in Forecast Builder.</p></div>`;
+        return;
+      }
+      const fragment = document.createDocumentFragment();
       window.currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
       updateTopBarStats({ jobs: baseJobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter });
       updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter });
@@ -2559,6 +2616,8 @@
       sortedDisciplines.forEach(disc => {
         const sec = document.createElement('div');
         sec.className = 'discipline-section';
+        sec.dataset.discipline = disc;
+        if (disciplineCollapseState[disc]) sec.classList.add('collapsed');
         sec.innerHTML = `
           <div class="discipline-header">
             <h2>${disc}</h2>
@@ -2583,6 +2642,17 @@
           const statusClass = isGroupRollup ? 'group-rollup' : (isReviewed ? 'reviewed' : 'needs-review');
           const commentCount = isGroupRollup ? 0 : getJobComments(j.jn).length;
           const varianceValue = `${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)}`;
+          const plannedValue = Math.max(0, Number(pd.f) || 0);
+          const actualValue = Math.max(0, Number(pd.a) || 0);
+          const baseForBar = Math.max(plannedValue, actualValue, 1);
+          const planPct = (plannedValue / baseForBar) * 100;
+          const actualWithinPlanPct = (Math.min(actualValue, plannedValue) / baseForBar) * 100;
+          const overflowPct = actualValue > plannedValue
+            ? ((actualValue - plannedValue) / baseForBar) * 100
+            : 0;
+          const underPct = actualValue < plannedValue
+            ? ((plannedValue - actualValue) / baseForBar) * 100
+            : 0;
           const alertTitle = stat === 'bad'
             ? 'Significant variance detected'
             : stat === 'warning'
@@ -2678,6 +2748,14 @@
                         <div class="job-variance-value ${vc === 'negative' ? 'variance-negative' : vc === 'positive' ? 'variance-positive' : ''}">${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)} ${healthStatus ? `(${healthStatus.percent.toFixed(0)}%)` : ''}</div>
                       </div>
                     </div>
+                    <div class="job-progress-bar-wrap" title="Blue=actual delivered, Grey=remaining to plan, Red=over plan">
+                      <div class="job-progress-bar">
+                        <div class="job-progress-actual" style="width:${actualWithinPlanPct.toFixed(2)}%"></div>
+                        ${underPct > 0 ? `<div class="job-progress-under" style="width:${underPct.toFixed(2)}%"></div>` : ''}
+                        ${overflowPct > 0 ? `<div class="job-progress-overflow" style="width:${overflowPct.toFixed(2)}%"></div>` : ''}
+                        <div class="job-progress-plan-marker" style="left:${planPct.toFixed(2)}%"></div>
+                      </div>
+                    </div>
                   </div>
                 `}
 
@@ -2733,8 +2811,9 @@
         });
         
         sec.appendChild(grid);
-        cont.appendChild(sec);
+        fragment.appendChild(sec);
       });
+      cont.replaceChildren(fragment);
       updateModalModeNotes(maxWorkDonePeriod, cutoffValue);
     }
 
@@ -2949,7 +3028,7 @@
 
     function showBreakdown(job, options = {}) {
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
-      const period = document.getElementById('period')?.value || 'all';
+      const period = normalizePeriodKey(document.getElementById('period')?.value || 'all');
       const wgLabel = wgFilter === 'all' ? '' : ` • ${wgFilter}`;
       const breakdownModal = document.getElementById('breakdown');
       const modalContent = breakdownModal?.querySelector('.modal-content');
@@ -3423,44 +3502,25 @@
       currentCommentJob = job.jn;
       const commentType = document.getElementById('commentType');
       const commentText = document.getElementById('commentText');
-      const commentRootCause = document.getElementById('commentRootCause');
-      const commentCorrectiveAction = document.getElementById('commentCorrectiveAction');
-      const commentOwner = document.getElementById('commentOwner');
-      const commentDueDate = document.getElementById('commentDueDate');
-      const commentEvidenceLinks = document.getElementById('commentEvidenceLinks');
       const commentAdd = document.getElementById('commentAdd');
       if (!commentType.options.length) {
         commentType.innerHTML = COMMENT_CATEGORIES.map(category => `<option value="${category}">${category}</option>`).join('');
       }
+      commentType.value = COMMENT_CATEGORIES.includes(currentReviewStage) ? currentReviewStage : 'General';
       commentText.value = '';
-      if (commentRootCause) commentRootCause.value = '';
-      if (commentCorrectiveAction) commentCorrectiveAction.value = '';
-      if (commentOwner) commentOwner.value = '';
-      if (commentDueDate) commentDueDate.value = '';
-      if (commentEvidenceLinks) commentEvidenceLinks.value = '';
       commentAdd.onclick = () => {
-        const evidenceLinks = (commentEvidenceLinks?.value || '')
-          .split('\n')
-          .map(link => link.trim())
-          .filter(Boolean);
         addJobComment(job.jn, commentType.value, commentText.value, {
-          rootCause: commentRootCause?.value || '',
-          correctiveAction: commentCorrectiveAction?.value || '',
-          owner: commentOwner?.value || '',
-          dueDate: commentDueDate?.value || '',
-          evidenceLinks
+          rootCause: '',
+          correctiveAction: '',
+          owner: '',
+          dueDate: '',
+          evidenceLinks: []
         });
         commentText.value = '';
-        if (commentRootCause) commentRootCause.value = '';
-        if (commentCorrectiveAction) commentCorrectiveAction.value = '';
-        if (commentOwner) commentOwner.value = '';
-        if (commentDueDate) commentDueDate.value = '';
-        if (commentEvidenceLinks) commentEvidenceLinks.value = '';
         renderCommentsTable(job.jn);
         render();
       };
       renderCommentsTable(job.jn);
-      renderReconciliationSection(job);
       
       breakdownModal.classList.add('open');
       if (options.scrollTop && modalContent) {
@@ -3513,70 +3573,6 @@
       });
     }
 
-    function renderReconciliationSection(job) {
-      const table = document.getElementById('reconciliationTable');
-      const trend = document.getElementById('reconciliationTrend');
-      const exportButton = document.getElementById('reconciliationExport');
-      if (!table || !trend) return;
-
-      const rows = [];
-      const totals = { plan: 0, forecast: 0, actual: 0, variance: 0 };
-      for (let i = 1; i <= 13; i++) {
-        const key = `P${i}`;
-        const entry = job.periods?.[key] || { f: 0, a: 0, v: 0 };
-        const plan = Number(entry.f) || 0;
-        const forecast = Number(entry.f) || 0;
-        const actual = Number(entry.a) || 0;
-        const variance = Number(entry.v) || 0;
-        totals.plan += plan;
-        totals.forecast += forecast;
-        totals.actual += actual;
-        totals.variance += variance;
-        rows.push({ period: key, plan, forecast, actual, variance });
-      }
-
-      table.innerHTML = `
-        <thead>
-          <tr><th>Period</th><th>Plan</th><th>Forecast</th><th>Actual</th><th>Variance</th></tr>
-        </thead>
-        <tbody>
-          ${rows.map(row => `<tr><td>${row.period}</td><td>${row.plan.toFixed(2)}</td><td>${row.forecast.toFixed(2)}</td><td>${row.actual.toFixed(2)}</td><td>${row.variance.toFixed(2)}</td></tr>`).join('')}
-          <tr><th>Total</th><th>${totals.plan.toFixed(2)}</th><th>${totals.forecast.toFixed(2)}</th><th>${totals.actual.toFixed(2)}</th><th>${totals.variance.toFixed(2)}</th></tr>
-        </tbody>
-      `;
-
-      const maxValue = Math.max(1, ...rows.flatMap(row => [Math.abs(row.forecast), Math.abs(row.actual)]));
-      trend.innerHTML = rows.map(row => `
-        <div class="breakdown-row">
-          <span>${row.period}</span>
-          <span style="display:inline-flex; align-items:center; gap:8px; min-width: 220px;">
-            <span style="display:inline-block; height:8px; background:#3b82f6; width:${(Math.abs(row.forecast) / maxValue) * 120}px;"></span>
-            <span style="display:inline-block; height:8px; background:#10b981; width:${(Math.abs(row.actual) / maxValue) * 120}px;"></span>
-          </span>
-        </div>
-      `).join('');
-
-      if (exportButton) {
-        exportButton.onclick = () => {
-          const csvRows = [
-            ['Period', 'Plan', 'Forecast', 'Actual', 'Variance'],
-            ...rows.map(row => [row.period, row.plan, row.forecast, row.actual, row.variance]),
-            ['Total', totals.plan, totals.forecast, totals.actual, totals.variance]
-          ];
-          const csv = csvRows.map(row => row.join(',')).join('\n');
-          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `${job.jn}-reconciliation-${currentFinancialYear}-${currentReviewStage}.csv`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        };
-      }
-    }
-
     function formatTimestamp(value) {
       if (!value) return '';
       const date = new Date(value);
@@ -3588,6 +3584,11 @@
       const section = button.closest('.discipline-section');
       if (!section) return;
       const isCollapsed = section.classList.toggle('collapsed');
+      const disc = section.dataset.discipline;
+      if (disc) {
+        disciplineCollapseState[disc] = isCollapsed;
+        localStorage.setItem('aprDisciplineCollapseStateV1', JSON.stringify(disciplineCollapseState));
+      }
       button.textContent = isCollapsed ? 'Expand' : 'Collapse';
     }
 

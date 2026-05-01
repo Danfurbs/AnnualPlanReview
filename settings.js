@@ -278,8 +278,29 @@ async function updateApiSyncIndicator() {
 document.addEventListener('DOMContentLoaded', () => {
   addApiSyncIndicator();
 
-  // Update indicator periodically
-  setInterval(updateApiSyncIndicator, SYNC_INDICATOR_POLL_INTERVAL_MS);
+  let syncIndicatorInterval = null;
+  const startSyncPolling = () => {
+    if (syncIndicatorInterval) return;
+    syncIndicatorInterval = setInterval(updateApiSyncIndicator, SYNC_INDICATOR_POLL_INTERVAL_MS);
+  };
+  const stopSyncPolling = () => {
+    if (!syncIndicatorInterval) return;
+    clearInterval(syncIndicatorInterval);
+    syncIndicatorInterval = null;
+  };
+
+  const refreshSyncPollingState = () => {
+    const indicatorVisible = Boolean(document.getElementById('apiSyncIndicator'));
+    if (document.hidden || !indicatorVisible) {
+      stopSyncPolling();
+      return;
+    }
+    updateApiSyncIndicator();
+    startSyncPolling();
+  };
+
+  document.addEventListener('visibilitychange', refreshSyncPollingState);
+  refreshSyncPollingState();
 });
 
 // Close modal when clicking outside
