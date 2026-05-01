@@ -1274,6 +1274,14 @@
       }
     }
 
+
+    function normalizePeriodKey(value) {
+      if (!value || value === 'all') return value;
+      const numeric = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
+      if (Number.isNaN(numeric)) return String(value).toUpperCase();
+      return `P${numeric}`;
+    }
+
     function updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter }) {
       if (!baseFiltered || !baseFiltered.length) {
         // Hide or clear health indicator when no jobs
@@ -1308,8 +1316,6 @@
       let warningCount = 0;
       let criticalCount = 0;
       let noForecastCount = 0;
-      const issues = [];
-
       baseFiltered.forEach(job => {
         const displayData = getJobDisplayData(job);
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
@@ -1330,11 +1336,6 @@
           warningCount++;
         } else {
           criticalCount++;
-          if (issues.length < 5) {  // Only show top 5 issues
-            const rawVariance = pd.v || 0;
-            const direction = rawVariance > 0 ? 'over' : 'under';
-            issues.push(`${job.jn} is ${variancePercent.toFixed(0)}% ${direction} (${rawVariance > 0 ? '+' : ''}${rawVariance.toFixed(1)})`);
-          }
         }
       });
 
@@ -1395,24 +1396,6 @@
         const filter = segment.dataset.filter;
         segment.classList.toggle('active', filter && filter === varianceFilter);
       });
-
-      // Update issues list
-      const healthIssues = document.getElementById('healthIssues');
-      if (healthIssues) {
-        if (issues.length > 0 || criticalCount > 0) {
-          const issuesList = issues.map(issue => `<li>${escapeHtml(issue)}</li>`).join('');
-          const additionalText = criticalCount > issues.length ? `<li>and ${criticalCount - issues.length} more critical jobs...</li>` : '';
-          healthIssues.innerHTML = `
-            <div class="health-issues-title">Issues Requiring Attention:</div>
-            <ul class="health-issues-list">
-              ${issuesList}
-              ${additionalText}
-            </ul>
-          `;
-        } else {
-          healthIssues.innerHTML = '';
-        }
-      }
     }
 
     function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter }) {
@@ -2485,13 +2468,6 @@
       });
       const groupFilter = document.getElementById('groupFilter')?.value || 'all';
       const activeGroup = getAllGroups().find(group => group.id === groupFilter);
-
-      const normalizePeriodKey = (value) => {
-        if (!value || value === 'all') return value;
-        const numeric = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
-        if (Number.isNaN(numeric)) return String(value).toUpperCase();
-        return `P${numeric}`;
-      };
 
       const search = document.getElementById('search')?.value.toLowerCase() || '';
       const period = normalizePeriodKey(document.getElementById('period')?.value || 'all');

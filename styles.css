@@ -118,7 +118,7 @@
     .control-group label { font-size: 12px; color: #4a5568; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
     button { background: #3182ce; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; }
     button:hover { background: #2c5aa0; }
-    select, input { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; }
+    select, input { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; color: #1f2937; }
     .top-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px; }
     .summary-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 12px; }
     .summary-card .card-title { font-size: 12px; color: #64748b; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -1287,6 +1287,6 @@
 }
 
 .cutoff-timeline { display:flex; flex-wrap:wrap; gap:6px; }
-.cutoff-chip { border:1px solid #cbd5e1; background:#fff; border-radius:999px; padding:4px 8px; font-size:11px; cursor:pointer; }
+.cutoff-chip { border:1px solid #cbd5e1; background:#fff; color:#334155; border-radius:999px; padding:4px 8px; font-size:11px; cursor:pointer; }
 .cutoff-chip.active { background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
 .wo-table tfoot th { position: sticky; bottom: 0; background: #f8fafc; z-index: 2; }
