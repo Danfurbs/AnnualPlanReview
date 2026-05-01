@@ -1004,6 +1004,7 @@
       if (!commentStore[jobNumber]) commentStore[jobNumber] = [];
       const newComment = {
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        jobNumber,
         category,
         text: trimmed,
         timestamp: new Date().toISOString(),
@@ -1800,6 +1801,7 @@
           if (!commentStore[jn]) commentStore[jn] = [];
           commentStore[jn].unshift({
             id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            jobNumber: jn,
             category,
             text,
             timestamp: new Date().toISOString(),
@@ -2198,9 +2200,14 @@
         return { ...order, flags };
       });
 
-      const baseFiltered = enriched.filter(order => (
-        currentWorkOrderWorkGroup === 'all' || order.workGroup === currentWorkOrderWorkGroup
-      ));
+      const engineerWorkGroups = getSelectedEngineerWorkGroups();
+      const baseFiltered = enriched.filter(order => {
+        const matchesWorkGroupFilter = currentWorkOrderWorkGroup === 'all' || order.workGroup === currentWorkOrderWorkGroup;
+        if (!matchesWorkGroupFilter) return false;
+        if (!engineerWorkGroups || engineerWorkGroups.length === 0) return true;
+        const normalizedOrderWg = normalizeWorkGroupSet(order.workGroup);
+        return engineerWorkGroups.some(ewg => normalizeWorkGroupSet(ewg) === normalizedOrderWg);
+      });
 
       const filtered = baseFiltered.filter(order => {
         const haystack = [
@@ -3176,7 +3183,13 @@
       tableHTML += '<th>Total</th></tr></thead><tbody>';
 
       const isFiltered = wgFilter !== 'all';
-      const wgEntries = Object.entries(job.wgs || {}).filter(([wg]) => !isFiltered || wg === wgFilter);
+      const engineerWorkGroups = getSelectedEngineerWorkGroups();
+      const wgEntries = Object.entries(job.wgs || {}).filter(([wg]) => {
+        if (isFiltered && wg !== wgFilter) return false;
+        if (!engineerWorkGroups || engineerWorkGroups.length === 0) return true;
+        const normalizedWg = normalizeWorkGroupSet(wg);
+        return engineerWorkGroups.some(ewg => normalizeWorkGroupSet(ewg) === normalizedWg);
+      });
       const showForecast = wgDisplayMode === 'forecast';
 
       if (wgEntries.length === 0) {

@@ -595,9 +595,19 @@ async function saveCommentsToApi(commentStore) {
   if (!isApiEnabled()) return false;
 
   try {
+    const normalizedCommentStore = Object.fromEntries(
+      Object.entries(commentStore || {}).map(([jobNumber, comments]) => [
+        jobNumber,
+        (Array.isArray(comments) ? comments : []).map(comment => ({
+          ...comment,
+          jobNumber: comment?.jobNumber || jobNumber
+        }))
+      ])
+    );
+
     const response = await apiRequest('/comments/bulk', {
       method: 'POST',
-      body: { commentStore }
+      body: { commentStore: normalizedCommentStore }
     });
 
     const ok = response.success === true;
