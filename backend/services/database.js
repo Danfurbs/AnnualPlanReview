@@ -75,6 +75,17 @@ class DatabaseService {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS review_statuses (
+        job_number TEXT NOT NULL,
+        rf_stage TEXT NOT NULL,
+        reviewed_at TEXT NOT NULL,
+        PRIMARY KEY(job_number, rf_stage)
+      );
+      CREATE TABLE IF NOT EXISTS work_order_amendments (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        data_json TEXT NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
       CREATE TABLE IF NOT EXISTS v1_overrides (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         job_number TEXT NOT NULL,
@@ -248,7 +259,19 @@ class DatabaseService {
 
       clearAllWorkDoneSnapshots: this.db.prepare(`
         DELETE FROM work_done_snapshots
-      `)
+      `),
+
+      upsertReviewStatus: this.db.prepare(`
+        INSERT OR REPLACE INTO review_statuses (job_number, rf_stage, reviewed_at)
+        VALUES (?, ?, ?)
+      `),
+      deleteAllReviewStatuses: this.db.prepare(`DELETE FROM review_statuses`),
+      getAllReviewStatuses: this.db.prepare(`SELECT * FROM review_statuses`),
+      upsertWorkOrderAmendments: this.db.prepare(`
+        INSERT OR REPLACE INTO work_order_amendments (id, data_json, updated_at)
+        VALUES (1, ?, CURRENT_TIMESTAMP)
+      `),
+      getWorkOrderAmendments: this.db.prepare(`SELECT data_json FROM work_order_amendments WHERE id = 1`)
     };
   }
 
@@ -678,7 +701,47 @@ class DatabaseService {
     this.stmts.clearAllWorkDoneSnapshots.run();
   }
 
-  // ========== Utility ==========
+  
+
+  saveAllReviewStatuses(reviewStore) {
+    const tx = this.db.transaction((store) => {
+      this.stmts.deleteAllReviewStatuses.run();
+      Object.entries(store || {}).forEach(([jobNumber, stages]) => {
+        Object.entries(stages || {}).forEach(([stage, value]) => {
+          const reviewedAt = value?.reviewedAt || new Date().toISOString();
+          this.stmts.upsertReviewStatus.run(jobNumber, stage, reviewedAt);
+        });
+      });
+    });
+    tx(reviewStore);
+  }
+
+  getAllReviewStatuses() {
+    const rows = this.stmts.getAllReviewStatuses.all();
+    const out = {};
+    rows.forEach(row => {
+      if (!out[row.job_number]) out[row.job_number] = {};
+      out[row.job_number][row.rf_stage] = { reviewedAt: row.reviewed_at };
+    });
+    return out;
+  }
+
+
+  saveWorkOrderAmendments(data) {
+    this.stmts.upsertWorkOrderAmendments.run(JSON.stringify(data || {}));
+  }
+
+  getWorkOrderAmendments() {
+    const row = this.stmts.getWorkOrderAmendments.get();
+    if (!row?.data_json) return {};
+    try {
+      const parsed = JSON.parse(row.data_json);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (error) {
+      return {};
+    }
+  }
+// ========== Utility ==========
 
   ping() {
     const row = this.db.prepare('SELECT 1 AS ok').get();
