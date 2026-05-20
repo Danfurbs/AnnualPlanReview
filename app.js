@@ -170,7 +170,20 @@
       loadCommentStore();
     }
 
-    function loadReviewStore() {
+    async function loadReviewStoreAsync() {
+      if (window.isApiEnabled && window.isApiEnabled() && window.loadReviewsFromApi) {
+        try {
+          const apiData = await window.loadReviewsFromApi();
+          if (apiData) {
+            reviewStore = apiData;
+            localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(reviewStore));
+            return;
+          }
+        } catch (err) {
+          console.warn('Failed to load reviews from API, falling back to localStorage:', err);
+        }
+      }
+
       try {
         const raw = localStorage.getItem(REVIEW_STORAGE_KEY);
         reviewStore = raw ? JSON.parse(raw) : {};
@@ -182,6 +195,20 @@
 
     function saveReviewStore() {
       localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(reviewStore));
+    }
+
+    async function saveReviewStoreAsync() {
+      saveReviewStore();
+      if (window.isApiEnabled && window.isApiEnabled() && window.saveReviewsToApi) {
+        try {
+          const ok = await window.saveReviewsToApi(reviewStore);
+          if (!ok && window.API_CONFIG?.forceServerPersistence) {
+            alert('Server review sync failed. Local cache updated, but Render database did not confirm the write.');
+          }
+        } catch (err) {
+          console.warn('Failed to save review store to API (saved locally):', err);
+        }
+      }
     }
 
     function updateReviewContextDisplay() {
@@ -366,7 +393,7 @@
       reviewStore[jobNumber][stage] = {
         reviewedAt: new Date().toISOString()
       };
-      saveReviewStore();
+      saveReviewStoreAsync();
     }
 
     function reopenJobReview(jobNumber, stage) {
@@ -376,7 +403,7 @@
       if (!Object.keys(reviewStore[jobNumber]).length) {
         delete reviewStore[jobNumber];
       }
-      saveReviewStore();
+      saveReviewStoreAsync();
     }
 
     // Forecast functions are now in separate modules:
@@ -414,7 +441,20 @@
       }
     }
 
-    function loadWorkOrderAmendments() {
+    async function loadWorkOrderAmendmentsAsync() {
+      if (window.isApiEnabled && window.isApiEnabled() && window.loadWorkOrderAmendmentsFromApi) {
+        try {
+          const apiData = await window.loadWorkOrderAmendmentsFromApi();
+          if (apiData && typeof apiData === 'object') {
+            workOrderAmendments = apiData;
+            localStorage.setItem(WORK_ORDER_AMENDMENTS_KEY, JSON.stringify(workOrderAmendments));
+            return;
+          }
+        } catch (err) {
+          console.warn('Failed to load work order amendments from API, falling back to localStorage:', err);
+        }
+      }
+
       try {
         const raw = localStorage.getItem(WORK_ORDER_AMENDMENTS_KEY);
         workOrderAmendments = raw ? JSON.parse(raw) : {};
@@ -426,6 +466,20 @@
 
     function saveWorkOrderAmendments() {
       localStorage.setItem(WORK_ORDER_AMENDMENTS_KEY, JSON.stringify(workOrderAmendments));
+    }
+
+    async function saveWorkOrderAmendmentsAsync() {
+      saveWorkOrderAmendments();
+      if (window.isApiEnabled && window.isApiEnabled() && window.saveWorkOrderAmendmentsToApi) {
+        try {
+          const ok = await window.saveWorkOrderAmendmentsToApi(workOrderAmendments);
+          if (!ok && window.API_CONFIG?.forceServerPersistence) {
+            alert('Server work order amendment sync failed. Local cache updated, but Render database did not confirm the write.');
+          }
+        } catch (err) {
+          console.warn('Failed to save work order amendments to API (saved locally):', err);
+        }
+      }
     }
 
     function getAllGroups() {
@@ -947,7 +1001,7 @@
           updatedAt: new Date().toISOString()
         };
       }
-      saveWorkOrderAmendments();
+      saveWorkOrderAmendmentsAsync();
     }
 
     function formatUnits(value) {
@@ -1063,9 +1117,9 @@
 
     async function init() {
       await loadCommentStoreAsync();
-      loadReviewStore();
+      await loadReviewStoreAsync();
       initializeForecastContext();  // Load forecast context from localStorage
-      loadWorkOrderAmendments();
+      await loadWorkOrderAmendmentsAsync();
       await loadGroupStoreAsync();
       refreshWorkDoneYearSelector();
       loadBreakdownPlanVersion();

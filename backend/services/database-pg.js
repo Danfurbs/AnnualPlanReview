@@ -88,6 +88,21 @@ class DatabaseServicePG {
       )
     `);
     await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS review_statuses (
+        job_number VARCHAR(50) NOT NULL,
+        rf_stage VARCHAR(50) NOT NULL,
+        reviewed_at VARCHAR(50) NOT NULL,
+        PRIMARY KEY(job_number, rf_stage)
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS work_order_amendments (
+        id INTEGER PRIMARY KEY,
+        data_json JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await this.pool.query(`
       CREATE TABLE IF NOT EXISTS v1_overrides (
         id SERIAL PRIMARY KEY,
         job_number VARCHAR(50) NOT NULL,
@@ -744,6 +759,26 @@ class DatabaseServicePG {
 
   // ========== Utility ==========
 
+
+
+  async saveWorkOrderAmendments(data) {
+    await this.ready;
+    await this.pool.query(
+      `INSERT INTO work_order_amendments (id, data_json, updated_at)
+       VALUES (1, $1::jsonb, CURRENT_TIMESTAMP)
+       ON CONFLICT (id) DO UPDATE SET
+         data_json = EXCLUDED.data_json,
+         updated_at = CURRENT_TIMESTAMP`,
+      [JSON.stringify(data || {})]
+    );
+  }
+
+  async getWorkOrderAmendments() {
+    await this.ready;
+    const result = await this.pool.query('SELECT data_json FROM work_order_amendments WHERE id = 1');
+    if (!result.rows.length) return {};
+    return result.rows[0].data_json || {};
+  }
   async ping() {
     await this.ready;
     const result = await this.pool.query('SELECT 1 AS ok');
@@ -754,6 +789,42 @@ class DatabaseServicePG {
     await this.pool.end();
   }
 
+
+
+  async saveAllReviewStatuses(reviewStore) {
+    await this.ready;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM review_statuses');
+      for (const [jobNumber, stages] of Object.entries(reviewStore || {})) {
+        for (const [stage, value] of Object.entries(stages || {})) {
+          await client.query(
+            `INSERT INTO review_statuses (job_number, rf_stage, reviewed_at) VALUES ($1,$2,$3)
+             ON CONFLICT (job_number, rf_stage) DO UPDATE SET reviewed_at = EXCLUDED.reviewed_at`,
+            [jobNumber, stage, value?.reviewedAt || new Date().toISOString()]
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getAllReviewStatuses() {
+    await this.ready;
+    const result = await this.pool.query('SELECT * FROM review_statuses');
+    const out = {};
+    result.rows.forEach(row => {
+      if (!out[row.job_number]) out[row.job_number] = {};
+      out[row.job_number][row.rf_stage] = { reviewedAt: row.reviewed_at };
+    });
+    return out;
+  }
   mapJobCommentRow(row) {
     return {
       id: row.id,

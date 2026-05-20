@@ -646,6 +646,32 @@ async function deleteCommentFromApi(commentId) {
   }
 }
 
+
+async function loadWorkOrderAmendmentsFromApi() {
+  if (!isApiEnabled()) return null;
+  try {
+    const response = await apiRequest('/work-order-amendments');
+    return response.success && response.data ? response.data : {};
+  } catch (err) {
+    console.warn('Failed to load work order amendments from API:', err);
+    return null;
+  }
+}
+
+async function saveWorkOrderAmendmentsToApi(data) {
+  if (!isApiEnabled()) return false;
+  try {
+    const response = await apiRequest('/work-order-amendments', {
+      method: 'POST',
+      body: { data: data || {} }
+    });
+    return response.success === true;
+  } catch (err) {
+    console.error('Failed to save work order amendments to API:', err);
+    return false;
+  }
+}
+
 async function loadPublicGroupsFromApi() {
   if (!isApiEnabled()) return [];
   try {
@@ -730,6 +756,31 @@ async function clearAllWorkDoneFromApi() {
   }
 }
 
+
+async function loadReviewsFromApi() {
+  if (!isApiEnabled()) return null;
+  try {
+    const response = await apiRequest('/reviews');
+    return response.success && response.data ? response.data : null;
+  } catch (err) {
+    console.warn('Failed to load reviews from API:', err);
+    return null;
+  }
+}
+
+async function saveReviewsToApi(reviewStore) {
+  if (!isApiEnabled()) return false;
+  try {
+    const response = await apiRequest('/reviews/bulk', {
+      method: 'POST',
+      body: { reviewStore: reviewStore || {} }
+    });
+    return response.success === true;
+  } catch (err) {
+    console.error('Failed to save reviews to API:', err);
+    return false;
+  }
+}
 // ========== Health Check ==========
 
 /**
@@ -772,3 +823,9 @@ window.loadWorkDoneFromApi = loadWorkDoneFromApi;
 window.saveWorkDoneToApi = saveWorkDoneToApi;
 window.deleteWorkDoneForYearFromApi = deleteWorkDoneForYearFromApi;
 window.clearAllWorkDoneFromApi = clearAllWorkDoneFromApi;
+
+window.loadReviewsFromApi = loadReviewsFromApi;
+window.saveReviewsToApi = saveReviewsToApi;
+
+window.loadWorkOrderAmendmentsFromApi = loadWorkOrderAmendmentsFromApi;
+window.saveWorkOrderAmendmentsToApi = saveWorkOrderAmendmentsToApi;
