@@ -3617,7 +3617,7 @@
     
     document.getElementById('modal').onclick = e => { if (e.target.id==='modal') closeModal(); };
     document.getElementById('groupModal').onclick = e => { if (e.target.id === 'groupModal') closeGroupModal(); };
-    document.getElementById('breakdown').onclick = e => { if (e.target.id==='breakdown') closeBreakdown(); };
+    // Keep breakdown open when clicking the backdrop; close via the top-right × button only.
     document.getElementById('forecastCompare').onclick = e => { if (e.target.id === 'forecastCompare') closeForecastComparison(); };
 
     // Health stats, legend items, and bar segments all act as filter buttons
