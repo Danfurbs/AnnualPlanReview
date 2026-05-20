@@ -206,7 +206,7 @@
         <button class="close" onclick="closeModal()">&times;</button>
       </div>
       <p class="helper-text" id="uploadModeNote"></p>
-      <div class="file-input-group">
+      <div class="file-input-group upload-section-card">
         <label>Work Done (must have "Detail" sheet)</label>
         <div class="row-input">
           <label for="workDoneFySelect">Financial Year:</label>
@@ -216,7 +216,10 @@
           <input type="checkbox" id="clearWorkDoneForFyBeforeUpload" checked style="width: auto; margin-right: 8px;">
           Clear existing Work Done for selected FY before upload
         </label>
-        <input type="file" id="wFile" accept=".xlsx,.xls" onchange="loadWorkDone(event)">
+        <div class="row-input upload-row">
+          <input type="file" id="wFile" accept=".xlsx,.xls">
+          <button type="button" class="primary-button upload-workdone-button" onclick="uploadSelectedWorkDoneFile()">Upload Work Done File</button>
+        </div>
         <div class="row-input">
           <label>Header row:</label>
           <input type="number" id="wRow" value="2" min="1">
