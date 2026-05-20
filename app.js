@@ -1631,8 +1631,7 @@
       }
     }
 
-    async function loadWorkDone(e) {
-      const file = e.target.files[0];
+    async function loadWorkDone(file) {
       if (!file) return;
       try {
         const selectedYear = getSelectedWorkDoneYear();
@@ -1764,6 +1763,16 @@
         console.error(err);
         alert('Error loading work done');
       }
+    }
+
+    async function uploadSelectedWorkDoneFile() {
+      const workDoneInput = document.getElementById('wFile');
+      const file = workDoneInput?.files?.[0];
+      if (!file) {
+        alert('Please choose a Work Done file first.');
+        return;
+      }
+      await loadWorkDone(file);
     }
 
     async function loadComments(e) {

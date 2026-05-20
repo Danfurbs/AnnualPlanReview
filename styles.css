@@ -200,6 +200,9 @@
     .file-input-group label { display: block; font-weight: 600; margin-bottom: 8px; }
     .helper-text { font-size: 12px; color: #718096; margin-top: 4px; }
     .row-input { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+    .upload-section-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; }
+    .upload-row { flex-wrap: wrap; align-items: center; gap: 10px; }
+    .upload-workdone-button { white-space: nowrap; }
     .checkbox-list { max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; background: #f8fafc; }
     .checkbox-list label { display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; }
     .checkbox-list label:hover { background: #edf2f7; padding-left: 4px; }
