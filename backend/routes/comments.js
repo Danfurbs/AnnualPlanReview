@@ -30,6 +30,34 @@ function normalizeEvidenceLinks(comment) {
     .filter(Boolean);
 }
 
+
+function normalizeOptionalCommentFields(comment) {
+  if (!isPlainObject(comment)) return comment;
+
+  const optionalFieldMaxLengths = {
+    owner: 120,
+    rootCause: 2000,
+    correctiveAction: 2000,
+    dueDate: 30
+  };
+
+  Object.entries(optionalFieldMaxLengths).forEach(([field, maxLength]) => {
+    if (comment[field] === undefined || comment[field] === null) {
+      return;
+    }
+
+    const value = String(comment[field]).trim();
+    if (!value) {
+      delete comment[field];
+      return;
+    }
+
+    comment[field] = value.slice(0, maxLength);
+  });
+
+  return comment;
+}
+
 function validateCommentShape(comment) {
   if (!isNonEmptyString(comment.id || '', 100)) return 'Invalid comment id';
   if (!isValidJobNumber(comment.jobNumber)) return 'Invalid job number format';
@@ -104,7 +132,7 @@ module.exports = (db) => {
    */
   router.post('/', async (req, res) => {
     try {
-      const comment = req.body;
+      const comment = normalizeOptionalCommentFields(req.body);
 
       // Validate required fields
       const missingFields = hasRequiredCommentFields(comment);
@@ -177,6 +205,7 @@ module.exports = (db) => {
           });
         }
         for (const comment of comments) {
+          normalizeOptionalCommentFields(comment);
           const missingFields = hasRequiredCommentFields(comment);
           if (missingFields.length > 0) {
             return res.status(400).json({
