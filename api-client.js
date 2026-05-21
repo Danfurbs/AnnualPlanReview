@@ -544,6 +544,45 @@ async function deleteBaselineFromApi(jobNumber) {
 
 // ========== Comment API Functions ==========
 
+function normalizeCommentForApi(comment, fallbackJobNumber = '') {
+  const raw = (comment && typeof comment === 'object') ? comment : {};
+  const normalized = {
+    ...raw,
+    jobNumber: String(raw.jobNumber || fallbackJobNumber || '').trim(),
+    evidenceLinks: Array.isArray(raw.evidenceLinks)
+      ? raw.evidenceLinks.map(link => String(link || '').trim()).filter(Boolean)
+      : []
+  };
+
+  const optionalFieldMaxLengths = {
+    owner: 120,
+    rootCause: 2000,
+    correctiveAction: 2000,
+    dueDate: 30
+  };
+
+  Object.entries(optionalFieldMaxLengths).forEach(([field, maxLength]) => {
+    if (normalized[field] === undefined || normalized[field] === null) return;
+    const value = String(normalized[field]).trim();
+    if (!value) {
+      delete normalized[field];
+      return;
+    }
+    normalized[field] = value.slice(0, maxLength);
+  });
+
+  if (typeof normalized.category === 'string') {
+    normalized.category = normalized.category.trim().slice(0, 50);
+  }
+  if (typeof normalized.text === 'string') {
+    normalized.text = normalized.text.trim().slice(0, 5000);
+  }
+
+  return normalized;
+}
+
+
+
 /**
  * Load all job comments from API
  * @returns {Promise<Object|null>} - { jobNumber: [comments], ... } or null
@@ -576,7 +615,7 @@ async function saveCommentToApi(comment) {
   try {
     const response = await apiRequest('/comments', {
       method: 'POST',
-      body: comment
+      body: normalizeCommentForApi(comment)
     });
 
     return response.success === true;
@@ -598,10 +637,7 @@ async function saveCommentsToApi(commentStore) {
     const normalizedCommentStore = Object.fromEntries(
       Object.entries(commentStore || {}).map(([jobNumber, comments]) => [
         jobNumber,
-        (Array.isArray(comments) ? comments : []).map(comment => ({
-          ...comment,
-          jobNumber: comment?.jobNumber || jobNumber
-        }))
+        (Array.isArray(comments) ? comments : []).map(comment => normalizeCommentForApi(comment, jobNumber))
       ])
     );
 
