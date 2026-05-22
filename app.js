@@ -2886,7 +2886,18 @@
       const jobData = snapshot.data.get(jobNumber);
       if (!jobData) return null;
       if (!wgFilter || wgFilter === 'all') return jobData.periods || {};
-      return jobData.wgs?.[wgFilter] || null;
+
+      const directMatch = jobData.wgs?.[wgFilter];
+      if (directMatch) return directMatch;
+
+      const normalizedWgFilter = normalizeWorkGroupSet(wgFilter);
+      for (const [wgName, wgPeriods] of Object.entries(jobData.wgs || {})) {
+        if (normalizeWorkGroupSet(wgName) === normalizedWgFilter) {
+          return wgPeriods;
+        }
+      }
+
+      return null;
     }
 
     function getForecastPeriodsForGroup(jobNumbers, wgFilter, planVersion) {
@@ -3600,15 +3611,20 @@
         return;
       }
       const cards = comments.map(entry => {
-        const filteredWorkGroupLabel = entry.filteredWorkGroup
-          ? (window.workGroupSets?.get(entry.filteredWorkGroup) || entry.filteredWorkGroup)
-          : '';
+        const filteredWorkGroupCode = String(entry.filteredWorkGroup || '').trim();
+        let filteredWorkGroupLabel = '';
+        if (filteredWorkGroupCode) {
+          const description = window.workGroupSets?.get(filteredWorkGroupCode);
+          filteredWorkGroupLabel = description
+            ? `${filteredWorkGroupCode} • ${description}`
+            : filteredWorkGroupCode;
+        }
         return `
         <div class="comment-card">
           <div class="comment-card-header">
             <div class="comment-header-left">
               <span class="comment-type">${escapeHtml(entry.category)}</span>
-              ${filteredWorkGroupLabel ? `<span class="comment-context-tag" title="Comment added while filtered to a work group set">WG Filter: ${escapeHtml(filteredWorkGroupLabel)}</span>` : ''}
+              ${filteredWorkGroupLabel ? `<span class="comment-context-tag" title="Comment added while filtered to a work group set">WG: ${escapeHtml(filteredWorkGroupLabel)}</span>` : ''}
             </div>
             <span class="comment-meta">${formatTimestamp(entry.timestamp)}</span>
           </div>
