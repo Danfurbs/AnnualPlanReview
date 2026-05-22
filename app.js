@@ -1069,7 +1069,8 @@
         owner: String(details.owner || '').trim(),
         dueDate: String(details.dueDate || '').trim(),
         evidenceLinks: Array.isArray(details.evidenceLinks) ? details.evidenceLinks : [],
-        deliveryUnit: currentDeliveryUnit === 'all' ? '' : currentDeliveryUnit
+        deliveryUnit: currentDeliveryUnit === 'all' ? '' : currentDeliveryUnit,
+        filteredWorkGroup: String(details.filteredWorkGroup || '').trim()
       };
       commentStore[jobNumber].unshift(newComment);
 
@@ -3561,12 +3562,15 @@
       commentType.value = COMMENT_CATEGORIES.includes(currentReviewStage) ? currentReviewStage : 'General';
       commentText.value = '';
       commentAdd.onclick = () => {
+        const selectedWorkGroupFilter = document.getElementById('wgFilter')?.value || 'all';
+        const filteredWorkGroup = selectedWorkGroupFilter !== 'all' ? selectedWorkGroupFilter : '';
         addJobComment(job.jn, commentType.value, commentText.value, {
           rootCause: '',
           correctiveAction: '',
           owner: '',
           dueDate: '',
-          evidenceLinks: []
+          evidenceLinks: [],
+          filteredWorkGroup
         });
         commentText.value = '';
         renderCommentsTable(job.jn);
@@ -3595,10 +3599,17 @@
         commentList.innerHTML = '<div class="comment-empty">No comments yet.</div>';
         return;
       }
-      const cards = comments.map(entry => `
+      const cards = comments.map(entry => {
+        const filteredWorkGroupLabel = entry.filteredWorkGroup
+          ? (window.workGroupSets?.get(entry.filteredWorkGroup) || entry.filteredWorkGroup)
+          : '';
+        return `
         <div class="comment-card">
           <div class="comment-card-header">
-            <span class="comment-type">${escapeHtml(entry.category)}</span>
+            <div class="comment-header-left">
+              <span class="comment-type">${escapeHtml(entry.category)}</span>
+              ${filteredWorkGroupLabel ? `<span class="comment-context-tag" title="Comment added while filtered to a work group set">WG Filter: ${escapeHtml(filteredWorkGroupLabel)}</span>` : ''}
+            </div>
             <span class="comment-meta">${formatTimestamp(entry.timestamp)}</span>
           </div>
           <div class="comment-body">${escapeHtml(entry.text)}</div>
@@ -3614,7 +3625,8 @@
             <button type="button" class="comment-delete" data-id="${entry.id}">Delete</button>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
       commentList.innerHTML = cards;
       commentList.querySelectorAll('.comment-delete').forEach(btn => {
         btn.addEventListener('click', () => {
