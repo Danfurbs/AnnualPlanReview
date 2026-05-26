@@ -2548,7 +2548,29 @@
       const reviewStage = currentReviewStage;
       const getJobDisplayData = (job) => {
         if (wgFilter === 'all') {
-          return { periods: job.periods, tot: job.tot };
+          if (!engineerWorkGroups || engineerWorkGroups.length === 0) {
+            return { periods: job.periods, tot: job.tot };
+          }
+
+          const periods = {};
+          const totals = { f: 0, a: 0, v: 0 };
+          for (let i = 1; i <= 13; i++) {
+            const p = `P${i}`;
+            const data = engineerWorkGroups.reduce((acc, engineerWg) => {
+              const normalizedWg = normalizeWorkGroupSet(engineerWg);
+              const wgPeriod = job.wgs?.[normalizedWg]?.periods?.[p];
+              if (!wgPeriod) return acc;
+              acc.f += wgPeriod.f || 0;
+              acc.a += wgPeriod.a || 0;
+              acc.v += wgPeriod.v || 0;
+              return acc;
+            }, { f: 0, a: 0, v: 0 });
+            periods[p] = data;
+            totals.f += data.f;
+            totals.a += data.a;
+            totals.v += data.v;
+          }
+          return { periods, tot: totals };
         }
         const wgData = job.wgs?.[wgFilter];
         const periods = {};
@@ -2711,6 +2733,8 @@
                 : isGroupRollup
                   ? 'Aggregated group totals'
                   : 'On track';
+          const duPeriodData = period === 'all' ? j.tot : j.periods[period];
+          const duSummary = `DU total F ${Math.max(0, Number(duPeriodData?.f) || 0).toFixed(1)} • A ${Math.max(0, Number(duPeriodData?.a) || 0).toFixed(1)} • V ${(duPeriodData?.v || 0) > 0 ? '+' : ''}${(duPeriodData?.v || 0).toFixed(1)}`;
           const alertDetail = stat === 'bad'
             ? `Large variance (${varianceValue}). Root cause analysis required.`
             : stat === 'warning'
@@ -2724,6 +2748,8 @@
           const subtitleText = isGroupRollup
             ? `Group of ${j.groupJobCount} job${j.groupJobCount === 1 ? '' : 's'} • Unit: ${j.unit}`
             : `Discipline: ${j.disc} • Unit: ${j.unit} • Status: ${statusLabel}`;
+          const showDuSummary = wgFilter === 'all' && engineerWorkGroups && engineerWorkGroups.length > 0;
+          const subtitleWithContext = showDuSummary ? `${subtitleText} • ${duSummary}` : subtitleText;
           
           // Calculate health status for non-rollup jobs
           const healthStatus = !isGroupRollup ? getJobHealthStatus(pd) : null;
@@ -2767,7 +2793,7 @@
             <div class="job-card-body">
               <div class="job-details">
                 <div class="job-card-title">${escapeHtml(titleText)}</div>
-                <div class="job-card-subtitle">${escapeHtml(subtitleText)}</div>
+                <div class="job-card-subtitle">${escapeHtml(subtitleWithContext)}</div>
 
                 ${isGroupRollup ? `
                   <div class="group-planned-actual-box">
