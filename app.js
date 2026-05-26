@@ -3568,18 +3568,40 @@
       currentCommentJob = job.jn;
       const commentType = document.getElementById('commentType');
       const commentText = document.getElementById('commentText');
+      const commentWorkGroupTag = document.getElementById('commentWorkGroupTag');
+      const commentEngineerTag = document.getElementById('commentEngineerTag');
       const commentAdd = document.getElementById('commentAdd');
       if (!commentType.options.length) {
         commentType.innerHTML = COMMENT_CATEGORIES.map(category => `<option value="${category}">${category}</option>`).join('');
       }
       commentType.value = COMMENT_CATEGORIES.includes(currentReviewStage) ? currentReviewStage : 'General';
+
+      const workGroupOptions = getWorkGroupOptions();
+      if (commentWorkGroupTag) {
+        commentWorkGroupTag.innerHTML = [
+          '<option value="">Tag work group (optional)</option>',
+          ...workGroupOptions.map(key => {
+            const description = window.workGroupSets?.get(key) || key;
+            const label = description === key ? key : `${key} • ${description}`;
+            return `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`;
+          })
+        ].join('');
+      }
+
+      if (commentEngineerTag) {
+        const engineers = window.getEngineers ? window.getEngineers() : [];
+        commentEngineerTag.innerHTML = [
+          '<option value="">Tag engineer (optional)</option>',
+          ...engineers.map(eng => `<option value="${escapeHtml(eng.id)}">${escapeHtml(eng.name)}</option>`)
+        ].join('');
+      }
+
       commentText.value = '';
       commentAdd.onclick = () => {
-        const selectedWorkGroupFilter = document.getElementById('wgFilter')?.value || 'all';
-        const filteredWorkGroup = selectedWorkGroupFilter !== 'all' ? selectedWorkGroupFilter : '';
-        const selectedEngineerId = document.getElementById('engineerFilter')?.value || 'all';
-        const selectedEngineer = selectedEngineerId !== 'all' && window.getEngineerById
-          ? window.getEngineerById(selectedEngineerId)
+        const taggedWorkGroup = commentWorkGroupTag?.value || '';
+        const taggedEngineerId = commentEngineerTag?.value || '';
+        const taggedEngineer = taggedEngineerId && window.getEngineerById
+          ? window.getEngineerById(taggedEngineerId)
           : null;
         addJobComment(job.jn, commentType.value, commentText.value, {
           rootCause: '',
@@ -3587,11 +3609,13 @@
           owner: '',
           dueDate: '',
           evidenceLinks: [],
-          filteredWorkGroup,
-          filteredEngineerId: selectedEngineer ? selectedEngineer.id : '',
-          filteredEngineerName: selectedEngineer ? selectedEngineer.name : ''
+          filteredWorkGroup: taggedWorkGroup,
+          filteredEngineerId: taggedEngineer ? taggedEngineer.id : '',
+          filteredEngineerName: taggedEngineer ? taggedEngineer.name : ''
         });
         commentText.value = '';
+        if (commentWorkGroupTag) commentWorkGroupTag.value = '';
+        if (commentEngineerTag) commentEngineerTag.value = '';
         renderCommentsTable(job.jn);
         render();
       };
