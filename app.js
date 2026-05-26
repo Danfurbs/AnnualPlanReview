@@ -2545,9 +2545,10 @@
       const search = document.getElementById('search')?.value.toLowerCase() || '';
       const period = normalizePeriodKey(document.getElementById('period')?.value || 'all');
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const normalizedWgFilter = wgFilter === 'all' ? 'all' : normalizeWorkGroupSet(wgFilter);
       const reviewStage = currentReviewStage;
       const getJobDisplayData = (job) => {
-        if (wgFilter === 'all') {
+        if (normalizedWgFilter === 'all') {
           if (!engineerWorkGroups || engineerWorkGroups.length === 0) {
             return { periods: job.periods, tot: job.tot };
           }
@@ -2572,7 +2573,7 @@
           }
           return { periods, tot: totals };
         }
-        const wgData = job.wgs?.[wgFilter];
+        const wgData = job.wgs?.[normalizedWgFilter];
         const periods = {};
         const totals = { f: 0, a: 0, v: 0 };
         for (let i = 1; i <= 13; i++) {
@@ -2609,8 +2610,8 @@
       const filterBySearch = (job) => {
         const matchesSearch = !search || job.jn.includes(search) || job.desc.toLowerCase().includes(search) || job.disc.toLowerCase().includes(search);
         if (!matchesSearch) return false;
-        if (wgFilter === 'all') return true;
-        const wgData = job.wgs[wgFilter];
+        if (normalizedWgFilter === 'all') return true;
+        const wgData = job.wgs[normalizedWgFilter];
         if (!wgData) return false;
         return Object.values(wgData.periods || {}).some(periodData => periodData.f !== 0 || periodData.a !== 0);
       };
