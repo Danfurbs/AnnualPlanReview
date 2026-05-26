@@ -1070,7 +1070,9 @@
         dueDate: String(details.dueDate || '').trim(),
         evidenceLinks: Array.isArray(details.evidenceLinks) ? details.evidenceLinks : [],
         deliveryUnit: currentDeliveryUnit === 'all' ? '' : currentDeliveryUnit,
-        filteredWorkGroup: String(details.filteredWorkGroup || '').trim()
+        filteredWorkGroup: String(details.filteredWorkGroup || '').trim(),
+        filteredEngineerId: String(details.filteredEngineerId || '').trim(),
+        filteredEngineerName: String(details.filteredEngineerName || '').trim()
       };
       commentStore[jobNumber].unshift(newComment);
 
@@ -3575,13 +3577,19 @@
       commentAdd.onclick = () => {
         const selectedWorkGroupFilter = document.getElementById('wgFilter')?.value || 'all';
         const filteredWorkGroup = selectedWorkGroupFilter !== 'all' ? selectedWorkGroupFilter : '';
+        const selectedEngineerId = document.getElementById('engineerFilter')?.value || 'all';
+        const selectedEngineer = selectedEngineerId !== 'all' && window.getEngineerById
+          ? window.getEngineerById(selectedEngineerId)
+          : null;
         addJobComment(job.jn, commentType.value, commentText.value, {
           rootCause: '',
           correctiveAction: '',
           owner: '',
           dueDate: '',
           evidenceLinks: [],
-          filteredWorkGroup
+          filteredWorkGroup,
+          filteredEngineerId: selectedEngineer ? selectedEngineer.id : '',
+          filteredEngineerName: selectedEngineer ? selectedEngineer.name : ''
         });
         commentText.value = '';
         renderCommentsTable(job.jn);
@@ -3619,12 +3627,14 @@
             ? `${filteredWorkGroupCode} • ${description}`
             : filteredWorkGroupCode;
         }
+        const filteredEngineerName = String(entry.filteredEngineerName || '').trim();
         return `
         <div class="comment-card">
           <div class="comment-card-header">
             <div class="comment-header-left">
               <span class="comment-type">${escapeHtml(entry.category)}</span>
               ${filteredWorkGroupLabel ? `<span class="comment-context-tag" title="Comment added while filtered to a work group set">WG: ${escapeHtml(filteredWorkGroupLabel)}</span>` : ''}
+              ${filteredEngineerName ? `<span class="comment-context-tag" title="Comment added while filtered to an engineer">Engineer: ${escapeHtml(filteredEngineerName)}</span>` : ''}
             </div>
             <span class="comment-meta">${formatTimestamp(entry.timestamp)}</span>
           </div>
