@@ -38,7 +38,10 @@ function normalizeOptionalCommentFields(comment) {
     owner: 120,
     rootCause: 2000,
     correctiveAction: 2000,
-    dueDate: 30
+    dueDate: 30,
+    filteredWorkGroup: 120,
+    filteredEngineerId: 120,
+    filteredEngineerName: 200
   };
 
   Object.entries(optionalFieldMaxLengths).forEach(([field, maxLength]) => {
@@ -69,6 +72,9 @@ function validateCommentShape(comment) {
   if (comment.rootCause !== undefined && String(comment.rootCause).length > 2000) return 'Root cause must be <= 2000 chars';
   if (comment.correctiveAction !== undefined && String(comment.correctiveAction).length > 2000) return 'Corrective action must be <= 2000 chars';
   if (comment.dueDate !== undefined && String(comment.dueDate).length > 30) return 'Due date must be <= 30 chars';
+  if (comment.filteredWorkGroup !== undefined && String(comment.filteredWorkGroup).length > 120) return 'Filtered work group must be <= 120 chars';
+  if (comment.filteredEngineerId !== undefined && String(comment.filteredEngineerId).length > 120) return 'Filtered engineer id must be <= 120 chars';
+  if (comment.filteredEngineerName !== undefined && String(comment.filteredEngineerName).length > 200) return 'Filtered engineer name must be <= 200 chars';
   const links = normalizeEvidenceLinks(comment);
   if (links.length > 20) return 'Maximum 20 evidence links per comment';
   if (!links.every(link => /^https?:\/\//i.test(link))) return 'Evidence links must start with http:// or https://';
