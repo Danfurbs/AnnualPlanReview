@@ -75,8 +75,8 @@
     </div>
 
     <div class="top-summary">
-      <div class="summary-card">
-        <div class="card-title">Review Progress</div>
+      <div class="summary-card" id="reviewProgressCard">
+        <div class="card-header"><div class="card-title">Review Progress</div><button type="button" class="section-toggle" onclick="toggleTopSummaryCard('reviewProgressCard', this)">Collapse</button></div>
         <div class="card-value">
           <span id="reviewedCount">0</span>
           <span class="card-sub">/<span id="totalCount">0</span></span>
@@ -91,8 +91,8 @@
         <div class="progress-bar"><div class="progress-fill" id="reviewProgress"></div></div>
         <ul class="discipline-progress-list" id="disciplineProgressList"></ul>
       </div>
-      <div class="summary-card">
-        <div class="card-title">Work Order Activity</div>
+      <div class="summary-card" id="workOrderActivityCard">
+        <div class="card-header"><div class="card-title">Work Order Activity</div><button type="button" class="section-toggle" onclick="toggleTopSummaryCard('workOrderActivityCard', this)">Collapse</button></div>
         <div class="card-value">
           <span id="workOrderCount">0</span>
           <span class="card-sub">work orders</span>
@@ -103,14 +103,14 @@
           <li><span>Amended</span><strong id="workOrderAmended">0</strong></li>
         </ul>
       </div>
-      <div class="summary-card">
-        <div class="card-title">Comments</div>
+      <div class="summary-card" id="commentsCard">
+        <div class="card-header"><div class="card-title">Comments</div><button type="button" class="section-toggle" onclick="toggleTopSummaryCard('commentsCard', this)">Collapse</button></div>
         <div class="card-value" id="commentTotal">0</div>
         <div class="card-meta" id="commentMeta">No comments yet</div>
         <ul class="comment-breakdown" id="commentBreakdown"></ul>
       </div>
-      <div class="summary-card">
-        <div class="card-title">Top 10 Variances</div>
+      <div class="summary-card" id="variancesCard">
+        <div class="card-header"><div class="card-title">Top 10 Variances</div><button type="button" class="section-toggle" onclick="toggleTopSummaryCard('variancesCard', this)">Collapse</button></div>
         <ul class="variance-list" id="varianceList"></ul>
       </div>
     </div>

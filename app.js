@@ -3760,6 +3760,14 @@
       button.textContent = isCollapsed ? 'Expand' : 'Collapse';
     }
 
+
+    function toggleTopSummaryCard(cardId, button) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      const isCollapsed = card.classList.toggle('is-collapsed');
+      button.textContent = isCollapsed ? 'Expand' : 'Collapse';
+    }
+
     function toggleBreakdownSection(targetId, button) {
       const target = document.getElementById(targetId);
       if (!target) return;
