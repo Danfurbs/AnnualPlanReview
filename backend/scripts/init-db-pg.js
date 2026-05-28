@@ -99,6 +99,9 @@ async function initializeDatabase() {
         due_date VARCHAR(50),
         evidence_links_json JSONB DEFAULT '[]'::jsonb,
         delivery_unit VARCHAR(120),
+        filtered_work_group VARCHAR(120),
+        filtered_engineer_id VARCHAR(120),
+        filtered_engineer_name VARCHAR(200),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
       `);

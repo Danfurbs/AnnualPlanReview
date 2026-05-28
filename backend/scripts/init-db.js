@@ -66,6 +66,9 @@ db.exec(`
     due_date TEXT,
     evidence_links_json TEXT,
     delivery_unit TEXT,
+    filtered_work_group TEXT,
+    filtered_engineer_id TEXT,
+    filtered_engineer_name TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 

@@ -70,6 +70,9 @@ class DatabaseServicePG {
         due_date VARCHAR(50),
         evidence_links_json JSONB DEFAULT '[]'::jsonb,
         delivery_unit VARCHAR(120),
+        filtered_work_group VARCHAR(120),
+        filtered_engineer_id VARCHAR(120),
+        filtered_engineer_name VARCHAR(200),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -79,6 +82,9 @@ class DatabaseServicePG {
     await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS due_date VARCHAR(50)`);
     await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS evidence_links_json JSONB DEFAULT '[]'::jsonb`);
     await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS delivery_unit VARCHAR(120)`);
+    await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS filtered_work_group VARCHAR(120)`);
+    await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS filtered_engineer_id VARCHAR(120)`);
+    await this.pool.query(`ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS filtered_engineer_name VARCHAR(200)`);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS baselines (
         job_number VARCHAR(50) PRIMARY KEY,
@@ -320,8 +326,8 @@ class DatabaseServicePG {
   async saveJobComment(comment) {
     await this.ready;
     await this.pool.query(
-      `INSERT INTO job_comments (id, job_number, category, text, timestamp, fiscal_year, rf_stage, root_cause, corrective_action, owner, due_date, evidence_links_json, delivery_unit)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13)
+      `INSERT INTO job_comments (id, job_number, category, text, timestamp, fiscal_year, rf_stage, root_cause, corrective_action, owner, due_date, evidence_links_json, delivery_unit, filtered_work_group, filtered_engineer_id, filtered_engineer_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15, $16)
        ON CONFLICT (id) DO UPDATE SET
          category = EXCLUDED.category,
          text = EXCLUDED.text,
@@ -333,8 +339,11 @@ class DatabaseServicePG {
          owner = EXCLUDED.owner,
          due_date = EXCLUDED.due_date,
          evidence_links_json = EXCLUDED.evidence_links_json,
-         delivery_unit = EXCLUDED.delivery_unit`,
-      [comment.id, comment.jobNumber, comment.category, comment.text, comment.timestamp, comment.fy, comment.rf, comment.rootCause || null, comment.correctiveAction || null, comment.owner || null, comment.dueDate || null, JSON.stringify(Array.isArray(comment.evidenceLinks) ? comment.evidenceLinks : []), comment.deliveryUnit || null]
+         delivery_unit = EXCLUDED.delivery_unit,
+         filtered_work_group = EXCLUDED.filtered_work_group,
+         filtered_engineer_id = EXCLUDED.filtered_engineer_id,
+         filtered_engineer_name = EXCLUDED.filtered_engineer_name`,
+      [comment.id, comment.jobNumber, comment.category, comment.text, comment.timestamp, comment.fy, comment.rf, comment.rootCause || null, comment.correctiveAction || null, comment.owner || null, comment.dueDate || null, JSON.stringify(Array.isArray(comment.evidenceLinks) ? comment.evidenceLinks : []), comment.deliveryUnit || null, comment.filteredWorkGroup || null, comment.filteredEngineerId || null, comment.filteredEngineerName || null]
     );
   }
 
@@ -359,10 +368,13 @@ class DatabaseServicePG {
     const dueDates = comments.map(comment => comment.dueDate || null);
     const evidenceLinks = comments.map(comment => JSON.stringify(Array.isArray(comment.evidenceLinks) ? comment.evidenceLinks : []));
     const deliveryUnits = comments.map(comment => comment.deliveryUnit || null);
+    const filteredWorkGroups = comments.map(comment => comment.filteredWorkGroup || null);
+    const filteredEngineerIds = comments.map(comment => comment.filteredEngineerId || null);
+    const filteredEngineerNames = comments.map(comment => comment.filteredEngineerName || null);
 
     await this.pool.query(
-      `INSERT INTO job_comments (id, job_number, category, text, timestamp, fiscal_year, rf_stage, root_cause, corrective_action, owner, due_date, evidence_links_json, delivery_unit)
-       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[], $11::text[], $12::jsonb[], $13::text[])
+      `INSERT INTO job_comments (id, job_number, category, text, timestamp, fiscal_year, rf_stage, root_cause, corrective_action, owner, due_date, evidence_links_json, delivery_unit, filtered_work_group, filtered_engineer_id, filtered_engineer_name)
+       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[], $11::text[], $12::jsonb[], $13::text[], $14::text[], $15::text[], $16::text[])
        ON CONFLICT (id) DO UPDATE SET
          category = EXCLUDED.category,
          text = EXCLUDED.text,
@@ -374,8 +386,11 @@ class DatabaseServicePG {
          owner = EXCLUDED.owner,
          due_date = EXCLUDED.due_date,
          evidence_links_json = EXCLUDED.evidence_links_json,
-         delivery_unit = EXCLUDED.delivery_unit`,
-      [ids, jobNumbers, categories, texts, timestamps, fiscalYears, rfStages, rootCauses, correctiveActions, owners, dueDates, evidenceLinks, deliveryUnits]
+         delivery_unit = EXCLUDED.delivery_unit,
+         filtered_work_group = EXCLUDED.filtered_work_group,
+         filtered_engineer_id = EXCLUDED.filtered_engineer_id,
+         filtered_engineer_name = EXCLUDED.filtered_engineer_name`,
+      [ids, jobNumbers, categories, texts, timestamps, fiscalYears, rfStages, rootCauses, correctiveActions, owners, dueDates, evidenceLinks, deliveryUnits, filteredWorkGroups, filteredEngineerIds, filteredEngineerNames]
     );
   }
 
@@ -839,7 +854,10 @@ class DatabaseServicePG {
       owner: row.owner || '',
       dueDate: row.due_date || '',
       evidenceLinks: Array.isArray(row.evidence_links_json) ? row.evidence_links_json : [],
-      deliveryUnit: row.delivery_unit || ''
+      deliveryUnit: row.delivery_unit || '',
+      filteredWorkGroup: row.filtered_work_group || '',
+      filteredEngineerId: row.filtered_engineer_id || '',
+      filteredEngineerName: row.filtered_engineer_name || ''
     };
   }
 }

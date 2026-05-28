@@ -121,12 +121,20 @@
     select, input { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; color: #1f2937; }
     .top-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px; }
     .summary-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 12px; }
+    .summary-card .card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .summary-card.is-collapsed > :not(.card-header) { display: none; }
     .summary-card .card-title { font-size: 12px; color: #64748b; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
     .summary-card .card-value { font-size: 28px; font-weight: 700; display: flex; align-items: baseline; gap: 6px; }
     .summary-card .card-sub { font-size: 14px; color: #94a3b8; }
     .summary-card .card-meta { font-size: 12px; color: #64748b; }
     .progress-bar { width: 100%; height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
     .progress-fill { height: 100%; width: 0%; background: #22c55e; border-radius: 999px; transition: width 0.3s ease; }
+
+    .discipline-progress-list { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-top: 4px; max-height: 128px; overflow-y: auto; padding-right: 4px; }
+    .discipline-progress-item { display: grid; grid-template-columns: minmax(80px, 1fr) auto auto; gap: 8px; align-items: center; font-size: 11px; color: #475569; }
+    .discipline-progress-name { font-weight: 700; color: #334155; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .discipline-progress-count { font-variant-numeric: tabular-nums; color: #64748b; }
+    .discipline-progress-pct { min-width: 34px; text-align: right; font-weight: 700; color: #1e3a8a; font-variant-numeric: tabular-nums; }
     .rag-grid { display: flex; gap: 10px; }
     .rag-pill { flex: 1; padding: 10px 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; font-size: 12px; font-weight: 700; border: 1px solid transparent; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
     .rag-pill:hover { transform: translateY(-1px); box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08); }

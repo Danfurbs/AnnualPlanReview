@@ -1471,6 +1471,33 @@
       if (percentEl) percentEl.textContent = `${percent}% jobs reviewed at ${reviewStage}`;
       if (progressEl) progressEl.style.width = `${percent}%`;
       if (stageDisplay) stageDisplay.textContent = reviewStage;
+      const disciplineProgressEl = document.getElementById('disciplineProgressList');
+      if (disciplineProgressEl) {
+        const byDiscipline = new Map();
+        (baseFiltered || []).forEach(job => {
+          const discipline = String(job.disc || 'Other').trim() || 'Other';
+          if (!byDiscipline.has(discipline)) byDiscipline.set(discipline, { total: 0, reviewed: 0 });
+          const entry = byDiscipline.get(discipline);
+          entry.total += 1;
+          if (isJobReviewed(job.jn, reviewStage)) entry.reviewed += 1;
+        });
+
+        const rows = [...byDiscipline.entries()]
+          .sort((a, b) => {
+            const pctA = a[1].total ? a[1].reviewed / a[1].total : 0;
+            const pctB = b[1].total ? b[1].reviewed / b[1].total : 0;
+            if (pctB !== pctA) return pctB - pctA;
+            return b[1].total - a[1].total;
+          })
+          .slice(0, 8)
+          .map(([discipline, stats]) => {
+            const pct = stats.total ? Math.round((stats.reviewed / stats.total) * 100) : 0;
+            return `<li class="discipline-progress-item"><span class="discipline-progress-name">${escapeHtml(discipline)}</span><span class="discipline-progress-count">${stats.reviewed}/${stats.total}</span><span class="discipline-progress-pct">${pct}%</span></li>`;
+          })
+          .join('');
+
+        disciplineProgressEl.innerHTML = rows || '<li class="discipline-progress-item"><span class="discipline-progress-name">No jobs</span><span class="discipline-progress-count">0/0</span><span class="discipline-progress-pct">0%</span></li>';
+      }
 
       // Update Work Order Activity card
       let totalWorkOrders = 0;
@@ -3730,6 +3757,14 @@
         disciplineCollapseState[disc] = isCollapsed;
         localStorage.setItem('aprDisciplineCollapseStateV1', JSON.stringify(disciplineCollapseState));
       }
+      button.textContent = isCollapsed ? 'Expand' : 'Collapse';
+    }
+
+
+    function toggleTopSummaryCard(cardId, button) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      const isCollapsed = card.classList.toggle('is-collapsed');
       button.textContent = isCollapsed ? 'Expand' : 'Collapse';
     }
 

@@ -67,6 +67,9 @@ class DatabaseService {
         due_date TEXT,
         evidence_links_json TEXT,
         delivery_unit TEXT,
+        filtered_work_group TEXT,
+        filtered_engineer_id TEXT,
+        filtered_engineer_name TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS baselines (
@@ -101,6 +104,9 @@ class DatabaseService {
     this.ensureColumn('job_comments', 'due_date', 'TEXT');
     this.ensureColumn('job_comments', 'evidence_links_json', 'TEXT');
     this.ensureColumn('job_comments', 'delivery_unit', 'TEXT');
+    this.ensureColumn('job_comments', 'filtered_work_group', 'TEXT');
+    this.ensureColumn('job_comments', 'filtered_engineer_id', 'TEXT');
+    this.ensureColumn('job_comments', 'filtered_engineer_name', 'TEXT');
   }
 
   ensureColumn(tableName, columnName, columnType) {
@@ -177,8 +183,8 @@ class DatabaseService {
       // Job comments
       insertJobComment: this.db.prepare(`
         INSERT OR REPLACE INTO job_comments
-        (id, job_number, category, text, timestamp, fiscal_year, rf_stage, root_cause, corrective_action, owner, due_date, evidence_links_json, delivery_unit)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, job_number, category, text, timestamp, fiscal_year, rf_stage, root_cause, corrective_action, owner, due_date, evidence_links_json, delivery_unit, filtered_work_group, filtered_engineer_id, filtered_engineer_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `),
 
       getJobComments: this.db.prepare(`
@@ -421,7 +427,10 @@ class DatabaseService {
       comment.owner || null,
       comment.dueDate || null,
       JSON.stringify(Array.isArray(comment.evidenceLinks) ? comment.evidenceLinks : []),
-      comment.deliveryUnit || null
+      comment.deliveryUnit || null,
+      comment.filteredWorkGroup || null,
+      comment.filteredEngineerId || null,
+      comment.filteredEngineerName || null
     );
   }
 
@@ -447,7 +456,10 @@ class DatabaseService {
           comment.owner || null,
           comment.dueDate || null,
           JSON.stringify(Array.isArray(comment.evidenceLinks) ? comment.evidenceLinks : []),
-          comment.deliveryUnit || null
+          comment.deliveryUnit || null,
+          comment.filteredWorkGroup || null,
+          comment.filteredEngineerId || null,
+          comment.filteredEngineerName || null
         );
       }
     });
@@ -594,7 +606,10 @@ class DatabaseService {
       owner: row.owner || '',
       dueDate: row.due_date || '',
       evidenceLinks: this.parseEvidenceLinks(row.evidence_links_json),
-      deliveryUnit: row.delivery_unit || ''
+      deliveryUnit: row.delivery_unit || '',
+      filteredWorkGroup: row.filtered_work_group || '',
+      filteredEngineerId: row.filtered_engineer_id || '',
+      filteredEngineerName: row.filtered_engineer_name || ''
     };
   }
 
