@@ -26,6 +26,8 @@
     // Review tracking (not in modules)
     const REVIEW_STORAGE_KEY = 'aprReviewStatusV1';
     let reviewStore = {};
+    const REVIEW_CELEBRATION_MS = 1400;
+    const recentlyReviewedJobs = new Map();
 
     // Work order amendments (not in modules)
     const WORK_ORDER_AMENDMENTS_KEY = 'aprWorkOrderAmendmentsV1';
@@ -54,10 +56,14 @@
       localStorage.setItem(BREAKDOWN_PLAN_VERSION_KEY, version);
     }
 
-    function handleBreakdownPlanVersionChange() {
-      const select = document.getElementById('breakdownPlanVersion');
+    function handleBreakdownPlanVersionChange(sourceSelect) {
+      const select = sourceSelect || document.getElementById('wgComparePlanVersion') || document.getElementById('breakdownPlanVersion');
       if (!select) return;
       saveBreakdownPlanVersion(select.value);
+      const modalSelect = document.getElementById('breakdownPlanVersion');
+      if (modalSelect && modalSelect !== select && modalSelect.value !== select.value) modalSelect.value = select.value;
+      const sectionSelect = document.getElementById('wgComparePlanVersion');
+      if (sectionSelect && sectionSelect !== select && sectionSelect.value !== select.value) sectionSelect.value = select.value;
       // Re-render the current breakdown if it's open
       if (currentCommentJob) {
         const job = window.currentJobsMap.get(currentCommentJob);
@@ -66,6 +72,11 @@
     }
     // Expose globally for HTML onclick handler
     window.handleBreakdownPlanVersionChange = handleBreakdownPlanVersionChange;
+    function getBreakdownComparisonLabel() {
+      if (breakdownPlanVersion === 'v1') return 'Comparing against Plan v1';
+      if (breakdownPlanVersion === 'both') return 'Comparing against both Plan v0 and Plan v1';
+      return 'Comparing against Plan v0';
+    }
 
     // Work group table display mode preference (forecast vs variance)
     const WG_DISPLAY_MODE_KEY = 'aprWgDisplayModeV1';
@@ -404,6 +415,26 @@
         delete reviewStore[jobNumber];
       }
       saveReviewStoreAsync();
+    }
+
+    function renderPreservingScroll() {
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      render();
+      requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
+    }
+
+    function getRenderedJobCard(jobNumber) {
+      return Array.from(document.querySelectorAll('.job-card'))
+        .find(card => card.dataset.jobNumber === jobNumber);
+    }
+
+    function triggerReviewCelebration(jobNumber) {
+      recentlyReviewedJobs.set(jobNumber, Date.now() + REVIEW_CELEBRATION_MS);
+      window.setTimeout(() => {
+        recentlyReviewedJobs.delete(jobNumber);
+        getRenderedJobCard(jobNumber)?.classList.remove('review-celebrating');
+      }, REVIEW_CELEBRATION_MS);
     }
 
     // Forecast functions are now in separate modules:
@@ -2514,7 +2545,7 @@
           unit: meta?.unit || 'Unit not specified',
           mnt: meta?.mnt || '',
           periods:{}, 
-          tot:{f:0,a:0,v:0},
+          tot:{f:0,a:0,wd:0,v:0},
           wgs: {}
         };
         for(let i=1; i<=13; i++) {
@@ -2524,9 +2555,10 @@
           // Always use forecast mode: periods after cutoff use forecast, before use actual
           const useForecast = i > maxWorkDonePeriod;
           const av = useForecast ? fv : avRaw;
-          job.periods[p] = {f:fv, a:av, v:av-fv};
+          job.periods[p] = {f:fv, a:av, wd:avRaw, v:av-fv};
           job.tot.f += fv;
           job.tot.a += av;
+          job.tot.wd = (job.tot.wd || 0) + avRaw;
           job.tot.v += av-fv;
         }
 
@@ -2561,7 +2593,7 @@
             // Always use forecast mode: periods after cutoff use forecast, before use actual
             const useForecast = i > maxWorkDonePeriod;
             const av = useForecast ? fv : avRaw;
-            job.wgs[normalized].periods[p] = {f: fv, a: av, v: av - fv};
+            job.wgs[normalized].periods[p] = {f: fv, a: av, wd: avRaw, v: av - fv};
           }
         });
         baseJobs.push(job);
@@ -2581,34 +2613,37 @@
           }
 
           const periods = {};
-          const totals = { f: 0, a: 0, v: 0 };
-          for (let i = 1; i <= 13; i++) {
-            const p = `P${i}`;
-            const data = engineerWorkGroups.reduce((acc, engineerWg) => {
-              const normalizedWg = normalizeWorkGroupSet(engineerWg);
-              const wgPeriod = job.wgs?.[normalizedWg]?.periods?.[p];
-              if (!wgPeriod) return acc;
-              acc.f += wgPeriod.f || 0;
-              acc.a += wgPeriod.a || 0;
-              acc.v += wgPeriod.v || 0;
-              return acc;
-            }, { f: 0, a: 0, v: 0 });
+            const totals = { f: 0, a: 0, wd: 0, v: 0 };
+            for (let i = 1; i <= 13; i++) {
+              const p = `P${i}`;
+              const data = engineerWorkGroups.reduce((acc, engineerWg) => {
+                const normalizedWg = normalizeWorkGroupSet(engineerWg);
+                const wgPeriod = job.wgs?.[normalizedWg]?.periods?.[p];
+                if (!wgPeriod) return acc;
+                acc.f += wgPeriod.f || 0;
+                acc.a += wgPeriod.a || 0;
+                acc.wd += wgPeriod.wd || 0;
+                acc.v += wgPeriod.v || 0;
+                return acc;
+            }, { f: 0, a: 0, wd: 0, v: 0 });
             periods[p] = data;
             totals.f += data.f;
             totals.a += data.a;
+            totals.wd += data.wd;
             totals.v += data.v;
           }
           return { periods, tot: totals };
         }
         const wgData = job.wgs?.[normalizedWgFilter];
         const periods = {};
-        const totals = { f: 0, a: 0, v: 0 };
+        const totals = { f: 0, a: 0, wd: 0, v: 0 };
         for (let i = 1; i <= 13; i++) {
           const p = `P${i}`;
-          const data = wgData?.periods?.[p] || { f: 0, a: 0, v: 0 };
+          const data = wgData?.periods?.[p] || { f: 0, a: 0, wd: 0, v: 0 };
           periods[p] = data;
           totals.f += data.f || 0;
           totals.a += data.a || 0;
+          totals.wd += data.wd || 0;
           totals.v += data.v || 0;
         }
         return { periods, tot: totals };
@@ -2800,7 +2835,10 @@
           }
 
           const card = document.createElement('div');
-          card.className = `job-card ${stat}`;
+          const celebrateUntil = recentlyReviewedJobs.get(j.jn) || 0;
+          const celebrationClass = celebrateUntil > Date.now() ? ' review-celebrating' : '';
+          card.className = `job-card ${stat}${celebrationClass}`;
+          card.dataset.jobNumber = j.jn;
           card.onclick = () => showBreakdown(j);
 
           card.innerHTML = `
@@ -2845,6 +2883,10 @@
                       <div class="job-variance-item">
                         <div class="job-variance-label">Actual</div>
                         <div class="job-variance-value">${pd.a.toFixed(1)}</div>
+                      </div>
+                      <div class="job-variance-item">
+                        <div class="job-variance-label">Work Done</div>
+                        <div class="job-variance-value">${(pd.wd || 0).toFixed(1)}</div>
                       </div>
                       <div class="job-variance-item">
                         <div class="job-variance-label">Variance</div>
@@ -2901,11 +2943,12 @@
               }
               if (action === 'reviewed' && !isReviewed) {
                 markJobReviewed(j.jn, reviewStage);
-                render();
+                triggerReviewCelebration(j.jn);
+                renderPreservingScroll();
               }
               if (action === 'reopen' && isReviewed) {
                 reopenJobReview(j.jn, reviewStage);
-                render();
+                renderPreservingScroll();
               }
             });
           });
@@ -3182,6 +3225,14 @@
       if (breakdownPlanSelect) {
         breakdownPlanSelect.value = breakdownPlanVersion;
       }
+      const wgComparePlanSelect = document.getElementById('wgComparePlanVersion');
+      if (wgComparePlanSelect) {
+        wgComparePlanSelect.value = breakdownPlanVersion;
+      }
+      const wgCompareBadge = document.getElementById('wgCompareBadge');
+      if (wgCompareBadge) {
+        wgCompareBadge.textContent = getBreakdownComparisonLabel();
+      }
 
       // Set work group display mode selector
       const wgDisplaySelect = document.getElementById('wgDisplayMode');
@@ -3395,13 +3446,13 @@
             tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
 
             const detailRows = [
-              { label: 'Planned', key: 'f' },
-              { label: 'Actual', key: 'a' },
-              { label: 'Variance', key: 'v' }
+              { shortLabel: 'P', label: 'Planned', key: 'f' },
+              { shortLabel: 'A', label: 'Actual', key: 'a' },
+              { shortLabel: 'V', label: 'Variance', key: 'v' }
             ];
-            detailRows.forEach(({ label, key }) => {
+            detailRows.forEach(({ shortLabel, label, key }) => {
               let detailTotal = 0;
-              tableHTML += `<tr class="wg-detail engineer-row${summaryOpen ? ' open' : ''}" data-wg="${idx}" data-eng="${engineer.id}"><td>${label}</td>`;
+              tableHTML += `<tr class="wg-detail engineer-row${summaryOpen ? ' open' : ''}" data-wg="${idx}" data-eng="${engineer.id}"><td><span class="wg-detail-label"><span class="wg-detail-pill">${shortLabel}</span><span class="wg-detail-text">${label}</span></span></td>`;
               for(let i=1; i<=13; i++) {
                 const p = `P${i}`;
                 const d = data.periods[p] || {f: 0, a: 0, v: 0};
@@ -3459,13 +3510,13 @@
             tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
 
             const detailRows = [
-              { label: 'Planned', key: 'f' },
-              { label: 'Actual', key: 'a' },
-              { label: 'Variance', key: 'v' }
+              { shortLabel: 'P', label: 'Planned', key: 'f' },
+              { shortLabel: 'A', label: 'Actual', key: 'a' },
+              { shortLabel: 'V', label: 'Variance', key: 'v' }
             ];
-            detailRows.forEach(({ label, key }) => {
+            detailRows.forEach(({ shortLabel, label, key }) => {
               let detailTotal = 0;
-              tableHTML += `<tr class="wg-detail${engRowClass}${summaryOpen ? ' open' : ''}" data-wg="${idx}" data-eng="ungrouped"><td>${label}</td>`;
+              tableHTML += `<tr class="wg-detail${engRowClass}${summaryOpen ? ' open' : ''}" data-wg="${idx}" data-eng="ungrouped"><td><span class="wg-detail-label"><span class="wg-detail-pill">${shortLabel}</span><span class="wg-detail-text">${label}</span></span></td>`;
               for(let i=1; i<=13; i++) {
                 const p = `P${i}`;
                 const d = data.periods[p] || {f: 0, a: 0, v: 0};

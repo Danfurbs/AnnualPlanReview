@@ -565,7 +565,7 @@
 
       <div class="breakdown-controls" style="display: flex; gap: 16px; align-items: center; margin-bottom: 16px; padding: 12px; background: #f5f5f5; border-radius: 4px;">
         <label style="font-weight: 500;">Compare against:</label>
-        <select id="breakdownPlanVersion" onchange="handleBreakdownPlanVersionChange()" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; background: white;">
+        <select id="breakdownPlanVersion" onchange="handleBreakdownPlanVersionChange(this)" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; background: white;">
           <option value="v0">Plan v0</option>
           <option value="v1">Plan v1 (Updated)</option>
           <option value="both">Both (v0 & v1)</option>
@@ -586,6 +586,12 @@
         <div class="discipline-header">
           <h3>Work Group Performance by Period</h3>
           <div class="header-actions">
+            <label style="font-size: 0.85rem; margin-right: 4px;">Compare:</label>
+            <select id="wgComparePlanVersion" onchange="handleBreakdownPlanVersionChange(this)" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 0.85rem; margin-right: 12px;">
+              <option value="v0">vs Plan v0</option>
+              <option value="v1">vs Plan v1</option>
+              <option value="both">v0 and v1</option>
+            </select>
             <label style="font-size: 0.85rem; margin-right: 4px;">Display:</label>
             <select id="wgDisplayMode" onchange="handleWgDisplayModeChange()" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 0.85rem; margin-right: 12px;">
               <option value="variance">Variance</option>
@@ -595,6 +601,7 @@
           </div>
         </div>
         <div class="collapsible-content" id="wgTableContainer">
+          <div id="wgCompareBadge" class="wg-compare-badge"></div>
           <div style="overflow-x: auto;">
             <table class="wg-table" id="wgTable"></table>
           </div>
