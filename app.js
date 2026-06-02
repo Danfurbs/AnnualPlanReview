@@ -1500,6 +1500,11 @@
       return `Period ${getPeriodNumber(period)}`;
     }
 
+    function getTopVarianceThroughLabel(periodNumber) {
+      const normalizedPeriodNumber = Math.max(1, Math.min(13, Number(periodNumber) || 13));
+      return `Overall to P${normalizedPeriodNumber}`;
+    }
+
     function formatSignedUnits(value, decimals = 1) {
       const numeric = Number(value) || 0;
       return `${numeric > 0 ? '+' : ''}${numeric.toFixed(decimals)}`;
@@ -1531,15 +1536,13 @@
 
     function buildTopVarianceBriefData({ baseFiltered, period, getJobDisplayData, varianceFilter }) {
       const periodNumber = getPeriodNumber(period);
-      const periodKey = period === 'all' ? 'all' : `P${periodNumber}`;
+      const throughLabel = getTopVarianceThroughLabel(periodNumber);
       const items = (baseFiltered || [])
         .map(job => {
           const displayData = getJobDisplayData(job);
-          const selected = periodKey === 'all'
-            ? displayData.tot
-            : (displayData.periods[periodKey] || { f: 0, a: 0, wd: 0, v: 0 });
           let cumulativeForecast = 0;
           let cumulativeActual = 0;
+          let cumulativeWorkDone = 0;
           const chartLabels = [];
           const forecastSeries = [];
           const actualSeries = [];
@@ -1548,17 +1551,22 @@
             const data = displayData.periods[p] || { f: 0, a: 0, wd: 0, v: 0 };
             cumulativeForecast += data.f || 0;
             cumulativeActual += data.a || 0;
+            cumulativeWorkDone += data.wd || 0;
             chartLabels.push(`P${i}`);
             forecastSeries.push(cumulativeForecast);
             actualSeries.push(cumulativeActual);
           }
+          const cumulativeVariance = cumulativeActual - cumulativeForecast;
+          const selected = {
+            f: cumulativeForecast,
+            a: cumulativeActual,
+            wd: cumulativeWorkDone,
+            v: cumulativeVariance
+          };
           return {
             job,
             selected,
-            variance: selected.v || 0,
-            cumulativeForecast,
-            cumulativeActual,
-            cumulativeVariance: cumulativeActual - cumulativeForecast,
+            variance: cumulativeVariance,
             chartLabels,
             forecastSeries,
             actualSeries
@@ -1573,9 +1581,8 @@
         acc.a += item.selected.a || 0;
         acc.wd += item.selected.wd || 0;
         acc.v += item.selected.v || 0;
-        acc.cumulativeVariance += item.cumulativeVariance || 0;
         return acc;
-      }, { f: 0, a: 0, wd: 0, v: 0, cumulativeVariance: 0 });
+      }, { f: 0, a: 0, wd: 0, v: 0 });
 
       return {
         items,
@@ -1583,6 +1590,7 @@
         period,
         periodNumber,
         periodLabel: getTopVariancePeriodLabel(period),
+        throughLabel,
         meta: getTopVarianceSelectionMeta(period, varianceFilter)
       };
     }
@@ -1610,19 +1618,17 @@
 
       if (metaEl) metaEl.textContent = data.meta;
       const totalClass = data.selectedTotals.v > 0 ? 'positive' : data.selectedTotals.v < 0 ? 'negative' : 'neutral';
-      const cumulativeClass = data.selectedTotals.cumulativeVariance > 0 ? 'positive' : data.selectedTotals.cumulativeVariance < 0 ? 'negative' : 'neutral';
       summaryEl.innerHTML = `
-        <div class="brief-summary-card"><span>Selection</span><strong>${escapeHtml(data.periodLabel)}</strong></div>
+        <div class="brief-summary-card"><span>Selection</span><strong>${escapeHtml(data.throughLabel)}</strong></div>
         <div class="brief-summary-card"><span>Jobs shown</span><strong>${data.items.length}</strong></div>
-        <div class="brief-summary-card"><span>Selected forecast</span><strong>${formatUnits(data.selectedTotals.f)}</strong></div>
-        <div class="brief-summary-card"><span>Selected actual</span><strong>${formatUnits(data.selectedTotals.a)}</strong></div>
-        <div class="brief-summary-card"><span>Selected variance</span><strong class="${totalClass}">${formatSignedUnits(data.selectedTotals.v)}</strong></div>
-        <div class="brief-summary-card"><span>Overall variance to P${data.periodNumber}</span><strong class="${cumulativeClass}">${formatSignedUnits(data.selectedTotals.cumulativeVariance)}</strong></div>
+        <div class="brief-summary-card"><span>Forecast to P${data.periodNumber}</span><strong>${formatUnits(data.selectedTotals.f)}</strong></div>
+        <div class="brief-summary-card"><span>Actual to P${data.periodNumber}</span><strong>${formatUnits(data.selectedTotals.a)}</strong></div>
+        <div class="brief-summary-card"><span>Work Done to P${data.periodNumber}</span><strong>${formatUnits(data.selectedTotals.wd)}</strong></div>
+        <div class="brief-summary-card"><span>Variance to P${data.periodNumber}</span><strong class="${totalClass}">${formatSignedUnits(data.selectedTotals.v)}</strong></div>
       `;
 
       gridEl.innerHTML = data.items.map((item, index) => {
         const selectedClass = item.variance > 0 ? 'positive' : item.variance < 0 ? 'negative' : 'neutral';
-        const overallClass = item.cumulativeVariance > 0 ? 'positive' : item.cumulativeVariance < 0 ? 'negative' : 'neutral';
         const health = getJobHealthStatus(item.selected);
         return `
           <article class="top-variance-slide-card">
@@ -1635,11 +1641,10 @@
               <span class="slide-rag slide-rag-${health.status}">${escapeHtml(health.label)}</span>
             </div>
             <div class="slide-period-summary">
-              <div><span>Forecast</span><strong>${formatUnits(item.selected.f)}</strong></div>
-              <div><span>Actual</span><strong>${formatUnits(item.selected.a)}</strong></div>
-              <div><span>Work Done</span><strong>${formatUnits(item.selected.wd || 0)}</strong></div>
-              <div><span>${escapeHtml(data.periodLabel)} variance</span><strong class="${selectedClass}">${formatSignedUnits(item.variance)}</strong></div>
-              <div><span>Overall to P${data.periodNumber}</span><strong class="${overallClass}">${formatSignedUnits(item.cumulativeVariance)}</strong></div>
+              <div><span>Forecast to P${data.periodNumber}</span><strong>${formatUnits(item.selected.f)}</strong></div>
+              <div><span>Actual to P${data.periodNumber}</span><strong>${formatUnits(item.selected.a)}</strong></div>
+              <div><span>Work Done to P${data.periodNumber}</span><strong>${formatUnits(item.selected.wd || 0)}</strong></div>
+              <div><span>${escapeHtml(data.throughLabel)}</span><strong class="${selectedClass}">${formatSignedUnits(item.variance)}</strong></div>
             </div>
             <div class="slide-chart-wrap"><canvas id="topVarianceChart${index}" aria-label="Cumulative forecast and work done for ${escapeHtml(item.job.jn)}"></canvas></div>
           </article>
@@ -1789,6 +1794,7 @@
           .join('');
         commentBreakdownEl.innerHTML = items || '<li><span>General</span><strong>0</strong></li>';
       }
+      refreshCommentExportTypeOptions(commentCounts);
 
       const varianceListEl = document.getElementById('varianceList');
       latestTopVarianceBrief = buildTopVarianceBriefData({ baseFiltered, period, getJobDisplayData, varianceFilter });
@@ -2166,17 +2172,44 @@
       }
     }
 
-    function exportComments() {
+    function refreshCommentExportTypeOptions(commentCounts = {}) {
+      const select = document.getElementById('commentExportType');
+      if (!select) return;
+      const previousValue = select.value || 'all';
+      const categories = new Set(['all', ...COMMENT_CATEGORIES]);
+      Object.keys(commentCounts || {}).forEach(category => {
+        if (category) categories.add(category);
+      });
+      const options = Array.from(categories).map(category => {
+        const label = category === 'all' ? 'All comment types' : category;
+        const suffix = category !== 'all' && Number.isFinite(Number(commentCounts[category]))
+          ? ` (${Number(commentCounts[category]).toLocaleString()})`
+          : '';
+        return `<option value="${escapeHtml(category)}">${escapeHtml(label)}${suffix}</option>`;
+      }).join('');
+      select.innerHTML = options;
+      select.value = categories.has(previousValue) ? previousValue : 'all';
+    }
+
+    function getSelectedCommentExportType(explicitType) {
+      if (explicitType) return explicitType;
+      return document.getElementById('commentExportType')?.value || 'all';
+    }
+
+    function exportComments(commentType) {
+      const selectedType = getSelectedCommentExportType(commentType);
       const rows = [];
       Object.entries(commentStore).forEach(([jobNumber, comments]) => {
         comments.forEach(entry => {
           // Only export comments for current FY
           const commentFY = entry.fy || entry.financialYear;
           if (commentFY !== currentFinancialYear) return;
+          const category = entry.category || 'General';
+          if (selectedType !== 'all' && category !== selectedType) return;
 
           rows.push({
             'Standard Job Number': jobNumber,
-            'Comment Type': entry.category,
+            'Comment Type': category,
             'Comment': entry.text,
             'Financial Year': entry.fy || '',
             'Review Stage': entry.rf || '',
@@ -2190,7 +2223,8 @@
         });
       });
       if (!rows.length) {
-        alert(`No comments to export for ${currentFinancialYear}.`);
+        const typeLabel = selectedType === 'all' ? 'comments' : `${selectedType} comments`;
+        alert(`No ${typeLabel} to export for ${currentFinancialYear}.`);
         return;
       }
       const ws = XLSX.utils.json_to_sheet(rows, {
@@ -2198,7 +2232,69 @@
       });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Comments');
-      XLSX.writeFile(wb, `apr-comments-${currentFinancialYear}.xlsx`);
+      const typeSlug = selectedType === 'all' ? 'all' : selectedType.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      XLSX.writeFile(wb, `apr-comments-${typeSlug}-${currentFinancialYear}.xlsx`);
+    }
+
+    function exportAmendedWorkOrders() {
+      if (!window.wData || !window.wData.size) {
+        alert('No Work Done data loaded to export amended work orders.');
+        return;
+      }
+      const rows = [];
+      window.wData.forEach((jobData, jobNumber) => {
+        const meta = window.stdJobs.get(jobNumber) || {};
+        (jobData.workOrders || []).forEach(order => {
+          if (!order.isAmended) return;
+          const originalUnits = Number(order.originalUnits);
+          const amendedUnits = Number(order.units);
+          rows.push({
+            'Standard Job Number': jobNumber,
+            'Standard Job Description': meta.desc || '',
+            'Discipline': meta.disc || '',
+            'Delivery Unit': meta.mnt || '',
+            'Work Order': order.number || '',
+            'Work Order Description': order.description || '',
+            'Work Order Type': order.workOrderType || '',
+            'Closed Period': order.period || '',
+            'Closed Date': order.closedDate || '',
+            'Work Group': order.workGroup || '',
+            'Original Units Complete': Number.isFinite(originalUnits) ? originalUnits : '',
+            'Amended Units Complete': Number.isFinite(amendedUnits) ? amendedUnits : '',
+            'Unit Difference': Number.isFinite(originalUnits) && Number.isFinite(amendedUnits) ? amendedUnits - originalUnits : '',
+            'Amended At': getWorkOrderAmendment(order.id)?.updatedAt || ''
+          });
+        });
+      });
+      if (!rows.length) {
+        alert(`No amended work orders to export for ${currentFinancialYear}.`);
+        return;
+      }
+      const headers = [
+        'Standard Job Number',
+        'Standard Job Description',
+        'Discipline',
+        'Delivery Unit',
+        'Work Order',
+        'Work Order Description',
+        'Work Order Type',
+        'Closed Period',
+        'Closed Date',
+        'Work Group',
+        'Original Units Complete',
+        'Amended Units Complete',
+        'Unit Difference',
+        'Amended At'
+      ];
+      const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+      ws['!cols'] = headers.map(header => {
+        if (header.includes('Description')) return { wch: 45 };
+        if (header.includes('Units') || header === 'Unit Difference') return { wch: 18 };
+        return { wch: 16 };
+      });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Amended Work Orders');
+      XLSX.writeFile(wb, `apr-amended-work-orders-${currentFinancialYear}.xlsx`);
     }
 
     function exportWorkGroupJobSummary() {
@@ -2902,6 +2998,9 @@
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
         const { status, hasVariance, hasNoForecast } = getVarianceStatus(pd);
         if (varianceFilter === 'all') return true;
+        if (varianceFilter === 'needsreview') {
+          return !job.isGroupRollup && !isJobReviewed(job.jn, reviewStage);
+        }
         if (varianceFilter === 'variance') return hasVariance;
         if (varianceFilter === 'noforecast') return hasNoForecast;
         if (varianceFilter === 'over') return pd.v > 0;
@@ -2942,7 +3041,8 @@
       }
       const fragment = document.createDocumentFragment();
       window.currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
-      updateTopBarStats({ jobs: baseJobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter });
+      const topVariancePeriod = period === 'all' && maxWorkDonePeriod > 0 ? `P${maxWorkDonePeriod}` : period;
+      updateTopBarStats({ jobs: baseJobs, baseFiltered, period: topVariancePeriod, getJobDisplayData, reviewStage, varianceFilter });
       updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter });
 
       // Custom discipline order: ALL, P-Way, W&G, Off Track, S&T, E&P CS, E&P D, then groups/others
