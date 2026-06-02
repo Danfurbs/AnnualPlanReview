@@ -110,7 +110,7 @@
         <ul class="comment-breakdown" id="commentBreakdown"></ul>
       </div>
       <div class="summary-card" id="variancesCard">
-        <div class="card-header"><div class="card-title">Top 10 Variances</div><button type="button" class="section-toggle" onclick="toggleTopSummaryCard('variancesCard', this)">Collapse</button></div>
+        <div class="card-header"><div class="card-title">Top 10 Variances</div><div class="header-actions"><button type="button" class="section-toggle" onclick="openTopVariancesModal()">Slide view</button><button type="button" class="section-toggle" onclick="toggleTopSummaryCard('variancesCard', this)">Collapse</button></div></div>
         <ul class="variance-list" id="varianceList"></ul>
       </div>
     </div>
@@ -198,6 +198,20 @@
     </div>
 
     <div id="jobs"></div>
+  </div>
+
+  <div id="topVariancesModal" class="modal">
+    <div class="modal-content modal-content--wide modal-content--slide">
+      <div class="modal-header slide-modal-header">
+        <div>
+          <h2>Top 10 Variance Brief</h2>
+          <p class="helper-text" id="topVarianceModalMeta">Current dashboard selection</p>
+        </div>
+        <button class="close" onclick="closeTopVariancesModal()">&times;</button>
+      </div>
+      <div class="top-variance-brief-summary" id="topVarianceBriefSummary"></div>
+      <div class="top-variance-slide-grid" id="topVarianceSlideGrid"></div>
+    </div>
   </div>
 
   <div id="modal" class="modal">

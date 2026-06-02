@@ -9,6 +9,8 @@
     let publicGroupStore = [];
     let editingGroupId = null;
     let currentChart = null;
+    let topVarianceBriefCharts = [];
+    let latestTopVarianceBrief = null;
     let currentWorkOrders = [];
     let currentWorkOrderWorkGroup = 'all';
     let lastForecastRowCount = null;
@@ -1487,6 +1489,223 @@
       });
     }
 
+    function getPeriodNumber(period) {
+      if (!period || period === 'all') return 13;
+      const numeric = parseInt(String(period).replace(/[^0-9]/g, ''), 10);
+      return Number.isNaN(numeric) ? 13 : Math.max(1, Math.min(13, numeric));
+    }
+
+    function getTopVariancePeriodLabel(period) {
+      if (!period || period === 'all') return 'Full year';
+      return `Period ${getPeriodNumber(period)}`;
+    }
+
+    function formatSignedUnits(value, decimals = 1) {
+      const numeric = Number(value) || 0;
+      return `${numeric > 0 ? '+' : ''}${numeric.toFixed(decimals)}`;
+    }
+
+    function getSelectDisplayText(id, fallback = 'All') {
+      const select = document.getElementById(id);
+      if (!select) return fallback;
+      const option = select.options?.[select.selectedIndex];
+      return option ? option.textContent.trim() : (select.value || fallback);
+    }
+
+    function getTopVarianceSelectionMeta(period, varianceFilter) {
+      const parts = [
+        currentFinancialYear,
+        currentPlanVersion,
+        currentReviewStage,
+        getTopVariancePeriodLabel(period),
+        `Group: ${getSelectDisplayText('groupFilter')}`,
+        `Delivery unit: ${currentDeliveryUnit === 'all' ? 'All Delivery Units' : currentDeliveryUnit}`,
+        `Engineer: ${getSelectDisplayText('engineerFilter')}`,
+        `Work group: ${getSelectDisplayText('wgFilter')}`
+      ].filter(Boolean);
+      if (varianceFilter && varianceFilter !== 'all') {
+        parts.push(`Variance filter: ${getSelectDisplayText('varianceFilter')}`);
+      }
+      return parts.join(' • ');
+    }
+
+    function buildTopVarianceBriefData({ baseFiltered, period, getJobDisplayData, varianceFilter }) {
+      const periodNumber = getPeriodNumber(period);
+      const periodKey = period === 'all' ? 'all' : `P${periodNumber}`;
+      const items = (baseFiltered || [])
+        .map(job => {
+          const displayData = getJobDisplayData(job);
+          const selected = periodKey === 'all'
+            ? displayData.tot
+            : (displayData.periods[periodKey] || { f: 0, a: 0, wd: 0, v: 0 });
+          let cumulativeForecast = 0;
+          let cumulativeActual = 0;
+          const chartLabels = [];
+          const forecastSeries = [];
+          const actualSeries = [];
+          for (let i = 1; i <= periodNumber; i++) {
+            const p = `P${i}`;
+            const data = displayData.periods[p] || { f: 0, a: 0, wd: 0, v: 0 };
+            cumulativeForecast += data.f || 0;
+            cumulativeActual += data.a || 0;
+            chartLabels.push(`P${i}`);
+            forecastSeries.push(cumulativeForecast);
+            actualSeries.push(cumulativeActual);
+          }
+          return {
+            job,
+            selected,
+            variance: selected.v || 0,
+            cumulativeForecast,
+            cumulativeActual,
+            cumulativeVariance: cumulativeActual - cumulativeForecast,
+            chartLabels,
+            forecastSeries,
+            actualSeries
+          };
+        })
+        .filter(item => Math.abs(item.variance) > 0.0001)
+        .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance))
+        .slice(0, 10);
+
+      const selectedTotals = items.reduce((acc, item) => {
+        acc.f += item.selected.f || 0;
+        acc.a += item.selected.a || 0;
+        acc.wd += item.selected.wd || 0;
+        acc.v += item.selected.v || 0;
+        acc.cumulativeVariance += item.cumulativeVariance || 0;
+        return acc;
+      }, { f: 0, a: 0, wd: 0, v: 0, cumulativeVariance: 0 });
+
+      return {
+        items,
+        selectedTotals,
+        period,
+        periodNumber,
+        periodLabel: getTopVariancePeriodLabel(period),
+        meta: getTopVarianceSelectionMeta(period, varianceFilter)
+      };
+    }
+
+    function destroyTopVarianceBriefCharts() {
+      topVarianceBriefCharts.forEach(chart => chart?.destroy?.());
+      topVarianceBriefCharts = [];
+    }
+
+    function renderTopVariancesModal() {
+      const data = latestTopVarianceBrief;
+      const modal = document.getElementById('topVariancesModal');
+      const metaEl = document.getElementById('topVarianceModalMeta');
+      const summaryEl = document.getElementById('topVarianceBriefSummary');
+      const gridEl = document.getElementById('topVarianceSlideGrid');
+      if (!modal || !summaryEl || !gridEl) return;
+
+      destroyTopVarianceBriefCharts();
+      if (!data || !data.items.length) {
+        if (metaEl) metaEl.textContent = 'No variance data for the current dashboard selection.';
+        summaryEl.innerHTML = '';
+        gridEl.innerHTML = '<div class="empty-slide-state">No variances to display for the current filters.</div>';
+        return;
+      }
+
+      if (metaEl) metaEl.textContent = data.meta;
+      const totalClass = data.selectedTotals.v > 0 ? 'positive' : data.selectedTotals.v < 0 ? 'negative' : 'neutral';
+      const cumulativeClass = data.selectedTotals.cumulativeVariance > 0 ? 'positive' : data.selectedTotals.cumulativeVariance < 0 ? 'negative' : 'neutral';
+      summaryEl.innerHTML = `
+        <div class="brief-summary-card"><span>Selection</span><strong>${escapeHtml(data.periodLabel)}</strong></div>
+        <div class="brief-summary-card"><span>Jobs shown</span><strong>${data.items.length}</strong></div>
+        <div class="brief-summary-card"><span>Selected forecast</span><strong>${formatUnits(data.selectedTotals.f)}</strong></div>
+        <div class="brief-summary-card"><span>Selected actual</span><strong>${formatUnits(data.selectedTotals.a)}</strong></div>
+        <div class="brief-summary-card"><span>Selected variance</span><strong class="${totalClass}">${formatSignedUnits(data.selectedTotals.v)}</strong></div>
+        <div class="brief-summary-card"><span>Overall variance to P${data.periodNumber}</span><strong class="${cumulativeClass}">${formatSignedUnits(data.selectedTotals.cumulativeVariance)}</strong></div>
+      `;
+
+      gridEl.innerHTML = data.items.map((item, index) => {
+        const selectedClass = item.variance > 0 ? 'positive' : item.variance < 0 ? 'negative' : 'neutral';
+        const overallClass = item.cumulativeVariance > 0 ? 'positive' : item.cumulativeVariance < 0 ? 'negative' : 'neutral';
+        const health = getJobHealthStatus(item.selected);
+        return `
+          <article class="top-variance-slide-card">
+            <div class="slide-card-heading">
+              <div>
+                <div class="slide-card-rank">#${index + 1}</div>
+                <h3>${escapeHtml(item.job.jn)}</h3>
+                <p>${escapeHtml(item.job.desc)}</p>
+              </div>
+              <span class="slide-rag slide-rag-${health.status}">${escapeHtml(health.label)}</span>
+            </div>
+            <div class="slide-period-summary">
+              <div><span>Forecast</span><strong>${formatUnits(item.selected.f)}</strong></div>
+              <div><span>Actual</span><strong>${formatUnits(item.selected.a)}</strong></div>
+              <div><span>Work Done</span><strong>${formatUnits(item.selected.wd || 0)}</strong></div>
+              <div><span>${escapeHtml(data.periodLabel)} variance</span><strong class="${selectedClass}">${formatSignedUnits(item.variance)}</strong></div>
+              <div><span>Overall to P${data.periodNumber}</span><strong class="${overallClass}">${formatSignedUnits(item.cumulativeVariance)}</strong></div>
+            </div>
+            <div class="slide-chart-wrap"><canvas id="topVarianceChart${index}" aria-label="Cumulative forecast and work done for ${escapeHtml(item.job.jn)}"></canvas></div>
+          </article>
+        `;
+      }).join('');
+
+      data.items.forEach((item, index) => {
+        const canvas = document.getElementById(`topVarianceChart${index}`);
+        if (!canvas) return;
+        const chart = new Chart(canvas, {
+          type: 'line',
+          data: {
+            labels: item.chartLabels,
+            datasets: [
+              {
+                label: 'Forecast',
+                data: item.forecastSeries,
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                borderWidth: 2,
+                pointRadius: 1.5,
+                tension: 0.25,
+                fill: false
+              },
+              {
+                label: 'Work Done',
+                data: item.actualSeries,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                borderWidth: 2,
+                pointRadius: 1.5,
+                tension: 0.25,
+                fill: false
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+              tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}` } }
+            },
+            scales: {
+              x: { ticks: { font: { size: 10 }, maxRotation: 0 }, grid: { display: false } },
+              y: { beginAtZero: true, ticks: { font: { size: 10 } } }
+            }
+          }
+        });
+        topVarianceBriefCharts.push(chart);
+      });
+    }
+
+    function openTopVariancesModal() {
+      renderTopVariancesModal();
+      document.getElementById('topVariancesModal')?.classList.add('open');
+    }
+    window.openTopVariancesModal = openTopVariancesModal;
+
+    function closeTopVariancesModal() {
+      document.getElementById('topVariancesModal')?.classList.remove('open');
+      destroyTopVarianceBriefCharts();
+    }
+    window.closeTopVariancesModal = closeTopVariancesModal;
+
     function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter }) {
       const totalJobs = jobs.length;
       const reviewedJobs = jobs.filter(job => isJobReviewed(job.jn, reviewStage)).length;
@@ -1572,19 +1791,12 @@
       }
 
       const varianceListEl = document.getElementById('varianceList');
+      latestTopVarianceBrief = buildTopVarianceBriefData({ baseFiltered, period, getJobDisplayData, varianceFilter });
       if (varianceListEl) {
-        const topVariances = baseFiltered
-          .map(job => {
-            const displayData = getJobDisplayData(job);
-            const pd = period === 'all' ? displayData.tot : displayData.periods[period];
-            return { job, variance: pd.v || 0 };
-          })
-          .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance))
-          .slice(0, 10);
-        if (!topVariances.length) {
+        if (!latestTopVarianceBrief.items.length) {
           varianceListEl.innerHTML = '<li class="variance-item"><span class="variance-desc">No variances to display.</span></li>';
         } else {
-          varianceListEl.innerHTML = topVariances.map(({ job, variance }) => {
+          varianceListEl.innerHTML = latestTopVarianceBrief.items.map(({ job, variance }) => {
             const valueClass = variance > 0 ? 'positive' : variance < 0 ? 'negative' : 'neutral';
             return `
               <li class="variance-item" onclick="showBreakdownByJobNumber('${escapeHtml(job.jn)}')">
@@ -1592,7 +1804,7 @@
                   <strong>${escapeHtml(job.jn)}</strong>
                   <span class="variance-desc">${escapeHtml(job.desc)}</span>
                 </div>
-                <div class="variance-value ${valueClass}">${variance > 0 ? '+' : ''}${variance.toFixed(1)}</div>
+                <div class="variance-value ${valueClass}">${formatSignedUnits(variance)}</div>
               </li>
             `;
           }).join('');
@@ -3846,6 +4058,7 @@
     
     document.getElementById('modal').onclick = e => { if (e.target.id==='modal') closeModal(); };
     document.getElementById('groupModal').onclick = e => { if (e.target.id === 'groupModal') closeGroupModal(); };
+    document.getElementById('topVariancesModal').onclick = e => { if (e.target.id === 'topVariancesModal') closeTopVariancesModal(); };
     // Keep breakdown open when clicking the backdrop; close via the top-right × button only.
     document.getElementById('forecastCompare').onclick = e => { if (e.target.id === 'forecastCompare') closeForecastComparison(); };
 
