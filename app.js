@@ -1517,7 +1517,7 @@
       return option ? option.textContent.trim() : (select.value || fallback);
     }
 
-    function getTopVarianceSelectionMeta(period, varianceFilter) {
+    function getTopVarianceSelectionMeta(period, varianceFilter, reviewStatusFilter = 'all') {
       const parts = [
         currentFinancialYear,
         currentPlanVersion,
@@ -1528,13 +1528,16 @@
         `Engineer: ${getSelectDisplayText('engineerFilter')}`,
         `Work group: ${getSelectDisplayText('wgFilter')}`
       ].filter(Boolean);
+      if (reviewStatusFilter && reviewStatusFilter !== 'all') {
+        parts.push(`Review status: ${getSelectDisplayText('reviewStatusFilter')}`);
+      }
       if (varianceFilter && varianceFilter !== 'all') {
         parts.push(`Variance filter: ${getSelectDisplayText('varianceFilter')}`);
       }
       return parts.join(' • ');
     }
 
-    function buildTopVarianceBriefData({ baseFiltered, period, getJobDisplayData, varianceFilter }) {
+    function buildTopVarianceBriefData({ baseFiltered, period, getJobDisplayData, varianceFilter, reviewStatusFilter }) {
       const periodNumber = getPeriodNumber(period);
       const throughLabel = getTopVarianceThroughLabel(periodNumber);
       const items = (baseFiltered || [])
@@ -1591,7 +1594,7 @@
         periodNumber,
         periodLabel: getTopVariancePeriodLabel(period),
         throughLabel,
-        meta: getTopVarianceSelectionMeta(period, varianceFilter)
+        meta: getTopVarianceSelectionMeta(period, varianceFilter, reviewStatusFilter)
       };
     }
 
@@ -1711,7 +1714,7 @@
     }
     window.closeTopVariancesModal = closeTopVariancesModal;
 
-    function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter }) {
+    function updateTopBarStats({ jobs, baseFiltered, period, getJobDisplayData, reviewStage, varianceFilter, reviewStatusFilter }) {
       const totalJobs = jobs.length;
       const reviewedJobs = jobs.filter(job => isJobReviewed(job.jn, reviewStage)).length;
       const percent = totalJobs ? Math.round((reviewedJobs / totalJobs) * 100) : 0;
@@ -1797,7 +1800,7 @@
       refreshCommentExportTypeOptions(commentCounts);
 
       const varianceListEl = document.getElementById('varianceList');
-      latestTopVarianceBrief = buildTopVarianceBriefData({ baseFiltered, period, getJobDisplayData, varianceFilter });
+      latestTopVarianceBrief = buildTopVarianceBriefData({ baseFiltered, period, getJobDisplayData, varianceFilter, reviewStatusFilter });
       if (varianceListEl) {
         if (!latestTopVarianceBrief.items.length) {
           varianceListEl.innerHTML = '<li class="variance-item"><span class="variance-desc">No variances to display.</span></li>';
@@ -2804,6 +2807,7 @@
       // Always show work done and forecast (no view mode toggle)
       const cutoffValue = getForecastCutoffValue();
       const varianceFilter = document.getElementById('varianceFilter')?.value || 'all';
+      const reviewStatusFilter = document.getElementById('reviewStatusFilter')?.value || 'all';
       const maxWorkDonePeriod = (() => {
         if (cutoffValue === 'auto') return getMaxWorkDonePeriod();
         const numeric = parseInt(String(cutoffValue).replace(/[^0-9]/g, ''), 10);
@@ -2998,9 +3002,6 @@
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
         const { status, hasVariance, hasNoForecast } = getVarianceStatus(pd);
         if (varianceFilter === 'all') return true;
-        if (varianceFilter === 'needsreview') {
-          return !job.isGroupRollup && !isJobReviewed(job.jn, reviewStage);
-        }
         if (varianceFilter === 'variance') return hasVariance;
         if (varianceFilter === 'noforecast') return hasNoForecast;
         if (varianceFilter === 'over') return pd.v > 0;
@@ -3008,6 +3009,15 @@
         // For good/warning/bad filters, exclude jobs with no forecast
         if (hasNoForecast) return false;
         return status === varianceFilter;
+      };
+
+      const applyReviewStatusFilter = (job) => {
+        if (reviewStatusFilter === 'all') return true;
+        if (job.isGroupRollup) return false;
+        const isReviewed = isJobReviewed(job.jn, reviewStage);
+        if (reviewStatusFilter === 'reviewed') return isReviewed;
+        if (reviewStatusFilter === 'needsreview') return !isReviewed;
+        return true;
       };
 
       const hideZeroVolume = document.getElementById('hideZeroVolume')?.checked || false;
@@ -3018,7 +3028,10 @@
         return !(displayData.tot.f === 0 && displayData.tot.a === 0);
       };
 
-      const filtered = [...baseFiltered.filter(applyVarianceFilter).filter(applyZeroVolumeFilter), ...rollupFiltered.filter(applyVarianceFilter).filter(applyZeroVolumeFilter)];
+      const filtered = [
+        ...baseFiltered.filter(applyReviewStatusFilter).filter(applyVarianceFilter).filter(applyZeroVolumeFilter),
+        ...rollupFiltered.filter(applyReviewStatusFilter).filter(applyVarianceFilter).filter(applyZeroVolumeFilter)
+      ];
       
       filtered.sort((a,b) => {
         const aDisplay = getJobDisplayData(a);
@@ -3042,7 +3055,7 @@
       const fragment = document.createDocumentFragment();
       window.currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
       const topVariancePeriod = period === 'all' && maxWorkDonePeriod > 0 ? `P${maxWorkDonePeriod}` : period;
-      updateTopBarStats({ jobs: baseJobs, baseFiltered, period: topVariancePeriod, getJobDisplayData, reviewStage, varianceFilter });
+      updateTopBarStats({ jobs: baseJobs, baseFiltered, period: topVariancePeriod, getJobDisplayData, reviewStage, varianceFilter, reviewStatusFilter });
       updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter });
 
       // Custom discipline order: ALL, P-Way, W&G, Off Track, S&T, E&P CS, E&P D, then groups/others
@@ -3064,15 +3077,64 @@
         sec.className = 'discipline-section';
         sec.dataset.discipline = disc;
         if (disciplineCollapseState[disc]) sec.classList.add('collapsed');
+        const standardDisciplineJobs = byDisc[disc].filter(job => !job.isGroupRollup);
+        const disciplineSummaryJobs = standardDisciplineJobs.length ? standardDisciplineJobs : byDisc[disc];
+        const disciplineSummary = disciplineSummaryJobs.reduce((totals, job) => {
+          const displayData = getJobDisplayData(job);
+          const pd = period === 'all' ? displayData.tot : displayData.periods[period];
+          totals.f += Number(pd?.f || 0);
+          totals.a += Number(pd?.a || 0);
+          totals.wd += Number(pd?.wd || 0);
+          totals.v += Number(pd?.v || 0);
+          return totals;
+        }, { f: 0, a: 0, wd: 0, v: 0 });
+        const disciplineStatus = getVarianceStatus(disciplineSummary).status;
+        const disciplineHealth = getJobHealthStatus(disciplineSummary);
+        const disciplineSummaryClass = disciplineStatus === 'bad'
+          ? 'critical'
+          : disciplineStatus === 'warning'
+            ? 'warning'
+            : disciplineStatus === 'noforecast'
+              ? 'noforecast'
+              : 'good';
+        const disciplineVarianceClass = disciplineSummary.v > 0
+          ? 'variance-positive'
+          : disciplineSummary.v < 0
+            ? 'variance-negative'
+            : '';
+
         sec.innerHTML = `
-          <div class="discipline-header">
-            <h2>${disc}</h2>
+          <div class="discipline-header summary-${disciplineSummaryClass}">
+            <div class="discipline-title-wrap">
+              <span class="discipline-rollup-dot"></span>
+              <h2>${escapeHtml(disc)}</h2>
+              <span class="discipline-rollup-status">${escapeHtml(disciplineHealth.label)}</span>
+            </div>
+            <div class="discipline-rollup-metrics" aria-label="${escapeHtml(disc)} planned actual work done and variance roll-up">
+              <div class="discipline-rollup-metric">
+                <span>Planned</span>
+                <strong>${disciplineSummary.f.toFixed(1)}</strong>
+              </div>
+              <div class="discipline-rollup-metric">
+                <span>Actual</span>
+                <strong>${disciplineSummary.a.toFixed(1)}</strong>
+              </div>
+              <div class="discipline-rollup-metric">
+                <span>Work Done</span>
+                <strong>${disciplineSummary.wd.toFixed(1)}</strong>
+              </div>
+              <div class="discipline-rollup-metric">
+                <span>Variance</span>
+                <strong class="${disciplineVarianceClass}">${disciplineSummary.v > 0 ? '+' : ''}${disciplineSummary.v.toFixed(1)} (${disciplineHealth.percent.toFixed(0)}%)</strong>
+              </div>
+            </div>
             <div class="header-actions">
               <span>${byDisc[disc].length} jobs</span>
               <button type="button" class="section-toggle" onclick="toggleDisciplineSection(this)">Collapse</button>
             </div>
           </div>
         `;
+
         const grid = document.createElement('div');
         grid.className = 'jobs-grid';
         

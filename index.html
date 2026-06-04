@@ -178,6 +178,15 @@
         </select>
       </div>
       <div class="control-group">
+        <label for="reviewStatusFilter">Review status</label>
+        <select id="reviewStatusFilter" onchange="render()">
+          <option value="all">All Review Statuses</option>
+          <option value="needsreview">Needs Review</option>
+          <option value="reviewed">Reviewed</option>
+        </select>
+        <span class="helper-text">Filters against the selected review stage</span>
+      </div>
+      <div class="control-group">
         <label for="varianceFilter">Variance filter</label>
         <select id="varianceFilter" onchange="render()">
           <option value="all">Show All</option>
@@ -188,7 +197,6 @@
           <option value="under">Show Under Delivered</option>
           <option value="noforecast">Show No Forecast (Grey)</option>
           <option value="variance">Show Any Variances</option>
-          <option value="needsreview">Show Needs Review</option>
         </select>
       </div>
       <div class="control-group">
