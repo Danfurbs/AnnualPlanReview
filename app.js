@@ -3033,7 +3033,11 @@
         ...rollupFiltered.filter(applyReviewStatusFilter).filter(applyVarianceFilter).filter(applyZeroVolumeFilter)
       ];
       
+      const shouldPrioritizeSelectedGroupRollup = groupFilter !== 'all';
       filtered.sort((a,b) => {
+        if (shouldPrioritizeSelectedGroupRollup && a.isGroupRollup !== b.isGroupRollup) {
+          return a.isGroupRollup ? -1 : 1;
+        }
         const aDisplay = getJobDisplayData(a);
         const bDisplay = getJobDisplayData(b);
         const av = period==='all' ? Math.abs(aDisplay.tot.v) : Math.abs(aDisplay.periods[period]?.v||0);
@@ -3061,6 +3065,10 @@
       // Custom discipline order: ALL, P-Way, W&G, Off Track, S&T, E&P CS, E&P D, then groups/others
       const disciplineOrder = ['ALL', 'P-Way', 'W&G', 'Off Track', 'S&T', 'E&P CS', 'E&P D'];
       const sortedDisciplines = Object.keys(byDisc).sort((a, b) => {
+        if (shouldPrioritizeSelectedGroupRollup && (a === 'Group Rollups' || b === 'Group Rollups')) {
+          if (a === b) return 0;
+          return a === 'Group Rollups' ? -1 : 1;
+        }
         const aIndex = disciplineOrder.indexOf(a);
         const bIndex = disciplineOrder.indexOf(b);
         // Both in order list - sort by order
