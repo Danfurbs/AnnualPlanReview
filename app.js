@@ -2543,7 +2543,7 @@
         desc: group.description || getGroupName(group),
         unit: getGroupUnitLabel(group),
         periods: {},
-        tot: { f: 0, a: 0, v: 0 },
+        tot: { f: 0, a: 0, wd: 0, v: 0 },
         wgs: {},
         isGroupRollup: true,
         groupId: group.id,
@@ -2555,17 +2555,19 @@
         const p = `P${i}`;
         const periodTotals = groupJobs.reduce(
           (acc, job) => {
-            const data = job.periods[p] || { f: 0, a: 0, v: 0 };
+            const data = job.periods[p] || { f: 0, a: 0, wd: 0, v: 0 };
             acc.f += data.f || 0;
             acc.a += data.a || 0;
+            acc.wd += data.wd || 0;
             acc.v += data.v || 0;
             return acc;
           },
-          { f: 0, a: 0, v: 0 }
+          { f: 0, a: 0, wd: 0, v: 0 }
         );
         rollup.periods[p] = periodTotals;
         rollup.tot.f += periodTotals.f;
         rollup.tot.a += periodTotals.a;
+        rollup.tot.wd += periodTotals.wd;
         rollup.tot.v += periodTotals.v;
       }
 
@@ -2579,13 +2581,14 @@
           const p = `P${i}`;
           const totals = groupJobs.reduce(
             (acc, job) => {
-              const data = job.wgs?.[wg]?.periods?.[p] || { f: 0, a: 0, v: 0 };
+              const data = job.wgs?.[wg]?.periods?.[p] || { f: 0, a: 0, wd: 0, v: 0 };
               acc.f += data.f || 0;
               acc.a += data.a || 0;
+              acc.wd += data.wd || 0;
               acc.v += data.v || 0;
               return acc;
             },
-            { f: 0, a: 0, v: 0 }
+            { f: 0, a: 0, wd: 0, v: 0 }
           );
           rollup.wgs[wg].periods[p] = totals;
         }
@@ -3253,6 +3256,11 @@
                     <div class="group-pa-item">
                       <div class="group-pa-label">ACTUAL</div>
                       <div class="group-pa-value">${pd.a.toFixed(1)}</div>
+                    </div>
+                    <div class="group-pa-divider">/</div>
+                    <div class="group-pa-item">
+                      <div class="group-pa-label">WORK DONE</div>
+                      <div class="group-pa-value">${(pd.wd || 0).toFixed(1)}</div>
                     </div>
                   </div>
                 ` : `
