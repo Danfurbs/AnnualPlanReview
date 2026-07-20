@@ -390,7 +390,7 @@
         <div class="forecast-card">
           <h4>Actions</h4>
           <div class="forecast-action-list">
-            <button type="button" class="primary-button" onclick="resubmitPlanAsV1()" title="Create a complete v1 submission from v0 and track subsequent changes">Resubmit plan as v1</button>
+            <button type="button" class="primary-button" onclick="openCopyWorkGroupsToV1Modal()" title="Review and select the work group sets to copy from Plan v0 into Plan v1">Select workgroups to copy to V1</button>
             <button type="button" onclick="addForecastEditorRow()">+ Add Row</button>
             <button type="button" class="group-action-button" onclick="openCopyActualsModal()" id="copyActualsBtn">Copy from Work Done</button>
             <button type="button" class="group-action-button" onclick="initializeV1FromV0Explicit()" id="initV1Btn" title="Reset only the selected work group from Plan v0">Reset current work group from v0</button>
@@ -511,6 +511,42 @@
           </table>
         </div>
       </main>
+    </div>
+  </div>
+
+  <div id="copyWorkGroupsToV1Modal" class="modal">
+    <div class="modal-content modal-content--wide">
+      <div class="modal-header">
+        <div>
+          <h2>Select workgroups to copy to V1</h2>
+          <p class="helper-text">Review existing V1 values before replacing selected workgroup sets with their V0 forecast.</p>
+        </div>
+        <button class="close" onclick="closeCopyWorkGroupsToV1Modal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="copy-wg-toolbar">
+        <input type="search" id="copyWorkGroupsSearch" placeholder="Search workgroups..." aria-label="Search workgroups">
+        <select id="copyWorkGroupsStatusFilter" aria-label="Filter by V1 status">
+          <option value="all">All statuses</option>
+          <option value="amended">Amended in V1</option>
+          <option value="same">Matches V0</option>
+          <option value="empty">Not in V1</option>
+        </select>
+        <button type="button" class="group-action-button" onclick="setAllCopyWorkGroups(true)">Select all shown</button>
+        <button type="button" class="group-action-button" onclick="clearCopyWorkGroupSelection()">Clear selection</button>
+        <strong id="copyWorkGroupsSelectionCount">0 selected</strong>
+      </div>
+      <div class="copy-wg-warning">Selecting a row replaces that entire workgroup in V1, including removing V1-only jobs. Rows marked <strong>Amended</strong> already differ from V0.</div>
+      <div class="copy-wg-impact" id="copyWorkGroupsImpact" aria-live="polite"></div>
+      <div class="copy-wg-table-wrap">
+        <table class="copy-wg-table">
+          <thead><tr><th>Select</th><th>Workgroup set</th><th>V0 jobs</th><th>V1 jobs</th><th>Changed jobs</th><th>V0 volume</th><th>V1 volume</th><th>Variation</th><th>Status</th></tr></thead>
+          <tbody id="copyWorkGroupsTableBody"></tbody>
+        </table>
+      </div>
+      <div class="comment-actions copy-wg-actions">
+        <button type="button" class="group-action-button" onclick="closeCopyWorkGroupsToV1Modal()">Cancel</button>
+        <button type="button" class="primary-button" id="copySelectedWorkGroupsButton" onclick="copySelectedWorkGroupsToV1()" disabled>Copy selected workgroups to V1</button>
+      </div>
     </div>
   </div>
 
