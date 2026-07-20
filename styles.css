@@ -426,6 +426,11 @@
     .wg-item-indicator { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .wg-item-name { flex: 1; font-size: 12px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .wg-item-count { font-size: 10px; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
+    .wg-version-badge { flex-shrink: 0; font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 999px; color: #475569; background: #e2e8f0; }
+    .wg-version-badge--changed { color: #92400e; background: #fef3c7; }
+    .wg-version-badge--v1-only { color: #166534; background: #dcfce7; }
+    .wg-version-badge--removed { color: #991b1b; background: #fee2e2; }
+    .wg-version-badge--mirrored { color: #3730a3; background: #e0e7ff; }
     .wg-item--selected .wg-item-name { font-weight: 600; color: #1d4ed8; }
 
     /* Current Work Group Display */

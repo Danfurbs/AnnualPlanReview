@@ -162,52 +162,48 @@ function getWorkGroupStatuses(fData, planVersion, year) {
     statuses.set(code, { hasData: false, jobCount: 0, totalVolume: 0 });
   });
 
-  // For v1, we need to check both v0 (inherited) and v1 (overrides)
+  const normalizeCode = code => typeof normalizeWorkGroupSet === 'function'
+    ? normalizeWorkGroupSet(code)
+    : String(code || '').trim().toUpperCase();
+  const statusByNormalizedCode = new Map();
+  statuses.forEach((status, code) => statusByNormalizedCode.set(normalizeCode(code), status));
+
+  // Count a job once when the work group is present in the effective plan. A
+  // zero-volume forecast (or a comment-only entry) is still a forecasted job.
+  const countData = data => {
+    if (!data) return;
+    data.forEach(job => {
+      Object.entries(job?.wgs || {}).forEach(([wgCode, periods]) => {
+        const status = statusByNormalizedCode.get(normalizeCode(wgCode));
+        if (!status) return;
+        const values = window.FORECAST_PERIODS || Object.keys(periods || {});
+        const totalForWg = values.reduce((sum, period) => sum + (Number(periods?.[period]) || 0), 0);
+        status.hasData = true;
+        status.jobCount++;
+        status.totalVolume += totalForWg;
+      });
+    });
+  };
+
+  // For v1, build the same effective view used by the editor: v0 jobs are
+  // inherited until that job is explicitly changed in v1.
   let dataToCheck = fData;
   if (planVersion === 'v1' && typeof getForecastSnapshot === 'function') {
     const v0Snapshot = getForecastSnapshot(year, 'v0');
     const v1Overrides = typeof loadV1Overrides === 'function' ? loadV1Overrides(year) : new Set();
 
     if (v0Snapshot && v0Snapshot.data) {
-      // Check v0 data for non-overridden jobs
+      const effectiveData = new Map();
       v0Snapshot.data.forEach((job, jobNumber) => {
-        if (v1Overrides.has(jobNumber)) return; // Skip if overridden in v1
-
-        if (job && job.wgs) {
-          Object.entries(job.wgs).forEach(([wgCode, periods]) => {
-            if (!statuses.has(wgCode)) return;
-
-            const totalForWg = Object.values(periods || {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
-            if (totalForWg > 0) {
-              const status = statuses.get(wgCode);
-              status.hasData = true;
-              status.jobCount++;
-              status.totalVolume += totalForWg;
-            }
-          });
-        }
+        if (!v1Overrides.has(jobNumber)) effectiveData.set(jobNumber, job);
       });
+      if (fData) fData.forEach((job, jobNumber) => effectiveData.set(jobNumber, job));
+      dataToCheck = effectiveData;
     }
   }
 
   // Check current fData
-  if (dataToCheck) {
-    dataToCheck.forEach((job) => {
-      if (job && job.wgs) {
-        Object.entries(job.wgs).forEach(([wgCode, periods]) => {
-          if (!statuses.has(wgCode)) return;
-
-          const totalForWg = Object.values(periods || {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
-          if (totalForWg > 0) {
-            const status = statuses.get(wgCode);
-            status.hasData = true;
-            status.jobCount++;
-            status.totalVolume += totalForWg;
-          }
-        });
-      }
-    });
-  }
+  countData(dataToCheck);
 
   return statuses;
 }
