@@ -360,8 +360,14 @@ function renderWorkGroupSelector(filter = 'all', searchText = '') {
 function getV1WorkGroupComparison(year) {
   const comparison = new Map();
   const v0 = getForecastSnapshot(year, 'v0')?.data || new Map();
-  const savedV1 = getForecastSnapshot(year, 'v1')?.data || new Map();
-  const v1 = savedV1;
+  // The editor's in-memory data is newer than local storage while an API save
+  // is in flight (and in API-only mode it may never be cached locally). Use it
+  // so V1 badges immediately reflect copies and edits.
+  const v1 = window.forecastEditorState.year === year
+    && window.forecastEditorState.planVersion === 'v1'
+    && window.fData
+    ? window.fData
+    : (getForecastSnapshot(year, 'v1')?.data || new Map());
   const groups = new Set();
   const collect = data => data.forEach(job => Object.keys(job?.wgs || {}).forEach(code => groups.add(normalizeWorkGroupSet(code))));
   collect(v0);
@@ -1418,6 +1424,11 @@ const debouncedSaveUndoState = window.debounce ? window.debounce(() => {
   }
 }, 1000) : null;
 
+const debouncedRefreshWorkGroupTags = window.debounce ? window.debounce(() => {
+  syncForecastEditorTableState();
+  renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
+}, 150) : null;
+
 function handleForecastEditorTableInput(event) {
   const rowEl = event.target.closest('tr');
   if (!rowEl) return;
@@ -1492,6 +1503,7 @@ function handleForecastEditorTableInput(event) {
     if (debouncedSaveUndoState) {
       debouncedSaveUndoState();
     }
+    if (debouncedRefreshWorkGroupTags) debouncedRefreshWorkGroupTags();
   }
 
   // Handle comment input
@@ -1536,6 +1548,7 @@ function handleForecastEditorTableInput(event) {
     if (debouncedSaveUndoState) {
       debouncedSaveUndoState();
     }
+    if (debouncedRefreshWorkGroupTags) debouncedRefreshWorkGroupTags();
   }
 }
 
@@ -1947,6 +1960,115 @@ function downloadTotalForecastExport() {
   URL.revokeObjectURL(url);
 
   console.log(`Exported ${rows.length} work group and standard job rows for ${year} ${planVersion}`);
+}
+
+let pendingFullForecastFile = null;
+
+/** Select a full-forecast CSV/XLSX created with Export All Work Groups. */
+function triggerFullForecastUpload() {
+  document.getElementById('fullForecastFileInput')?.click();
+}
+
+function prepareFullForecastUpload(event) {
+  const file = event.target?.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  pendingFullForecastFile = file;
+  const fileName = document.getElementById('fullForecastUploadFileName');
+  if (fileName) fileName.textContent = `${file.name} will be loaded into ${window.forecastEditorState.year}.`;
+  const plan = document.getElementById('fullForecastUploadPlan');
+  if (plan) plan.value = window.forecastEditorState.planVersion || 'v0';
+  document.getElementById('fullForecastUploadModal')?.classList.add('open');
+}
+
+function closeFullForecastUploadModal() {
+  document.getElementById('fullForecastUploadModal')?.classList.remove('open');
+  pendingFullForecastFile = null;
+}
+
+function normalizeUploadedFinancialYear(value) {
+  const raw = String(value || '').trim().toUpperCase();
+  if (/^FY\d{2}$/.test(raw)) return raw;
+  if (/^20\d{2}$/.test(raw)) return `FY${raw.slice(-2)}`;
+  return raw;
+}
+
+async function confirmFullForecastUpload() {
+  if (!pendingFullForecastFile) return;
+  const file = pendingFullForecastFile;
+  const year = window.forecastEditorState.year;
+  const planVersion = document.getElementById('fullForecastUploadPlan')?.value || 'v0';
+  const planLabel = planVersion.toUpperCase();
+  const confirmed = confirm(
+    `Replace ${year} ${planLabel} with “${file.name}”?\n\n` +
+    `This will overwrite all existing ${planLabel} workgroup forecasts and any unsaved changes for ${year}. This cannot be undone.`
+  );
+  if (!confirmed) return;
+
+  try {
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!sheet) throw new Error('The upload does not contain a worksheet.');
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    if (!rows.length) throw new Error('The upload does not contain any forecast rows.');
+
+    const requiredHeaders = ['Strategic Route', 'WGST', 'Financial Year', 'Standard Job', 'SJN and Desc', 'Account Code',
+      'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13', 'Comment'];
+    const missingHeaders = requiredHeaders.filter(header => !Object.prototype.hasOwnProperty.call(rows[0], header));
+    if (missingHeaders.length) throw new Error(`Missing required column(s): ${missingHeaders.join(', ')}`);
+
+    const uploadedYears = new Set(rows.map(row => normalizeUploadedFinancialYear(row['Financial Year'])).filter(Boolean));
+    if (uploadedYears.size && (uploadedYears.size !== 1 || !uploadedYears.has(year))) {
+      throw new Error(`Financial Year must be ${year}; found ${Array.from(uploadedYears).join(', ')}.`);
+    }
+
+    const uploadedData = new Map();
+    rows.forEach((row, index) => {
+      const workGroup = String(row.WGST || '').trim().toUpperCase();
+      const digits = String(row['Standard Job'] || '').replace(/\D/g, '');
+      const jobNumber = digits ? digits.padStart(6, '0') : '';
+      if (!workGroup || !jobNumber) {
+        throw new Error(`Row ${index + 2} requires both WGST and Standard Job.`);
+      }
+      if (!uploadedData.has(jobNumber)) uploadedData.set(jobNumber, { periods: {}, wgs: {}, comments: {} });
+      const job = uploadedData.get(jobNumber);
+      const workGroupPeriods = {};
+      window.FORECAST_PERIODS.forEach((period, periodIndex) => {
+        const rawValue = row[`P${String(periodIndex + 1).padStart(2, '0')}`];
+        if (rawValue === '') return;
+        const value = Number(rawValue);
+        if (!Number.isFinite(value)) throw new Error(`Row ${index + 2} contains an invalid value for P${String(periodIndex + 1).padStart(2, '0')}.`);
+        workGroupPeriods[period] = value;
+      });
+      job.wgs[workGroup] = workGroupPeriods;
+      const comment = String(row.Comment || '').trim();
+      if (comment) job.comments[workGroup] = comment;
+    });
+
+    uploadedData.forEach(job => {
+      window.FORECAST_PERIODS.forEach(period => {
+        job.periods[period] = Object.values(job.wgs).reduce((total, workGroup) => total + (Number(workGroup[period]) || 0), 0);
+      });
+    });
+
+    const saved = await saveForecastToStorageAsync(uploadedData, uploadedData.size, year, planVersion);
+    if (!saved) throw new Error('The replacement forecast could not be saved.');
+
+    window.forecastEditorState.planVersion = planVersion;
+    window.currentPlanVersion = planVersion;
+    window.fData = uploadedData;
+    pendingFullForecastFile = null;
+    document.getElementById('fullForecastUploadModal')?.classList.remove('open');
+    renderForecastEditorSelectors();
+    renderForecastEditorTable();
+    updateForecastEditorSummary();
+    const status = document.getElementById('forecastEditorStatus');
+    if (status) status.textContent = `✓ Replaced ${year} ${planLabel} from ${file.name}.`;
+    window.Toast?.success(`Replaced ${year} ${planLabel} with ${uploadedData.size} jobs`);
+  } catch (error) {
+    console.error('Failed to upload full forecast:', error);
+    alert(`Failed to upload forecast: ${error.message}`);
+  }
 }
 
 /**
@@ -2706,6 +2828,10 @@ window.clearCopyWorkGroupSelection = clearCopyWorkGroupSelection;
 window.copySelectedWorkGroupsToV1 = copySelectedWorkGroupsToV1;
 window.downloadForecastEditorExport = downloadForecastEditorExport;
 window.downloadTotalForecastExport = downloadTotalForecastExport;
+window.triggerFullForecastUpload = triggerFullForecastUpload;
+window.prepareFullForecastUpload = prepareFullForecastUpload;
+window.closeFullForecastUploadModal = closeFullForecastUploadModal;
+window.confirmFullForecastUpload = confirmFullForecastUpload;
 window.downloadExcelUploadFormat = downloadExcelUploadFormat;
 window.triggerForecastFileUpload = triggerForecastFileUpload;
 window.loadForecastFile = loadForecastFile;
