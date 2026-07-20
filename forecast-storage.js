@@ -96,7 +96,16 @@ function deepCloneJobEntry(jobEntry) {
     });
   }
 
-  return { periods, wgs, comments };
+  // Amendment audit values are stored with the forecast so they follow the
+  // forecast between browser cache and server persistence.
+  const amendments = {};
+  if (jobEntry.amendments && typeof jobEntry.amendments === 'object') {
+    Object.entries(jobEntry.amendments).forEach(([key, value]) => {
+      if (value && typeof value === 'object') amendments[key] = { ...value };
+    });
+  }
+
+  return { periods, wgs, comments, amendments };
 }
 
 /**

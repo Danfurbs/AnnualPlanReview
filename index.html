@@ -653,6 +653,23 @@
         <canvas id="chart"></canvas>
       </div>
 
+      <div class="breakdown-section" id="forecastAmendmentSection">
+        <div class="discipline-header">
+          <div>
+            <h3>Amend Forecast</h3>
+            <p class="helper-text">Update Plan v0 or v1 for this standard job. Saved changes feed the chart, period totals and variance calculations immediately.</p>
+          </div>
+          <div class="header-actions forecast-amend-controls">
+            <label for="forecastAmendVersion">Forecast</label>
+            <select id="forecastAmendVersion"></select>
+            <label for="forecastAmendWorkGroup">Work group</label>
+            <select id="forecastAmendWorkGroup"></select>
+            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('forecastAmendmentEditor', this)">Collapse</button>
+          </div>
+        </div>
+        <div class="collapsible-content forecast-amend-editor" id="forecastAmendmentEditor"></div>
+      </div>
+
       <div class="breakdown-section">
         <div class="discipline-header">
           <h3>Work Group Performance by Period</h3>
