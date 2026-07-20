@@ -242,6 +242,9 @@ function renderWorkGroupSelector(filter = 'all', searchText = '') {
 
   const disciplines = getSortedDisciplines();
   const normalizedSearch = searchText.toLowerCase().trim();
+  const v1Comparison = window.forecastEditorState.planVersion === 'v1'
+    ? getV1WorkGroupComparison(window.forecastEditorState.year)
+    : new Map();
 
   let html = '';
 
@@ -292,6 +295,11 @@ function renderWorkGroupSelector(filter = 'all', searchText = '') {
             const status = statuses.get(wg.code);
             const hasData = status?.hasData || false;
             const isSelected = wg.code === window.forecastEditorState.workGroup;
+            const versionState = v1Comparison.get(normalizeWorkGroupSet(wg.code));
+            const versionLabel = versionState === 'changed' ? 'Changed'
+              : versionState === 'v1-only' ? 'New'
+                : versionState === 'removed' ? 'Removed'
+                  : versionState === 'mirrored' ? 'From v0' : '';
             return `
               <button type="button"
                       class="wg-item ${hasData ? 'wg-item--done' : 'wg-item--todo'} ${isSelected ? 'wg-item--selected' : ''}"
@@ -299,6 +307,7 @@ function renderWorkGroupSelector(filter = 'all', searchText = '') {
                       title="${escapeHtml(wg.description)}${status?.jobCount ? ` (${status.jobCount} jobs)` : ''}">
                 <span class="wg-item-indicator"></span>
                 <span class="wg-item-name">${escapeHtml(wg.shortName)}</span>
+                ${versionLabel ? `<span class="wg-version-badge wg-version-badge--${versionState}">${versionLabel}</span>` : ''}
                 ${status?.jobCount ? `<span class="wg-item-count">${status.jobCount}</span>` : ''}
               </button>
             `;
@@ -347,6 +356,71 @@ function renderWorkGroupSelector(filter = 'all', searchText = '') {
       saveCollapsedDisciplines(collapsedDisciplines);
     });
   });
+}
+
+/** Summarize whether each v1 work group is unchanged from, or differs from, v0. */
+function getV1WorkGroupComparison(year) {
+  const comparison = new Map();
+  const v0 = getForecastSnapshot(year, 'v0')?.data || new Map();
+  const savedV1 = getForecastSnapshot(year, 'v1')?.data || new Map();
+  const overrides = loadV1Overrides(year);
+  const v1 = new Map();
+  v0.forEach((job, jobNumber) => {
+    if (!overrides.has(jobNumber)) v1.set(jobNumber, job);
+  });
+  savedV1.forEach((job, jobNumber) => v1.set(jobNumber, job));
+  const groups = new Set();
+  const collect = data => data.forEach(job => Object.keys(job?.wgs || {}).forEach(code => groups.add(normalizeWorkGroupSet(code))));
+  collect(v0);
+  collect(v1);
+
+  const snapshot = (data, group) => {
+    const result = {};
+    data.forEach((job, jobNumber) => {
+      const key = Object.keys(job?.wgs || {}).find(code => normalizeWorkGroupSet(code) === group);
+      if (!key) return;
+      result[jobNumber] = {
+        periods: window.FORECAST_PERIODS.map(period => Number(job.wgs[key]?.[period]) || 0),
+        comment: String(job.comments?.[key] || '')
+      };
+    });
+    return result;
+  };
+
+  groups.forEach(group => {
+    const before = snapshot(v0, group);
+    const after = snapshot(v1, group);
+    const hasBefore = Object.keys(before).length > 0;
+    const hasAfter = Object.keys(after).length > 0;
+    comparison.set(group, !hasBefore ? 'v1-only' : !hasAfter ? 'removed'
+      : JSON.stringify(before) === JSON.stringify(after) ? 'mirrored' : 'changed');
+  });
+  return comparison;
+}
+
+/** Create a complete v1 submission from v0, ready for tracked amendments. */
+async function resubmitPlanAsV1() {
+  const year = window.forecastEditorState.year;
+  const v0 = getForecastSnapshot(year, 'v0');
+  if (!v0?.data?.size) {
+    alert(`No Plan v0 forecast exists for ${year}.`);
+    return;
+  }
+  if (!confirm(`Start a new ${year} Plan v1 submission from Plan v0?\n\nThis replaces the current v1 with a full copy of v0. Work groups will be labelled “From v0” until you change them.`)) return;
+
+  const v1Data = cloneForecastData(v0.data);
+  const saved = await saveForecastToStorageAsync(v1Data, v1Data.size, year, 'v1');
+  if (!saved) return;
+  await saveV1OverridesAsync(year, new Set());
+  window.forecastEditorState.planVersion = 'v1';
+  window.currentPlanVersion = 'v1';
+  window.fData = v1Data;
+  renderForecastEditorSelectors();
+  renderForecastEditorTable();
+  updateForecastEditorSummary();
+  const statusEl = document.getElementById('forecastEditorStatus');
+  if (statusEl) statusEl.textContent = `✓ Plan v1 created from v0 for ${year}. Change only the work groups that need amending.`;
+  window.Toast?.success(`Plan v1 created from ${year} v0`);
 }
 
 /**
@@ -2556,6 +2630,7 @@ window.submitForecastEditorForm = submitForecastEditorForm;
 window.addForecastEditorRow = addForecastEditorRow;
 window.clearForecastEditorTable = clearForecastEditorTable;
 window.initializeV1FromV0Explicit = initializeV1FromV0Explicit;
+window.resubmitPlanAsV1 = resubmitPlanAsV1;
 window.downloadForecastEditorExport = downloadForecastEditorExport;
 window.downloadTotalForecastExport = downloadTotalForecastExport;
 window.downloadExcelUploadFormat = downloadExcelUploadFormat;
