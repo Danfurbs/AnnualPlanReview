@@ -430,7 +430,9 @@ async function saveForecastToStorageAsync(forecastData, rowCount, year, planVers
   // exception there must never prevent or obscure the actual server save.
   if (window.isApiEnabled && window.isApiEnabled() && window.saveForecastToApi) {
     try {
-      return await window.saveForecastToApi(forecastData, rowCount, year, planVersion);
+      const saved = await window.saveForecastToApi(forecastData, rowCount, year, planVersion);
+      if (saved) rememberForecastSnapshot(forecastData, rowCount, year, planVersion);
+      return saved;
     } catch (err) {
       console.warn('Failed to save forecast to API:', err);
       if (window.API_CONFIG?.forceServerPersistence) {
@@ -441,7 +443,18 @@ async function saveForecastToStorageAsync(forecastData, rowCount, year, planVers
   }
 
   // localStorage remains the persistence mechanism for explicitly offline use.
-  return saveForecastToStorage(forecastData, rowCount, year, planVersion, false);
+  const saved = saveForecastToStorage(forecastData, rowCount, year, planVersion, false);
+  if (saved) rememberForecastSnapshot(forecastData, rowCount, year, planVersion);
+  return saved;
+}
+
+function rememberForecastSnapshot(forecastData, rowCount, year, planVersion) {
+  window.forecastMemorySnapshots ||= new Map();
+  window.forecastMemorySnapshots.set(`${year}:${planVersion}`, {
+    data: cloneForecastData(forecastData),
+    rowCount: rowCount ?? forecastData?.size ?? 0,
+    source: 'memory'
+  });
 }
 
 /**
@@ -550,6 +563,9 @@ async function loadForecastFromLibraryAsync(year, planVersion) {
  */
 function getForecastSnapshot(year, planVersion) {
   if (!year || !planVersion) return null;
+
+  const memorySnapshot = window.forecastMemorySnapshots?.get(`${year}:${planVersion}`);
+  if (memorySnapshot) return memorySnapshot;
 
   // Try localStorage first
   const cached = loadForecastFromStorage(year, planVersion);

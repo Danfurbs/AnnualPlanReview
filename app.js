@@ -2143,7 +2143,8 @@
             owner: String(r['Owner'] || '').trim(),
             dueDate: String(r['Due Date'] || '').trim(),
             evidenceLinks: String(r['Evidence Links'] || '').split(/\n|,/).map(link => link.trim()).filter(Boolean),
-            deliveryUnit: String(r['Delivery Unit'] || '').trim()
+            deliveryUnit: String(r['Delivery Unit'] || '').trim(),
+            filteredWorkGroup: String(r['Work Group Set'] || '').trim()
           });
           added += 1;
         });
@@ -2195,6 +2196,7 @@
           if (commentFY !== currentFinancialYear) return;
           const category = entry.category || 'General';
           if (selectedType !== 'all' && category !== selectedType) return;
+          const workGroupSet = String(entry.filteredWorkGroup || '').trim();
 
           rows.push({
             'Standard Job Number': jobNumber,
@@ -2207,7 +2209,11 @@
             'Owner': entry.owner || '',
             'Due Date': entry.dueDate || '',
             'Evidence Links': Array.isArray(entry.evidenceLinks) ? entry.evidenceLinks.join('\n') : '',
-            'Delivery Unit': entry.deliveryUnit || ''
+            'Delivery Unit': entry.deliveryUnit || '',
+            'Work Group Set': workGroupSet,
+            'Work Group Set Description': workGroupSet
+              ? (window.workGroupSets?.get(workGroupSet) || '')
+              : ''
           });
         });
       });
@@ -2217,7 +2223,7 @@
         return;
       }
       const ws = XLSX.utils.json_to_sheet(rows, {
-        header: ['Standard Job Number', 'Comment Type', 'Comment', 'Financial Year', 'Review Stage', 'Root Cause', 'Corrective Action', 'Owner', 'Due Date', 'Evidence Links', 'Delivery Unit']
+        header: ['Standard Job Number', 'Comment Type', 'Comment', 'Financial Year', 'Review Stage', 'Root Cause', 'Corrective Action', 'Owner', 'Due Date', 'Evidence Links', 'Delivery Unit', 'Work Group Set', 'Work Group Set Description']
       });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Comments');

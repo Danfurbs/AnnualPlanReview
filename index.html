@@ -395,6 +395,8 @@
             <button type="button" class="group-action-button" onclick="openCopyActualsModal()" id="copyActualsBtn">Copy from Work Done</button>
             <button type="button" class="group-action-button" onclick="initializeV1FromV0Explicit()" id="initV1Btn" title="Reset only the selected work group from Plan v0">Reset current work group from v0</button>
             <button type="button" class="group-action-button" onclick="downloadTotalForecastExport()" title="Export every populated work group and standard job">Export All Work Groups</button>
+            <button type="button" class="group-action-button" onclick="triggerFullForecastUpload()" title="Replace Plan v0 or v1 using an Export All Work Groups file">Upload Full Forecast</button>
+            <input type="file" id="fullForecastFileInput" accept=".csv,.xlsx,.xls,text/csv" class="is-hidden" onchange="prepareFullForecastUpload(event)">
             <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear</button>
           </div>
         </div>
@@ -511,6 +513,30 @@
           </table>
         </div>
       </main>
+    </div>
+  </div>
+
+  <div id="fullForecastUploadModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h2>Upload full forecast</h2>
+          <p class="helper-text" id="fullForecastUploadFileName"></p>
+        </div>
+        <button type="button" class="close" onclick="closeFullForecastUploadModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="control-group">
+        <label for="fullForecastUploadPlan">Plan to replace</label>
+        <select id="fullForecastUploadPlan">
+          <option value="v0">Plan v0 (Original)</option>
+          <option value="v1">Plan v1 (Updated)</option>
+        </select>
+        <p class="helper-text">The upload must use the same columns as “Export All Work Groups”. It will replace the selected plan for the Forecast Builder year.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="group-action-button" onclick="closeFullForecastUploadModal()">Cancel</button>
+        <button type="button" class="primary-button" onclick="confirmFullForecastUpload()">Review and replace plan</button>
+      </div>
     </div>
   </div>
 
