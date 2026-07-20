@@ -1974,6 +1974,8 @@ function prepareFullForecastUpload(event) {
   event.target.value = '';
   if (!file) return;
   pendingFullForecastFile = file;
+  const includeComments = document.getElementById('fullForecastIncludeComments');
+  if (includeComments) includeComments.checked = true;
   const fileName = document.getElementById('fullForecastUploadFileName');
   if (fileName) fileName.textContent = `${file.name} will be loaded into ${window.forecastEditorState.year}.`;
   const plan = document.getElementById('fullForecastUploadPlan');
@@ -1990,6 +1992,7 @@ function normalizeUploadedFinancialYear(value) {
   const raw = String(value || '').trim().toUpperCase();
   if (/^FY\d{2}$/.test(raw)) return raw;
   if (/^20\d{2}$/.test(raw)) return `FY${raw.slice(-2)}`;
+  if (/^\d{2}$/.test(raw)) return `FY${raw}`;
   return raw;
 }
 
@@ -1999,9 +2002,12 @@ async function confirmFullForecastUpload() {
   const year = window.forecastEditorState.year;
   const planVersion = document.getElementById('fullForecastUploadPlan')?.value || 'v0';
   const planLabel = planVersion.toUpperCase();
+  const includeComments = document.getElementById('fullForecastIncludeComments')?.checked !== false;
   const confirmed = confirm(
     `Replace ${year} ${planLabel} with “${file.name}”?\n\n` +
-    `This will overwrite all existing ${planLabel} workgroup forecasts and any unsaved changes for ${year}. This cannot be undone.`
+    `This will overwrite all existing ${planLabel} workgroup forecasts and any unsaved changes for ${year}.` +
+    (includeComments ? '' : '\n\nComments are excluded: all existing workgroup comments for this plan will be cleared.') +
+    `\n\nThis cannot be undone.`
   );
   if (!confirmed) return;
 
@@ -2013,20 +2019,23 @@ async function confirmFullForecastUpload() {
     if (!rows.length) throw new Error('The upload does not contain any forecast rows.');
 
     const requiredHeaders = ['Strategic Route', 'WGST', 'Financial Year', 'Standard Job', 'SJN and Desc', 'Account Code',
-      'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13', 'Comment'];
+      'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13'];
+    if (includeComments) requiredHeaders.push('Comment');
     const missingHeaders = requiredHeaders.filter(header => !Object.prototype.hasOwnProperty.call(rows[0], header));
     if (missingHeaders.length) throw new Error(`Missing required column(s): ${missingHeaders.join(', ')}`);
 
-    const uploadedYears = new Set(rows.map(row => normalizeUploadedFinancialYear(row['Financial Year'])).filter(Boolean));
-    if (uploadedYears.size && (uploadedYears.size !== 1 || !uploadedYears.has(year))) {
+    rows.forEach((row, index) => { if (!String(row['Financial Year']).trim()) throw new Error(`Row ${index + 2} requires Financial Year.`); });
+    const uploadedYears = new Set(rows.map(row => normalizeUploadedFinancialYear(row['Financial Year'])));
+    if (uploadedYears.size !== 1 || !uploadedYears.has(year)) {
       throw new Error(`Financial Year must be ${year}; found ${Array.from(uploadedYears).join(', ')}.`);
     }
 
     const uploadedData = new Map();
     rows.forEach((row, index) => {
       const workGroup = String(row.WGST || '').trim().toUpperCase();
-      const digits = String(row['Standard Job'] || '').replace(/\D/g, '');
-      const jobNumber = digits ? digits.padStart(6, '0') : '';
+      const rawJobNumber = String(row['Standard Job'] ?? '').trim();
+      if (!/^\d{1,6}$/.test(rawJobNumber)) throw new Error(`Row ${index + 2} Standard Job must contain 1–6 digits only.`);
+      const jobNumber = rawJobNumber.padStart(6, '0');
       if (!workGroup || !jobNumber) {
         throw new Error(`Row ${index + 2} requires both WGST and Standard Job.`);
       }
@@ -2041,8 +2050,10 @@ async function confirmFullForecastUpload() {
         workGroupPeriods[period] = value;
       });
       job.wgs[workGroup] = workGroupPeriods;
-      const comment = String(row.Comment || '').trim();
-      if (comment) job.comments[workGroup] = comment;
+      if (includeComments) {
+        const comment = String(row.Comment || '').trim();
+        if (comment) job.comments[workGroup] = comment;
+      }
     });
 
     uploadedData.forEach(job => {

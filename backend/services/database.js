@@ -7,6 +7,12 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
+function revisionConflict() {
+  const error = new Error('Revision conflict');
+  error.code = 'REVISION_CONFLICT';
+  return error;
+}
+
 class DatabaseService {
   constructor() {
     // Support environment variable for database path
@@ -83,6 +89,10 @@ class DatabaseService {
         rf_stage TEXT NOT NULL,
         reviewed_at TEXT NOT NULL,
         PRIMARY KEY(job_number, rf_stage)
+      );
+      CREATE TABLE IF NOT EXISTS revisions (
+        scope TEXT NOT NULL, data_key TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(scope, data_key)
       );
       CREATE TABLE IF NOT EXISTS work_order_amendments (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -162,6 +172,10 @@ class DatabaseService {
         DELETE FROM forecast_comments
         WHERE job_number = ? AND fiscal_year = ? AND plan_version = ?
       `),
+      deleteForecastsByVersion: this.db.prepare(`DELETE FROM forecasts WHERE fiscal_year = ? AND plan_version = ?`),
+      deleteForecastCommentsByVersion: this.db.prepare(`DELETE FROM forecast_comments WHERE fiscal_year = ? AND plan_version = ?`),
+      getRevision: this.db.prepare(`SELECT revision FROM revisions WHERE scope = ? AND data_key = ?`),
+      setRevision: this.db.prepare(`INSERT INTO revisions(scope, data_key, revision) VALUES (?, ?, ?) ON CONFLICT(scope, data_key) DO UPDATE SET revision = excluded.revision`),
 
       // Forecast comments
       insertForecastComment: this.db.prepare(`
@@ -313,9 +327,13 @@ class DatabaseService {
           );
         }
       }
+      const key = `${fiscalYear}:${planVersion}`;
+      const revision = this.getRevision('forecast', key) + 1;
+      this.stmts.setRevision.run('forecast', key, revision);
+      return revision;
     });
 
-    saveTransaction(forecastData);
+    return saveTransaction(forecastData);
   }
 
   /**
@@ -562,14 +580,15 @@ class DatabaseService {
    * @param {string} fiscalYear
    * @param {string} planVersion
    */
-  saveAllForecasts(data, fiscalYear, planVersion) {
+  saveAllForecasts(data, fiscalYear, planVersion, expectedRevision) {
     const saveTransaction = this.db.transaction((forecastData) => {
+      const key = `${fiscalYear}:${planVersion}`;
+      const current = this.getRevision('forecast', key);
+      if (current !== expectedRevision) throw revisionConflict();
+      this.stmts.deleteForecastsByVersion.run(fiscalYear, planVersion);
+      this.stmts.deleteForecastCommentsByVersion.run(fiscalYear, planVersion);
       for (const [jobNumber, jobData] of Object.entries(forecastData)) {
         const { wgs, comments } = jobData;
-
-        // Delete existing forecast data for this job
-        this.stmts.deleteForecastsByJob.run(jobNumber, fiscalYear, planVersion);
-        this.stmts.deleteForecastCommentsByJob.run(jobNumber, fiscalYear, planVersion);
 
         // Insert forecast values for each work group and period
         for (const [workGroup, periods] of Object.entries(wgs || {})) {
@@ -587,9 +606,12 @@ class DatabaseService {
           }
         }
       }
+      const revision = current + 1;
+      this.stmts.setRevision.run('forecast', key, revision);
+      return revision;
     });
 
-    saveTransaction(data);
+    return saveTransaction(data);
   }
 
   mapJobCommentRow(row) {
@@ -718,8 +740,10 @@ class DatabaseService {
 
   
 
-  saveAllReviewStatuses(reviewStore) {
+  saveAllReviewStatuses(reviewStore, expectedRevision) {
     const tx = this.db.transaction((store) => {
+      const current = this.getRevision('reviews', 'all');
+      if (current !== expectedRevision) throw revisionConflict();
       this.stmts.deleteAllReviewStatuses.run();
       Object.entries(store || {}).forEach(([jobNumber, stages]) => {
         Object.entries(stages || {}).forEach(([stage, value]) => {
@@ -727,8 +751,11 @@ class DatabaseService {
           this.stmts.upsertReviewStatus.run(jobNumber, stage, reviewedAt);
         });
       });
+      const revision = current + 1;
+      this.stmts.setRevision.run('reviews', 'all', revision);
+      return revision;
     });
-    tx(reviewStore);
+    return tx(reviewStore);
   }
 
   getAllReviewStatuses() {
@@ -739,6 +766,10 @@ class DatabaseService {
       out[row.job_number][row.rf_stage] = { reviewedAt: row.reviewed_at };
     });
     return out;
+  }
+
+  getRevision(scope, dataKey) {
+    return this.stmts.getRevision.get(scope, dataKey)?.revision || 0;
   }
 
 

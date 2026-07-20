@@ -9,7 +9,6 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const path = require('path');
 
@@ -53,8 +52,8 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions)); // Enable CORS for all routes
-app.use(bodyParser.json({ limit: '5mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev')); // HTTP request logging
 
 // Serve static files from parent directory (frontend)
@@ -122,9 +121,11 @@ app.get('*', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
+  if (err?.type === 'entity.too.large') return res.status(413).json({ success: false, error: 'Request body exceeds the 5 MB limit' });
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) return res.status(400).json({ success: false, error: 'Malformed JSON request body' });
   res.status(500).json({
     success: false,
-    error: err.message || 'Internal server error'
+    error: 'Internal server error'
   });
 });
 

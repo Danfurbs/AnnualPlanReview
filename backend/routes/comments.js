@@ -55,7 +55,7 @@ function normalizeOptionalCommentFields(comment) {
       return;
     }
 
-    comment[field] = value.slice(0, maxLength);
+    comment[field] = value;
   });
 
   return comment;

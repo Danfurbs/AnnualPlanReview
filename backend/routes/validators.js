@@ -11,7 +11,11 @@ function isValidPlanVersion(value) {
 }
 
 function isValidJobNumber(value) {
-  return isNonEmptyString(value, 100);
+  return typeof value === 'string' && /^\d{1,50}$/.test(value);
+}
+
+function isNonNegativeInteger(value) {
+  return Number.isInteger(value) && value >= 0;
 }
 
 function isPlainObject(value) {
@@ -28,5 +32,6 @@ module.exports = {
   isValidPlanVersion,
   isValidJobNumber,
   isPlainObject,
+  isNonNegativeInteger,
   isNullOrUndefined
 };
