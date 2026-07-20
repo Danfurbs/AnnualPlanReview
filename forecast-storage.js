@@ -232,8 +232,9 @@ async function loadForecastFromStorageAsync(year, planVersion) {
     try {
       const apiData = await window.loadForecastFromApi(year, planVersion);
       if (apiData) {
-        // Cache in localStorage for offline access
-        saveForecastToStorage(apiData.data, apiData.rowCount, year, planVersion);
+        // The server is authoritative in API mode. Large FY snapshots regularly
+        // exceed localStorage's quota, so do not duplicate them in browser
+        // storage merely to warm an optional cache.
         return apiData;
       }
     } catch (err) {
@@ -394,7 +395,7 @@ function checkV0ConflictsWithV1(year, jobNumbers) {
 /**
  * Save forecast to localStorage
  */
-function saveForecastToStorage(forecastData, rowCount, year, planVersion) {
+function saveForecastToStorage(forecastData, rowCount, year, planVersion, syncServer = true) {
   try {
     if (!year || !planVersion) {
       console.warn('Missing year or plan version; skipping save.');
@@ -404,9 +405,17 @@ function saveForecastToStorage(forecastData, rowCount, year, planVersion) {
     const payload = buildForecastStoragePayload(forecastData, rowCount);
 
     localStorage.setItem(getForecastStorageKey(year, planVersion), JSON.stringify(payload));
-    saveForecastToServerAsync(payload, year, planVersion);
+    if (syncServer) saveForecastToServerAsync(payload, year, planVersion);
     return true;
   } catch (err) {
+    // Forecast snapshots can exceed the browser's small localStorage quota.
+    // When the API is enabled this cache is optional and server persistence is
+    // handled by saveForecastToStorageAsync, so avoid presenting this expected
+    // cache miss as an application failure.
+    if (err?.name === 'QuotaExceededError' && window.isApiEnabled?.()) {
+      console.info('Forecast is too large for the browser cache; using API persistence only.');
+      return false;
+    }
     console.warn('Failed to save forecast to storage:', err);
     return false;
   }
@@ -416,27 +425,23 @@ function saveForecastToStorage(forecastData, rowCount, year, planVersion) {
  * Save forecast to storage and API (async version)
  */
 async function saveForecastToStorageAsync(forecastData, rowCount, year, planVersion) {
-  // Save to localStorage first (always)
-  const localSuccess = saveForecastToStorage(forecastData, rowCount, year, planVersion);
-
-  // Also save to API if enabled
+  // In API mode the server is authoritative. Do not attempt to serialize the
+  // same (often multi-megabyte) FY snapshot into localStorage first: a quota
+  // exception there must never prevent or obscure the actual server save.
   if (window.isApiEnabled && window.isApiEnabled() && window.saveForecastToApi) {
     try {
-      const apiSaved = await window.saveForecastToApi(forecastData, rowCount, year, planVersion);
-      if (!apiSaved && window.API_CONFIG?.forceServerPersistence) {
-        alert('Server save failed. Your browser cache has a local copy, but persistence to Render database did not complete.');
-        return false;
-      }
+      return await window.saveForecastToApi(forecastData, rowCount, year, planVersion);
     } catch (err) {
-      console.warn('Failed to save to API (data saved locally):', err);
+      console.warn('Failed to save forecast to API:', err);
       if (window.API_CONFIG?.forceServerPersistence) {
-        alert('Server save failed. Your browser cache has a local copy, but persistence to Render database did not complete.');
+        alert('Server save failed. Persistence to the Render database did not complete.');
         return false;
       }
     }
   }
 
-  return localSuccess;
+  // localStorage remains the persistence mechanism for explicitly offline use.
+  return saveForecastToStorage(forecastData, rowCount, year, planVersion, false);
 }
 
 /**

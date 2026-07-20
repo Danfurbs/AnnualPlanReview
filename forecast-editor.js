@@ -539,7 +539,12 @@ async function copySelectedWorkGroupsToV1() {
     Object.values(job.wgs || {}).forEach(wg => window.FORECAST_PERIODS.forEach(period => { job.periods[period] = (job.periods[period] || 0) + (Number(wg?.[period]) || 0); }));
   });
   const saved = await saveForecastToStorageAsync(v1, v1.size, year, 'v1');
-  if (!saved) return;
+  if (!saved) {
+    window.Toast?.error('Could not copy workgroups to V1 because the forecast save failed.');
+    const statusEl = document.getElementById('forecastEditorStatus');
+    if (statusEl) statusEl.textContent = '⚠️ Copy to V1 failed. No changes were applied.';
+    return;
+  }
   const overrides = await loadV1OverridesAsync(year);
   affectedJobs.forEach(job => overrides.add(job));
   await saveV1OverridesAsync(year, overrides);

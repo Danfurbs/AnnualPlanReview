@@ -65,9 +65,15 @@ module.exports = (db) => {
    * GET /api/forecasts/:fiscalYear/:planVersion
    * Get all forecasts for a fiscal year and plan version
    */
-  router.get('/:fiscalYear/:planVersion', async (req, res) => {
+  router.get('/:fiscalYear/:planVersion', async (req, res, next) => {
     try {
       const { fiscalYear, planVersion } = req.params;
+
+      // This generic two-segment route is registered before the legacy
+      // /v1-overrides/:fiscalYear endpoint below. Let that more-specific route
+      // handle its own requests instead of treating "v1-overrides" as a year.
+      if (fiscalYear === 'v1-overrides') return next('route');
+
       if (!isValidFiscalYear(fiscalYear) || !isValidPlanVersion(planVersion)) {
         return res.status(400).json({
           success: false,
