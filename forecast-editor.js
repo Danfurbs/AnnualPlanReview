@@ -787,21 +787,17 @@ function getForecastEditorTotals() {
     periodTotals[period] = 0;
   });
 
-  const workGroup = window.forecastEditorState.workGroup;
-
-  // Calculate totals from fData
-  if (window.fData) {
-    window.fData.forEach((job, jobNumber) => {
-      const wgData = job.wgs?.[workGroup];
-      if (wgData) {
-        window.FORECAST_PERIODS.forEach(period => {
-          const value = Number(wgData[period] || 0);
-          periodTotals[period] += value;
-          grandTotal += value;
-        });
-      }
+  // Rows contain the effective plan for the selected context. In particular,
+  // loadForecastEditorRows() resolves v1 overrides against v0, so summing the
+  // raw forecast maps here can count both versions instead of the selected one.
+  // Using the editor rows also keeps these totals in sync with unsaved edits.
+  window.forecastEditorState.rows.forEach(row => {
+    window.FORECAST_PERIODS.forEach(period => {
+      const value = Number(row.volumes?.[period] || 0);
+      periodTotals[period] += value;
+      grandTotal += value;
     });
-  }
+  });
 
   return { periodTotals, grandTotal };
 }
