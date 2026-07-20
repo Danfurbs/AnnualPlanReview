@@ -185,25 +185,8 @@ function getWorkGroupStatuses(fData, planVersion, year) {
     });
   };
 
-  // For v1, build the same effective view used by the editor: v0 jobs are
-  // inherited until that job is explicitly changed in v1.
-  let dataToCheck = fData;
-  if (planVersion === 'v1' && typeof getForecastSnapshot === 'function') {
-    const v0Snapshot = getForecastSnapshot(year, 'v0');
-    const v1Overrides = typeof loadV1Overrides === 'function' ? loadV1Overrides(year) : new Set();
-
-    if (v0Snapshot && v0Snapshot.data) {
-      const effectiveData = new Map();
-      v0Snapshot.data.forEach((job, jobNumber) => {
-        if (!v1Overrides.has(jobNumber)) effectiveData.set(jobNumber, job);
-      });
-      if (fData) fData.forEach((job, jobNumber) => effectiveData.set(jobNumber, job));
-      dataToCheck = effectiveData;
-    }
-  }
-
-  // Check current fData
-  countData(dataToCheck);
+  // Status reflects only the selected plan's own snapshot.
+  countData(fData);
 
   return statuses;
 }

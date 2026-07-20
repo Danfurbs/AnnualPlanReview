@@ -150,9 +150,7 @@ async function initializeForecastEditor() {
     // Load forecast for this context (checks API if enabled)
     const snapshot = await getForecastSnapshotAsync(window.forecastEditorState.year, window.forecastEditorState.planVersion);
 
-    if (snapshot) {
-      window.fData = snapshot.data;
-    }
+    window.fData = snapshot ? snapshot.data : null;
 
     // Render selectors and table
     renderForecastEditorSelectors();
@@ -358,17 +356,12 @@ function renderWorkGroupSelector(filter = 'all', searchText = '') {
   });
 }
 
-/** Summarize whether each v1 work group is unchanged from, or differs from, v0. */
+/** Summarize the two independent snapshots for optional visual comparison. */
 function getV1WorkGroupComparison(year) {
   const comparison = new Map();
   const v0 = getForecastSnapshot(year, 'v0')?.data || new Map();
   const savedV1 = getForecastSnapshot(year, 'v1')?.data || new Map();
-  const overrides = loadV1Overrides(year);
-  const v1 = new Map();
-  v0.forEach((job, jobNumber) => {
-    if (!overrides.has(jobNumber)) v1.set(jobNumber, job);
-  });
-  savedV1.forEach((job, jobNumber) => v1.set(jobNumber, job));
+  const v1 = savedV1;
   const groups = new Set();
   const collect = data => data.forEach(job => Object.keys(job?.wgs || {}).forEach(code => groups.add(normalizeWorkGroupSet(code))));
   collect(v0);
@@ -545,9 +538,6 @@ async function copySelectedWorkGroupsToV1() {
     if (statusEl) statusEl.textContent = '⚠️ Copy to V1 failed. No changes were applied.';
     return;
   }
-  const overrides = await loadV1OverridesAsync(year);
-  affectedJobs.forEach(job => overrides.add(job));
-  await saveV1OverridesAsync(year, overrides);
   window.forecastEditorState.planVersion = 'v1';
   window.currentPlanVersion = 'v1';
   window.fData = v1;
@@ -620,40 +610,12 @@ function getWorkGroupSearchText() {
 }
 
 /**
- * Load forecast editor rows from current forecast data
- * For v1: Inherits v0 values for jobs not explicitly edited in v1
+ * Load forecast editor rows from the selected plan's forecast data.
  */
 function loadForecastEditorRows() {
   const workGroup = window.forecastEditorState.workGroup;
-  const year = window.forecastEditorState.year;
-  const planVersion = window.forecastEditorState.planVersion;
   const rows = [];
-
-  // If editing v1, merge with v0 for non-overridden jobs
-  let dataToUse = window.fData;
-  if (planVersion === 'v1') {
-    const v0Snapshot = getForecastSnapshot(year, 'v0');
-    const v1Overrides = loadV1Overrides(year);
-
-    if (v0Snapshot && v0Snapshot.data) {
-      // Create merged data: v1 overrides take precedence, otherwise use v0
-      dataToUse = new Map();
-
-      // First, add all v0 jobs
-      v0Snapshot.data.forEach((job, jobNumber) => {
-        if (!v1Overrides.has(jobNumber)) {
-          dataToUse.set(jobNumber, job);
-        }
-      });
-
-      // Then add/override with v1 jobs
-      if (window.fData) {
-        window.fData.forEach((job, jobNumber) => {
-          dataToUse.set(jobNumber, job);
-        });
-      }
-    }
-  }
+  const dataToUse = window.fData;
 
   if (dataToUse && workGroup) {
     // Normalize work group code for consistent lookups
@@ -996,10 +958,7 @@ function getForecastEditorTotals() {
     periodTotals[period] = 0;
   });
 
-  // Rows contain the effective plan for the selected context. In particular,
-  // loadForecastEditorRows() resolves v1 overrides against v0, so summing the
-  // raw forecast maps here can count both versions instead of the selected one.
-  // Using the editor rows also keeps these totals in sync with unsaved edits.
+  // Using editor rows keeps totals in sync with unsaved edits.
   window.forecastEditorState.rows.forEach(row => {
     window.FORECAST_PERIODS.forEach(period => {
       const value = Number(row.volumes?.[period] || 0);
@@ -1129,8 +1088,6 @@ async function initializeV1FromV0Explicit() {
   // Get or create v1 data
   const v1Snapshot = getForecastSnapshot(year, 'v1');
   const v1Data = v1Snapshot ? cloneForecastData(v1Snapshot.data) : new Map();
-  const v1Overrides = loadV1Overrides(year);
-
   let copiedCount = 0;
 
   // Copy work group data from v0 to v1
@@ -1163,16 +1120,11 @@ async function initializeV1FromV0Explicit() {
     });
     v1Job.periods = totals;
 
-    // Mark this job as explicitly edited in v1
-    v1Overrides.add(jobNumber);
     copiedCount++;
   });
 
   // Save to v1 storage (and API)
   await saveForecastToStorageAsync(v1Data, v1Data.size, year, 'v1');
-
-  // Save updated overrides
-  saveV1Overrides(year, v1Overrides);
 
   // Reload the forecast editor and refresh selectors to update checkmarks
   window.fData = v1Data;
@@ -1329,12 +1281,6 @@ async function handleForecastEditorSubmit(event) {
     }
 
     if (saved) {
-      // If saving v1, mark these jobs as explicitly edited (overrides)
-      // Use async version to prevent race conditions with concurrent saves
-      if (planVersion === 'v1' && jobNumbers.length > 0) {
-        await addToV1OverridesAsync(year, jobNumbers);
-      }
-
       // Refresh only the work group selector (not full selectors) for better performance
       renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
       updateCurrentWorkGroupDisplay();
@@ -1878,12 +1824,6 @@ function handleForecastEditorDeleteRow(event) {
 
       // Save asynchronously
       await saveForecastToStorageAsync(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
-
-      // If deleting from v1 and job had a number, mark it as explicitly deleted
-      // Use async version to prevent race conditions with concurrent deletes
-      if (window.forecastEditorState.planVersion === 'v1' && jobNumber) {
-        await addToV1OverridesAsync(window.forecastEditorState.year, [jobNumber]);
-      }
 
       // Update work group selector to refresh checkmarks (lighter than full re-render)
       renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
@@ -2733,12 +2673,6 @@ async function handleCopyActuals(event) {
 
   // Save to storage (and API)
   await saveForecastToStorageAsync(window.fData, window.fData.size, year, planVersion);
-
-  // If saving to v1, mark jobs as overrides
-  // Use async version to prevent race conditions with concurrent pastes
-  if (planVersion === 'v1') {
-    await addToV1OverridesAsync(year, jobsToUpdate);
-  }
 
   // Reload editor and refresh selectors to update checkmarks
   renderForecastEditorSelectors();

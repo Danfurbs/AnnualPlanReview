@@ -657,13 +657,17 @@
         <div class="discipline-header">
           <div>
             <h3>Amend Forecast</h3>
-            <p class="helper-text">Update Plan v0 or v1 for this standard job. Saved changes feed the chart, period totals and variance calculations immediately.</p>
+            <p class="helper-text">Choose a plan and work group set, then update its period forecast. Work group sets without an existing forecast start at zero.</p>
           </div>
           <div class="header-actions forecast-amend-controls">
-            <label for="forecastAmendVersion">Forecast</label>
-            <select id="forecastAmendVersion"></select>
-            <label for="forecastAmendWorkGroup">Work group</label>
-            <select id="forecastAmendWorkGroup"></select>
+            <div class="forecast-amend-field">
+              <label for="forecastAmendVersion">Plan</label>
+              <select id="forecastAmendVersion"></select>
+            </div>
+            <div class="forecast-amend-field forecast-amend-field--work-group">
+              <label for="forecastAmendWorkGroup">Work group set</label>
+              <select id="forecastAmendWorkGroup"></select>
+            </div>
             <button type="button" class="section-toggle" onclick="toggleBreakdownSection('forecastAmendmentEditor', this)">Collapse</button>
           </div>
         </div>

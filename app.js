@@ -134,14 +134,6 @@
           updateWorkGroupFilterOptions();
           const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
           console.log(`✓ Switched to ${newPlanVersion}: ${source} forecast loaded`);
-        } else if (currentPlanVersion === 'v1') {
-          // Try to initialize v1 from v0
-          const initialized = initializeV1FromV0(currentFinancialYear);
-          if (initialized) {
-            fData = initialized.data;
-            updateWorkGroupFilterOptions();
-            console.log(`✓ Switched to ${newPlanVersion}: Initialized from v0`);
-          }
         }
       }
 
@@ -347,12 +339,6 @@
           updateWorkGroupFilterOptions();
           const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
           console.log(`✓ Forecast loaded from ${source}`);
-        } else if (currentPlanVersion === 'v1') {
-          const initialized = initializeV1FromV0(currentFinancialYear);
-          if (initialized) {
-            fData = initialized.data;
-            updateWorkGroupFilterOptions();
-          }
         }
       }
       render();
@@ -2817,33 +2803,9 @@
         return Number.isNaN(numeric) ? 0 : numeric;
       })();
 
-      // For v1, merge with v0 for proper inheritance
-      let forecastDataToUse = fData;
-      if (currentPlanVersion === 'v1') {
-        const v0Snapshot = getForecastSnapshot(currentFinancialYear, 'v0');
-        const v1Overrides = loadV1Overrides(currentFinancialYear);
-
-        if (v0Snapshot && v0Snapshot.data) {
-          // Create merged data: v0 as base, v1 overrides take precedence
-          const mergedData = new Map();
-
-          // First, add all v0 jobs that haven't been overridden
-          v0Snapshot.data.forEach((job, jobNumber) => {
-            if (!v1Overrides.has(jobNumber)) {
-              mergedData.set(jobNumber, job);
-            }
-          });
-
-          // Then add all v1 jobs (overrides)
-          if (fData) {
-            fData.forEach((job, jobNumber) => {
-              mergedData.set(jobNumber, job);
-            });
-          }
-
-          forecastDataToUse = mergedData;
-        }
-      }
+      // Each plan is a complete, independent snapshot. V0 data only enters V1
+      // through an explicit copy action in the forecast editor.
+      const forecastDataToUse = fData;
 
       const all = new Set([...(forecastDataToUse?.keys()||[]), ...(window.wData?.keys()||[])]);
       const baseJobs = [];
@@ -3448,34 +3410,41 @@
       }
       section.style.display = '';
       const availableVersions = ['v0', 'v1'].filter(version => getForecastSnapshot(currentFinancialYear, version));
+      if (!availableVersions.length) {
+        versionSelect.innerHTML = '';
+        workGroupSelect.innerHTML = '';
+        editor.innerHTML = '<div class="forecast-amend-empty">No forecast plan is available for this financial year.</div>';
+        return;
+      }
       versionSelect.innerHTML = availableVersions.map(version =>
         `<option value="${version}">Plan ${version}${version === 'v1' ? ' (Updated)' : ''}</option>`
       ).join('');
       const preferredVersion = breakdownPlanVersion === 'v1' ? 'v1' : 'v0';
       if (availableVersions.includes(preferredVersion)) versionSelect.value = preferredVersion;
 
-      const selectedSnapshotJob = getForecastSnapshot(currentFinancialYear, versionSelect.value)?.data.get(job.jn);
-      const snapshotJob = selectedSnapshotJob || (versionSelect.value === 'v1'
-        ? getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn)
-        : null);
-      const workGroups = Object.keys(snapshotJob?.wgs || {});
-      workGroupSelect.innerHTML = [
-        '<option value="">Overall job</option>',
-        ...workGroups.map(wg => `<option value="${escapeHtml(wg)}">${escapeHtml(window.workGroupSets?.get(wg) || wg)}</option>`)
-      ].join('');
+      const snapshotJob = getForecastSnapshot(currentFinancialYear, versionSelect.value)?.data.get(job.jn);
+      const forecastWorkGroups = new Set(Object.keys(snapshotJob?.wgs || {}).map(normalizeWorkGroupSet));
+      const workGroups = [...(window.workGroupSets || new Map()).entries()]
+        .filter(([, description]) => !String(description).includes('RETIRED') && !String(description).includes('DO NOT USE'))
+        .map(([code, description]) => ({ code, description }))
+        .sort((a, b) => a.code.localeCompare(b.code));
+      workGroupSelect.innerHTML = workGroups.map(({ code, description }) => {
+        const availability = forecastWorkGroups.has(normalizeWorkGroupSet(code)) ? '' : ' — No forecast';
+        return `<option value="${escapeHtml(code)}">${escapeHtml(code)} — ${escapeHtml(description)}${availability}</option>`;
+      }).join('');
       const activeFilter = document.getElementById('wgFilter')?.value || 'all';
-      const matchingWorkGroup = workGroups.find(wg => normalizeWorkGroupSet(wg) === normalizeWorkGroupSet(activeFilter));
-      if (activeFilter !== 'all' && matchingWorkGroup) workGroupSelect.value = matchingWorkGroup;
+      const matchingWorkGroup = workGroups.find(wg => normalizeWorkGroupSet(wg.code) === normalizeWorkGroupSet(activeFilter));
+      if (activeFilter !== 'all' && matchingWorkGroup) workGroupSelect.value = matchingWorkGroup.code;
 
       const drawInputs = () => {
         const planVersion = versionSelect.value;
         const workGroup = workGroupSelect.value;
-        const selectedJob = getForecastSnapshot(currentFinancialYear, planVersion)?.data.get(job.jn);
-        const forecastJob = selectedJob || (planVersion === 'v1'
-          ? getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn)
-          : null);
-        const values = workGroup ? forecastJob?.wgs?.[workGroup] : forecastJob?.periods;
-        editor.innerHTML = `<div class="forecast-amend-grid">${Array.from({ length: 13 }, (_, index) => {
+        const forecastJob = getForecastSnapshot(currentFinancialYear, planVersion)?.data.get(job.jn);
+        const storedWorkGroup = Object.keys(forecastJob?.wgs || {}).find(wg => normalizeWorkGroupSet(wg) === normalizeWorkGroupSet(workGroup));
+        const values = storedWorkGroup ? forecastJob.wgs[storedWorkGroup] : null;
+        const hasForecast = Boolean(storedWorkGroup);
+        const workGroupLabel = window.workGroupSets?.get(workGroup) || workGroup;
+        editor.innerHTML = `<div class="forecast-amend-context"><span><strong>${escapeHtml(workGroup)}</strong> — ${escapeHtml(workGroupLabel)}</span><span>${hasForecast ? 'Editing existing forecast' : 'New work group forecast · values start at zero'}</span></div><div class="forecast-amend-grid">${Array.from({ length: 13 }, (_, index) => {
           const period = `P${index + 1}`;
           const amendment = forecastJob?.amendments?.[getForecastAmendmentKey(workGroup, period)];
           const original = amendment ? `Originally ${Number(amendment.original).toFixed(2)}` : '';
@@ -3491,22 +3460,21 @@
 
     async function saveForecastAmendments(job, planVersion, workGroup) {
       const snapshot = await getForecastSnapshotAsync(currentFinancialYear, planVersion);
-      let forecastJob = snapshot?.data.get(job.jn);
-      if (!forecastJob && snapshot && planVersion === 'v1') {
-        const inheritedJob = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn);
-        if (inheritedJob) {
-          forecastJob = deepCloneJobEntry(inheritedJob);
-          snapshot.data.set(job.jn, forecastJob);
-        }
-      }
-      if (!forecastJob) {
-        alert(`No Plan ${planVersion} forecast exists for ${job.jn}.`);
+      if (!snapshot || !workGroup) {
+        alert(!snapshot ? `No Plan ${planVersion} forecast exists.` : 'Select a work group set to update.');
         return;
+      }
+      let forecastJob = snapshot.data.get(job.jn);
+      if (!forecastJob) {
+        forecastJob = { periods: {}, wgs: {}, comments: {}, amendments: {} };
+        snapshot.data.set(job.jn, forecastJob);
       }
       forecastJob.periods ||= {};
       forecastJob.wgs ||= {};
       forecastJob.amendments ||= {};
-      const target = workGroup ? (forecastJob.wgs[workGroup] ||= {}) : forecastJob.periods;
+      const storedWorkGroup = Object.keys(forecastJob.wgs).find(wg => normalizeWorkGroupSet(wg) === normalizeWorkGroupSet(workGroup));
+      const targetWorkGroup = storedWorkGroup || workGroup;
+      const target = (forecastJob.wgs[targetWorkGroup] ||= {});
       for (let index = 1; index <= 13; index++) {
         const period = `P${index}`;
         const input = document.querySelector(`#forecastAmendmentEditor input[data-period="${period}"]`);
@@ -3522,32 +3490,14 @@
           forecastJob.amendments[key] ||= { original: previous };
           forecastJob.amendments[key].updatedAt = new Date().toISOString();
           target[period] = next;
-          // Keep overall and work-group values consistent. Overall amendments
-          // retain the existing split between work groups for that period.
-          if (!workGroup) {
-            const groupEntries = Object.values(forecastJob.wgs);
-            const groupTotal = groupEntries.reduce((sum, periods) => sum + Number(periods?.[period] || 0), 0);
-            if (groupEntries.length && groupTotal !== 0) {
-              groupEntries.forEach(periods => {
-                periods[period] = next * (Number(periods?.[period] || 0) / groupTotal);
-              });
-            } else if (groupEntries.length) {
-              groupEntries.forEach((periods, groupIndex) => {
-                periods[period] = groupIndex === 0 ? next : 0;
-              });
-            }
-          }
         }
       }
-      if (workGroup) {
-        for (let index = 1; index <= 13; index++) {
-          const period = `P${index}`;
-          forecastJob.periods[period] = Object.values(forecastJob.wgs).reduce((sum, periods) => sum + Number(periods?.[period] || 0), 0);
-        }
+      for (let index = 1; index <= 13; index++) {
+        const period = `P${index}`;
+        forecastJob.periods[period] = Object.values(forecastJob.wgs).reduce((sum, periods) => sum + Number(periods?.[period] || 0), 0);
       }
-      const saved = await saveForecastToStorageAsync(snapshot.data, snapshot.rowCount, currentFinancialYear, planVersion);
+      const saved = await saveForecastToStorageAsync(snapshot.data, snapshot.data.size, currentFinancialYear, planVersion);
       if (!saved) return;
-      if (planVersion === 'v1') await addToV1OverridesAsync(currentFinancialYear, [job.jn]);
       if (currentPlanVersion === planVersion) fData = cloneForecastData(snapshot.data);
       render();
       const refreshedJob = window.currentJobsMap.get(job.jn);
@@ -3587,24 +3537,8 @@
         return;
       }
 
-      // Merge v0 with v1 overrides for proper inheritance
-      const v1Overrides = loadV1Overrides(currentFinancialYear);
-      const v1Data = new Map();
-
-      // Start with all v0 jobs
-      v0Snapshot.data.forEach((job, jobNumber) => {
-        if (!v1Overrides.has(jobNumber)) {
-          // Job not overridden in v1 - inherit from v0
-          v1Data.set(jobNumber, job);
-        }
-      });
-
-      // Add all v1 overrides
-      if (v1SnapshotRaw && v1SnapshotRaw.data) {
-        v1SnapshotRaw.data.forEach((job, jobNumber) => {
-          v1Data.set(jobNumber, job);
-        });
-      }
+      // Compare the two stored snapshots as-is; missing V1 rows stay missing.
+      const v1Data = v1SnapshotRaw?.data || new Map();
 
       const allJobs = new Set([...(v0Snapshot.data.keys()), ...(v1Data.keys())]);
       const rows = [];
@@ -3693,7 +3627,7 @@
         `;
       }
       if (meta) {
-        const v1Source = v1SnapshotRaw ? v1SnapshotRaw.source : 'inherited from v0';
+        const v1Source = v1SnapshotRaw ? v1SnapshotRaw.source : 'not available';
         meta.textContent = `${currentFinancialYear} ${currentReviewStage} • Plan v0 (${v0Snapshot.source}) vs Plan v1 (${v1Source}) • ${rows.length} jobs`;
       }
     }
