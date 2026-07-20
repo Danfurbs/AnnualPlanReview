@@ -1569,3 +1569,5 @@
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+.forecast-upload-checkbox { display:flex; align-items:center; gap:8px; margin-top:14px; font-weight:600; }
+.forecast-upload-checkbox input { width:16px; height:16px; accent-color:var(--primary-color, #2563eb); }

@@ -4,6 +4,7 @@
 
 const express = require('express');
 const router = express.Router();
+const { isPlainObject, isValidJobNumber } = require('./validators');
 
 module.exports = (db) => {
   /**
@@ -34,6 +35,7 @@ module.exports = (db) => {
   router.get('/:jobNumber', async (req, res) => {
     try {
       const { jobNumber } = req.params;
+      if (!isValidJobNumber(jobNumber)) return res.status(400).json({ success: false, error: 'Invalid job number format' });
       const value = await db.getBaseline(jobNumber);
 
       res.json({
@@ -58,11 +60,15 @@ module.exports = (db) => {
     try {
       const baselines = req.body;
 
-      if (!baselines || typeof baselines !== 'object') {
+      if (!isPlainObject(baselines)) {
         return res.status(400).json({
           success: false,
           error: 'Invalid baselines format'
         });
+      }
+      for (const [jobNumber, value] of Object.entries(baselines)) {
+        if (!isValidJobNumber(jobNumber)) return res.status(400).json({ success: false, error: `Invalid job number: ${jobNumber}` });
+        if (typeof value !== 'number' || !Number.isFinite(value)) return res.status(400).json({ success: false, error: `Baseline for ${jobNumber} must be a finite number` });
       }
 
       await db.saveAllBaselines(baselines);
@@ -90,8 +96,9 @@ module.exports = (db) => {
     try {
       const { jobNumber } = req.params;
       const { value } = req.body;
+      if (!isValidJobNumber(jobNumber)) return res.status(400).json({ success: false, error: 'Invalid job number format' });
 
-      if (typeof value !== 'number') {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
         return res.status(400).json({
           success: false,
           error: 'Invalid value format'
@@ -120,6 +127,7 @@ module.exports = (db) => {
   router.delete('/:jobNumber', async (req, res) => {
     try {
       const { jobNumber } = req.params;
+      if (!isValidJobNumber(jobNumber)) return res.status(400).json({ success: false, error: 'Invalid job number format' });
       await db.deleteBaseline(jobNumber);
 
       res.json({

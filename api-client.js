@@ -89,6 +89,8 @@ loadApiConfig();
  * Key: `${method}:${endpoint}:${bodyHash}` -> Promise
  */
 const inFlightRequests = new Map();
+const forecastRevisions = new Map();
+let reviewRevision = 0;
 
 /**
  * Generate a cache key for request deduplication
@@ -235,6 +237,7 @@ async function apiRequest(endpoint, options = {}) {
     }
     finalError.endpoint = endpoint;
     finalError.method = method;
+    finalError.status = lastStatus;
 
     throw finalError;
   })();
@@ -350,6 +353,7 @@ async function loadForecastFromApi(year, planVersion) {
     const response = await apiRequest(`/forecasts/${year}/${planVersion}`);
 
     if (response.success && response.data) {
+      forecastRevisions.set(`${year}:${planVersion}`, response.revision || 0);
       const hydrated = window.hydrateForecastData(response.data);
       return {
         data: hydrated,
@@ -397,11 +401,12 @@ async function saveForecastToApi(forecastData, rowCount, year, planVersion) {
 
     const response = await apiRequest(endpoint, {
       method: 'POST',
-      body: { data: serialized }
+      body: { data: serialized, expectedRevision: forecastRevisions.get(`${year}:${planVersion}`) ?? 0 }
     });
-
+    if (response.success) forecastRevisions.set(`${year}:${planVersion}`, response.revision);
     return response.success === true;
   } catch (err) {
+    if (err.status === 409) window.Toast?.error('This forecast changed in another session. Reload before saving again.');
     console.error(`Failed to save forecast to API (POST ${endpoint}):`, err);
     return false;
   }
@@ -797,6 +802,7 @@ async function loadReviewsFromApi() {
   if (!isApiEnabled()) return null;
   try {
     const response = await apiRequest('/reviews');
+    if (response.success) reviewRevision = response.revision || 0;
     return response.success && response.data ? response.data : null;
   } catch (err) {
     console.warn('Failed to load reviews from API:', err);
@@ -809,10 +815,12 @@ async function saveReviewsToApi(reviewStore) {
   try {
     const response = await apiRequest('/reviews/bulk', {
       method: 'POST',
-      body: { reviewStore: reviewStore || {} }
+      body: { reviewStore: reviewStore || {}, expectedRevision: reviewRevision }
     });
+    if (response.success) reviewRevision = response.revision;
     return response.success === true;
   } catch (err) {
+    if (err.status === 409) window.Toast?.error('Review statuses changed in another session. Reload before saving again.');
     console.error('Failed to save reviews to API:', err);
     return false;
   }

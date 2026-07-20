@@ -6,6 +6,8 @@
 
 const { Pool } = require('pg');
 
+function revisionConflict() { const error = new Error('Revision conflict'); error.code = 'REVISION_CONFLICT'; return error; }
+
 class DatabaseServicePG {
   constructor() {
     // Use DATABASE_URL from environment (Render provides this automatically)
@@ -138,6 +140,7 @@ class DatabaseServicePG {
         uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await this.pool.query(`CREATE TABLE IF NOT EXISTS revisions (scope VARCHAR(50) NOT NULL, data_key VARCHAR(100) NOT NULL, revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(scope, data_key))`);
   }
 
   // ========== Forecast Operations ==========
@@ -155,6 +158,9 @@ class DatabaseServicePG {
 
     try {
       await client.query('BEGIN');
+
+      const key = `${fiscalYear}:${planVersion}`;
+      await client.query(`INSERT INTO revisions(scope,data_key,revision) VALUES ('forecast',$1,0) ON CONFLICT DO NOTHING`, [key]);
 
       const { wgs, comments } = forecastData;
 
@@ -191,7 +197,9 @@ class DatabaseServicePG {
         }
       }
 
+      const revisionResult = await client.query(`UPDATE revisions SET revision = revision + 1 WHERE scope = 'forecast' AND data_key = $1 RETURNING revision`, [key]);
       await client.query('COMMIT');
+      return revisionResult.rows[0].revision;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -537,29 +545,19 @@ class DatabaseServicePG {
    * @param {string} fiscalYear
    * @param {string} planVersion
    */
-  async saveAllForecasts(data, fiscalYear, planVersion) {
+  async saveAllForecasts(data, fiscalYear, planVersion, expectedRevision) {
     await this.ready;
     const client = await this.pool.connect();
 
     try {
       await client.query('BEGIN');
-
-      // Collect all job numbers for bulk delete
-      const jobNumbers = Object.keys(data);
-
-      if (jobNumbers.length > 0) {
-        // Bulk delete existing forecasts for all jobs
-        await client.query(
-          'DELETE FROM forecasts WHERE job_number = ANY($1) AND fiscal_year = $2 AND plan_version = $3',
-          [jobNumbers, fiscalYear, planVersion]
-        );
-
-        // Bulk delete existing comments for all jobs
-        await client.query(
-          'DELETE FROM forecast_comments WHERE job_number = ANY($1) AND fiscal_year = $2 AND plan_version = $3',
-          [jobNumbers, fiscalYear, planVersion]
-        );
-      }
+      const key = `${fiscalYear}:${planVersion}`;
+      await client.query(`INSERT INTO revisions(scope,data_key,revision) VALUES ('forecast',$1,0) ON CONFLICT DO NOTHING`, [key]);
+      const currentResult = await client.query(`SELECT revision FROM revisions WHERE scope = 'forecast' AND data_key = $1 FOR UPDATE`, [key]);
+      const current = currentResult.rows[0].revision;
+      if (current !== expectedRevision) throw revisionConflict();
+      await client.query('DELETE FROM forecasts WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
+      await client.query('DELETE FROM forecast_comments WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
 
       // Collect all forecast values and comments for batch insert
       const forecastValues = [];
@@ -610,7 +608,10 @@ class DatabaseServicePG {
         );
       }
 
+      const revision = current + 1;
+      await client.query(`UPDATE revisions SET revision = $2 WHERE scope = 'forecast' AND data_key = $1`, [key, revision]);
       await client.query('COMMIT');
+      return revision;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -806,11 +807,15 @@ class DatabaseServicePG {
 
 
 
-  async saveAllReviewStatuses(reviewStore) {
+  async saveAllReviewStatuses(reviewStore, expectedRevision) {
     await this.ready;
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query(`INSERT INTO revisions(scope,data_key,revision) VALUES ('reviews','all',0) ON CONFLICT DO NOTHING`);
+      const revisionResult = await client.query(`SELECT revision FROM revisions WHERE scope = 'reviews' AND data_key = 'all' FOR UPDATE`);
+      const current = revisionResult.rows[0].revision;
+      if (current !== expectedRevision) throw revisionConflict();
       await client.query('DELETE FROM review_statuses');
       for (const [jobNumber, stages] of Object.entries(reviewStore || {})) {
         for (const [stage, value] of Object.entries(stages || {})) {
@@ -821,7 +826,10 @@ class DatabaseServicePG {
           );
         }
       }
+      const revision = current + 1;
+      await client.query(`UPDATE revisions SET revision = $1 WHERE scope = 'reviews' AND data_key = 'all'`, [revision]);
       await client.query('COMMIT');
+      return revision;
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -839,6 +847,11 @@ class DatabaseServicePG {
       out[row.job_number][row.rf_stage] = { reviewedAt: row.reviewed_at };
     });
     return out;
+  }
+  async getRevision(scope, dataKey) {
+    await this.ready;
+    const result = await this.pool.query('SELECT revision FROM revisions WHERE scope = $1 AND data_key = $2', [scope, dataKey]);
+    return result.rows[0]?.revision || 0;
   }
   mapJobCommentRow(row) {
     return {

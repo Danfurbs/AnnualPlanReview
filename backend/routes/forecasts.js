@@ -8,10 +8,13 @@ const {
   isValidFiscalYear,
   isValidPlanVersion,
   isValidJobNumber,
-  isPlainObject
+  isPlainObject,
+  isNonNegativeInteger
 } = require('./validators');
 
 const VALID_PERIOD_KEYS = new Set(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11', 'P12', 'P13']);
+const MAX_JOBS = 10000;
+const MAX_WORKGROUPS_PER_JOB = 250;
 
 function isFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value);
@@ -44,6 +47,7 @@ function validateForecastEntry(jobNumber, forecastData) {
   }
 
   for (const [wgName, wgPeriods] of Object.entries(forecastData.wgs)) {
+    if (!wgName.trim() || wgName.length > 50) return `Job ${jobNumber}: workgroup names must be 1-50 characters`;
     const periodsError = validatePeriods(wgPeriods, `Job ${jobNumber} workgroup '${wgName}'`);
     if (periodsError) return periodsError;
   }
@@ -81,10 +85,12 @@ module.exports = (db) => {
         });
       }
       const data = await db.getForecastData(fiscalYear, planVersion);
+      const revision = await db.getRevision('forecast', `${fiscalYear}:${planVersion}`);
 
       res.json({
         success: true,
         data: data,
+        revision,
         rowCount: Object.keys(data).length,
         savedAt: new Date().toISOString()
       });
@@ -133,7 +139,7 @@ module.exports = (db) => {
   router.post('/:fiscalYear/:planVersion', async (req, res) => {
     try {
       const { fiscalYear, planVersion } = req.params;
-      const { data } = req.body;
+      const { data, expectedRevision } = req.body || {};
       if (!isValidFiscalYear(fiscalYear) || !isValidPlanVersion(planVersion)) {
         return res.status(400).json({
           success: false,
@@ -147,6 +153,8 @@ module.exports = (db) => {
           error: 'Invalid data format'
         });
       }
+      if (!isNonNegativeInteger(expectedRevision)) return res.status(400).json({ success: false, error: 'expectedRevision must be a non-negative integer' });
+      if (Object.keys(data).length > MAX_JOBS) return res.status(413).json({ success: false, error: `Forecast snapshot exceeds the ${MAX_JOBS} job limit` });
       for (const [jobNumber, forecastData] of Object.entries(data)) {
         if (!isValidJobNumber(jobNumber)) {
           return res.status(400).json({
@@ -161,17 +169,20 @@ module.exports = (db) => {
             error: validationError
           });
         }
+        if (Object.keys(forecastData.wgs).length > MAX_WORKGROUPS_PER_JOB) return res.status(413).json({ success: false, error: `Job ${jobNumber} exceeds the ${MAX_WORKGROUPS_PER_JOB} workgroup limit` });
       }
 
       // Use bulk save for all forecasts in a single transaction
-      await db.saveAllForecasts(data, fiscalYear, planVersion);
+      const revision = await db.saveAllForecasts(data, fiscalYear, planVersion, expectedRevision);
 
       res.json({
         success: true,
         message: 'Forecasts saved successfully',
-        rowCount: Object.keys(data).length
+        rowCount: Object.keys(data).length,
+        revision
       });
     } catch (error) {
+      if (error.code === 'REVISION_CONFLICT') return res.status(409).json({ success: false, error: 'Forecast changed since it was loaded. Reload before saving.' });
       console.error('Error saving forecasts:', error);
       res.status(500).json({
         success: false,
@@ -204,11 +215,11 @@ module.exports = (db) => {
         });
       }
 
-      await db.saveForecast(jobNumber, fiscalYear, planVersion, forecastData);
+      const revision = await db.saveForecast(jobNumber, fiscalYear, planVersion, forecastData);
 
       res.json({
         success: true,
-        message: 'Forecast saved successfully'
+        message: 'Forecast saved successfully', revision
       });
     } catch (error) {
       console.error('Error saving forecast:', error);
