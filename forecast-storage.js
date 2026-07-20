@@ -352,7 +352,7 @@ async function addToV1OverridesAsync(year, jobNumbers) {
 }
 
 /**
- * Remove job numbers from v1 overrides (allows them to inherit from v0 again)
+ * Remove job numbers from the legacy v1 override metadata.
  * Note: For use in async contexts, prefer removeFromV1OverridesAsync to avoid race conditions
  */
 function removeFromV1Overrides(year, jobNumbers) {
@@ -572,33 +572,6 @@ async function getForecastSnapshotAsync(year, planVersion) {
 
   // Try GitHub or library
   return await loadForecastFromLibraryAsync(year, planVersion);
-}
-
-/**
- * Initialize v1 from v0 if v1 doesn't exist
- * Returns the initialized data or null
- */
-function initializeV1FromV0(year) {
-  if (!year) return null;
-
-  // Check if v1 already exists
-  const v1Snapshot = getForecastSnapshot(year, 'v1');
-  if (v1Snapshot) return null;
-
-  // Get v0 data
-  const v0Snapshot = getForecastSnapshot(year, 'v0');
-  if (!v0Snapshot || !v0Snapshot.data?.size) return null;
-
-  // Clone v0 to v1
-  const clonedData = cloneForecastData(v0Snapshot.data);
-  saveForecastToStorage(clonedData, clonedData.size, year, 'v1');
-
-  console.log(`✓ Plan v1 initialized from v0 for ${year}`);
-  return {
-    data: clonedData,
-    rowCount: clonedData.size,
-    savedAt: new Date().toISOString()
-  };
 }
 
 /**
@@ -929,7 +902,6 @@ window.loadForecastFromGitHub = loadForecastFromGitHub;
 window.loadForecastFromLibraryAsync = loadForecastFromLibraryAsync;
 window.getForecastSnapshot = getForecastSnapshot;
 window.getForecastSnapshotAsync = getForecastSnapshotAsync;
-window.initializeV1FromV0 = initializeV1FromV0;
 window.exportForecastFile = exportForecastFile;
 window.importForecastFile = importForecastFile;
 window.getForecastPeriodsForJob = getForecastPeriodsForJob;

@@ -176,7 +176,7 @@ function getPreferredPlanVersion(year) {
 
 /**
  * Load forecast for current context
- * Tries: localStorage > library > initialize v1 from v0
+ * Tries the selected plan's storage and library sources only.
  * Dispatches 'apr:forecast-load-failed' event if no forecast is found
  */
 function loadForecastForCurrentContext() {
@@ -210,16 +210,6 @@ function loadForecastForCurrentContext() {
     return library;
   }
 
-  // Auto-initialize v1 from v0 if needed
-  if (window.currentPlanVersion === 'v1') {
-    sourcesAttempted.push('v0-initialization');
-    const initialized = initializeV1FromV0(window.currentFinancialYear);
-    if (initialized) {
-      window.fData = initialized.data;
-      return initialized;
-    }
-  }
-
   // No forecast available - dispatch event for UI notification
   window.fData = null;
   console.log(`No forecast available for ${window.currentFinancialYear} ${window.currentPlanVersion}`);
@@ -234,7 +224,7 @@ function loadForecastForCurrentContext() {
 
 /**
  * Load forecast for current context (async version with GitHub support)
- * Tries: localStorage > GitHub > library > initialize v1 from v0
+ * Tries the selected plan's storage, GitHub, and library sources only.
  * Dispatches 'apr:forecast-load-failed' event if no forecast is found
  */
 async function loadForecastForCurrentContextAsync() {
@@ -268,16 +258,6 @@ async function loadForecastForCurrentContextAsync() {
     const source = library.source === 'github' ? 'GitHub' : 'library';
     console.log(`✓ Forecast loaded from ${source}: ${window.currentFinancialYear} ${window.currentPlanVersion}`);
     return library;
-  }
-
-  // Auto-initialize v1 from v0 if needed
-  if (window.currentPlanVersion === 'v1') {
-    sourcesAttempted.push('v0-initialization');
-    const initialized = initializeV1FromV0(window.currentFinancialYear);
-    if (initialized) {
-      window.fData = initialized.data;
-      return initialized;
-    }
   }
 
   // No forecast available - dispatch event for UI notification
@@ -427,4 +407,3 @@ window.getAllWorkGroupSetNames = getAllWorkGroupSetNames;
 window.getJobNumbersForWorkGroupSet = getJobNumbersForWorkGroupSet;
 window.getStandardJobList = getStandardJobList;
 window.getJobMetadata = getJobMetadata;
-
