@@ -398,29 +398,159 @@ function getV1WorkGroupComparison(year) {
   return comparison;
 }
 
-/** Create a complete v1 submission from v0, ready for tracked amendments. */
-async function resubmitPlanAsV1() {
-  const year = window.forecastEditorState.year;
-  const v0 = getForecastSnapshot(year, 'v0');
-  if (!v0?.data?.size) {
-    alert(`No Plan v0 forecast exists for ${year}.`);
-    return;
-  }
-  if (!confirm(`Start a new ${year} Plan v1 submission from Plan v0?\n\nThis replaces the current v1 with a full copy of v0. Work groups will be labelled “From v0” until you change them.`)) return;
+let copyWorkGroupRows = [];
+let selectedCopyWorkGroups = new Set();
 
-  const v1Data = cloneForecastData(v0.data);
-  const saved = await saveForecastToStorageAsync(v1Data, v1Data.size, year, 'v1');
+function getWorkGroupCopySummary(year) {
+  const v0 = getForecastSnapshot(year, 'v0')?.data || new Map();
+  const v1 = getForecastSnapshot(year, 'v1')?.data || new Map();
+  const groups = new Set();
+  [v0, v1].forEach(data => data.forEach(job => Object.keys(job?.wgs || {}).forEach(key => groups.add(normalizeWorkGroupSet(key)))));
+  const summarize = (data, group) => {
+    const values = [];
+    let volume = 0;
+    data.forEach((job, jobNumber) => {
+      const key = Object.keys(job?.wgs || {}).find(name => normalizeWorkGroupSet(name) === group);
+      if (!key) return;
+      const periods = window.FORECAST_PERIODS.map(period => Number(job.wgs[key]?.[period]) || 0);
+      volume += periods.reduce((sum, value) => sum + value, 0);
+      values.push([String(jobNumber), periods, String(job.comments?.[key] || '')]);
+    });
+    values.sort((a, b) => a[0].localeCompare(b[0]));
+    return { jobs: values.length, volume, fingerprint: JSON.stringify(values), values: new Map(values.map(value => [value[0], JSON.stringify(value.slice(1))])) };
+  };
+  return [...groups].sort().map(group => {
+    const before = summarize(v0, group);
+    const after = summarize(v1, group);
+    const jobNumbers = new Set([...before.values.keys(), ...after.values.keys()]);
+    const changedJobs = [...jobNumbers].filter(job => before.values.get(job) !== after.values.get(job)).length;
+    const status = after.jobs === 0 ? 'empty' : before.fingerprint === after.fingerprint ? 'same' : 'amended';
+    return { group, v0: before, v1: after, changedJobs, status };
+  });
+}
+
+function renderCopyWorkGroupsTable() {
+  const body = document.getElementById('copyWorkGroupsTableBody');
+  if (!body) return;
+  const query = (document.getElementById('copyWorkGroupsSearch')?.value || '').trim().toLowerCase();
+  const statusFilter = document.getElementById('copyWorkGroupsStatusFilter')?.value || 'all';
+  const shown = copyWorkGroupRows.filter(row => (statusFilter === 'all' || row.status === statusFilter) && `${row.group} ${window.workGroupSets?.get(row.group) || ''}`.toLowerCase().includes(query));
+  body.innerHTML = shown.length ? shown.map(row => {
+    const delta = row.v1.volume - row.v0.volume;
+    const status = row.status === 'empty' ? ['Not in V1', 'empty'] : row.status === 'amended' ? ['Amended', 'amended'] : ['Matches V0', 'same'];
+    const percent = row.v0.volume ? `${delta >= 0 ? '+' : ''}${((delta / row.v0.volume) * 100).toFixed(1)}%` : 'n/a';
+    return `<tr><td><input type="checkbox" class="copy-wg-checkbox" value="${escapeHtml(row.group)}" aria-label="Copy ${escapeHtml(row.group)}" ${selectedCopyWorkGroups.has(row.group) ? 'checked' : ''}></td>` +
+      `<td><span class="copy-wg-name">${escapeHtml(row.group)}</span><span class="copy-wg-description">${escapeHtml(window.workGroupSets?.get(row.group) || '')}</span></td>` +
+      `<td>${row.v0.jobs}</td><td>${row.v1.jobs}</td><td>${row.changedJobs}</td><td>${formatForecastNumber(row.v0.volume)}</td><td>${formatForecastNumber(row.v1.volume)}</td>` +
+      `<td class="${delta ? 'copy-wg-delta--changed' : ''}">${delta > 0 ? '+' : ''}${formatForecastNumber(delta)} <small>(${percent})</small></td>` +
+      `<td><span class="copy-wg-status copy-wg-status--${status[1]}">${status[0]}</span></td></tr>`;
+  }).join('') : '<tr><td colspan="9">No matching workgroups.</td></tr>';
+  body.querySelectorAll('.copy-wg-checkbox').forEach(box => box.addEventListener('change', updateCopyWorkGroupSelection));
+  updateCopyWorkGroupSelection();
+}
+
+function updateCopyWorkGroupSelection() {
+  document.querySelectorAll('.copy-wg-checkbox').forEach(box => box.checked ? selectedCopyWorkGroups.add(box.value) : selectedCopyWorkGroups.delete(box.value));
+  const selectedRows = copyWorkGroupRows.filter(row => selectedCopyWorkGroups.has(row.group));
+  const count = selectedRows.length;
+  const label = document.getElementById('copyWorkGroupsSelectionCount');
+  if (label) label.textContent = `${count} selected`;
+  const button = document.getElementById('copySelectedWorkGroupsButton');
+  if (button) button.disabled = count === 0;
+  const amended = selectedRows.filter(row => row.status === 'amended').length;
+  const jobs = selectedRows.reduce((sum, row) => sum + row.v0.jobs, 0);
+  const v0Volume = selectedRows.reduce((sum, row) => sum + row.v0.volume, 0);
+  const v1Volume = selectedRows.reduce((sum, row) => sum + row.v1.volume, 0);
+  const impact = document.getElementById('copyWorkGroupsImpact');
+  if (impact) impact.innerHTML = `
+    <div class="copy-wg-impact-card"><strong>${count}</strong><span>Workgroups selected</span></div>
+    <div class="copy-wg-impact-card"><strong>${jobs}</strong><span>V0 jobs to copy</span></div>
+    <div class="copy-wg-impact-card"><strong>${formatForecastNumber(v0Volume - v1Volume)}</strong><span>Net volume change</span></div>
+    <div class="copy-wg-impact-card ${amended ? 'copy-wg-impact-card--warning' : ''}"><strong>${amended}</strong><span>Amended V1 groups overwritten</span></div>`;
+}
+
+function openCopyWorkGroupsToV1Modal() {
+  const year = window.forecastEditorState.year;
+  if (!getForecastSnapshot(year, 'v0')?.data?.size) return alert(`No Plan v0 forecast exists for ${year}.`);
+  copyWorkGroupRows = getWorkGroupCopySummary(year).filter(row => row.v0.jobs > 0);
+  selectedCopyWorkGroups = new Set();
+  const search = document.getElementById('copyWorkGroupsSearch');
+  if (search) search.value = '';
+  const filter = document.getElementById('copyWorkGroupsStatusFilter');
+  if (filter) filter.value = 'all';
+  renderCopyWorkGroupsTable();
+  document.getElementById('copyWorkGroupsToV1Modal')?.classList.add('open');
+}
+
+function closeCopyWorkGroupsToV1Modal() {
+  document.getElementById('copyWorkGroupsToV1Modal')?.classList.remove('open');
+}
+
+function setAllCopyWorkGroups(selected) {
+  document.querySelectorAll('.copy-wg-checkbox').forEach(box => {
+    box.checked = selected;
+    if (selected) selectedCopyWorkGroups.add(box.value); else selectedCopyWorkGroups.delete(box.value);
+  });
+  updateCopyWorkGroupSelection();
+}
+
+function clearCopyWorkGroupSelection() {
+  selectedCopyWorkGroups.clear();
+  document.querySelectorAll('.copy-wg-checkbox').forEach(box => { box.checked = false; });
+  updateCopyWorkGroupSelection();
+}
+
+async function copySelectedWorkGroupsToV1() {
+  const groups = new Set(selectedCopyWorkGroups);
+  if (!groups.size) return;
+  const year = window.forecastEditorState.year;
+  const v0 = getForecastSnapshot(year, 'v0')?.data;
+  const current = getForecastSnapshot(year, 'v1')?.data;
+  if (!v0) return;
+  const amendedCount = copyWorkGroupRows.filter(row => groups.has(row.group) && row.status === 'amended').length;
+  const warning = amendedCount ? `\n\nWARNING: ${amendedCount} selected workgroup(s) contain V1 amendments that will be overwritten.` : '';
+  if (!confirm(`Copy ${groups.size} selected workgroup set(s) from ${year} V0 to V1?\n\nExisting V1 data for these workgroups will be replaced.${warning}`)) return;
+  const v1 = current ? cloneForecastData(current) : new Map();
+  const affectedJobs = new Set();
+  [v0, v1].forEach(data => data.forEach((job, jobNumber) => {
+    if (Object.keys(job?.wgs || {}).some(key => groups.has(normalizeWorkGroupSet(key)))) affectedJobs.add(jobNumber);
+  }));
+  affectedJobs.forEach(jobNumber => {
+    const target = v1.get(jobNumber);
+    if (!target) return;
+    Object.keys(target.wgs || {}).forEach(key => { if (groups.has(normalizeWorkGroupSet(key))) delete target.wgs[key]; });
+    Object.keys(target.comments || {}).forEach(key => { if (groups.has(normalizeWorkGroupSet(key))) delete target.comments[key]; });
+  });
+  v0.forEach((source, jobNumber) => {
+    Object.keys(source.wgs || {}).forEach(key => {
+      if (!groups.has(normalizeWorkGroupSet(key))) return;
+      if (!v1.has(jobNumber)) v1.set(jobNumber, cloneForecastData(new Map([[jobNumber, source]])).get(jobNumber));
+      const target = v1.get(jobNumber);
+      target.wgs ||= {};
+      target.comments ||= {};
+      target.wgs[key] = { ...source.wgs[key] };
+      if (source.comments?.[key]) target.comments[key] = source.comments[key];
+    });
+  });
+  affectedJobs.forEach(jobNumber => {
+    const job = v1.get(jobNumber);
+    if (!job) return;
+    job.periods = {};
+    Object.values(job.wgs || {}).forEach(wg => window.FORECAST_PERIODS.forEach(period => { job.periods[period] = (job.periods[period] || 0) + (Number(wg?.[period]) || 0); }));
+  });
+  const saved = await saveForecastToStorageAsync(v1, v1.size, year, 'v1');
   if (!saved) return;
-  await saveV1OverridesAsync(year, new Set());
+  const overrides = await loadV1OverridesAsync(year);
+  affectedJobs.forEach(job => overrides.add(job));
+  await saveV1OverridesAsync(year, overrides);
   window.forecastEditorState.planVersion = 'v1';
   window.currentPlanVersion = 'v1';
-  window.fData = v1Data;
-  renderForecastEditorSelectors();
-  renderForecastEditorTable();
-  updateForecastEditorSummary();
+  window.fData = v1;
+  closeCopyWorkGroupsToV1Modal();
+  renderForecastEditorSelectors(); loadForecastEditorRows(); renderForecastEditorTable(); updateForecastEditorSummary();
   const statusEl = document.getElementById('forecastEditorStatus');
-  if (statusEl) statusEl.textContent = `✓ Plan v1 created from v0 for ${year}. Change only the work groups that need amending.`;
-  window.Toast?.success(`Plan v1 created from ${year} v0`);
+  if (statusEl) statusEl.textContent = `✓ Copied ${groups.size} workgroup set(s) from ${year} V0 to V1.`;
+  window.Toast?.success(`Copied ${groups.size} workgroup set(s) to V1`);
 }
 
 /**
@@ -2630,7 +2760,11 @@ window.submitForecastEditorForm = submitForecastEditorForm;
 window.addForecastEditorRow = addForecastEditorRow;
 window.clearForecastEditorTable = clearForecastEditorTable;
 window.initializeV1FromV0Explicit = initializeV1FromV0Explicit;
-window.resubmitPlanAsV1 = resubmitPlanAsV1;
+window.openCopyWorkGroupsToV1Modal = openCopyWorkGroupsToV1Modal;
+window.closeCopyWorkGroupsToV1Modal = closeCopyWorkGroupsToV1Modal;
+window.setAllCopyWorkGroups = setAllCopyWorkGroups;
+window.clearCopyWorkGroupSelection = clearCopyWorkGroupSelection;
+window.copySelectedWorkGroupsToV1 = copySelectedWorkGroupsToV1;
 window.downloadForecastEditorExport = downloadForecastEditorExport;
 window.downloadTotalForecastExport = downloadTotalForecastExport;
 window.downloadExcelUploadFormat = downloadExcelUploadFormat;
@@ -2646,6 +2780,8 @@ window.applyImportConflictResolution = applyImportConflictResolution;
 
 // Event listener setup
 document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('copyWorkGroupsSearch')?.addEventListener('input', renderCopyWorkGroupsTable);
+  document.getElementById('copyWorkGroupsStatusFilter')?.addEventListener('change', renderCopyWorkGroupsTable);
   // Forecast editor form submit
   const forecastForm = document.getElementById('forecastEditorForm');
   if (forecastForm) {
