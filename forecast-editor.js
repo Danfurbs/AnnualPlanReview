@@ -1716,6 +1716,95 @@ function downloadForecastEditorExport() {
 }
 
 /**
+ * Download every populated work group/standard job combination as CSV.
+ * Each combination is a separate row so the file can be filtered or uploaded
+ * without losing work-group-specific volumes and comments.
+ */
+function downloadTotalForecastExport() {
+  if (!window.fData || !window.fData.size) {
+    alert('No forecast data to export. Save your changes first.');
+    return;
+  }
+
+  // Capture the currently visible table before building the export. Input
+  // events normally keep fData current, but syncing also covers autofill and
+  // other browser-driven edits that may not yet have emitted a change event.
+  if (typeof syncForecastEditorTableState === 'function') {
+    syncForecastEditorTableState();
+  }
+
+  const year = window.forecastEditorState.year;
+  const planVersion = window.forecastEditorState.planVersion;
+  const financialYear = year.startsWith('FY') ? `20${year.substring(2)}` : year;
+  const headers = ['Strategic Route', 'WGST', 'Financial Year', 'Standard Job', 'SJN and Desc', 'Account Code',
+    'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13', 'Comment'];
+  const rows = [];
+
+  window.fData.forEach((job, jobNumber) => {
+    // Include comment-only combinations as well as combinations with volumes.
+    const workGroups = new Set([
+      ...Object.keys(job?.wgs || {}),
+      ...Object.keys(job?.comments || {})
+    ]);
+
+    workGroups.forEach(workGroup => {
+      const wgData = job?.wgs?.[workGroup] || {};
+      const comment = job?.comments?.[workGroup] || '';
+      const hasVolumes = window.FORECAST_PERIODS.some(period => {
+        const value = wgData[period];
+        return value !== undefined && value !== null && value !== '';
+      });
+
+      if (!hasVolumes && !String(comment).trim()) return;
+
+      const jobDesc = window.stdJobs?.get(jobNumber)?.desc || '';
+      const row = [
+        '',
+        workGroup,
+        financialYear,
+        jobNumber,
+        jobDesc ? `${jobNumber} - ${jobDesc}` : jobNumber,
+        'XXXX'
+      ];
+
+      window.FORECAST_PERIODS.forEach(period => {
+        const value = wgData[period];
+        row.push(value !== undefined && value !== null && value !== '' ? value : '');
+      });
+      row.push(comment);
+      rows.push(row);
+    });
+  });
+
+  if (!rows.length) {
+    alert('No work group data to export.');
+    return;
+  }
+
+  rows.sort((a, b) => a[1].localeCompare(b[1]) || a[3].localeCompare(b[3]));
+  const escapeCsvCell = cell => {
+    const value = String(cell);
+    return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  };
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(escapeCsvCell).join(','))
+    .join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = `Forecast_${year}_${planVersion}_All_Work_Groups.csv`;
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  console.log(`Exported ${rows.length} work group and standard job rows for ${year} ${planVersion}`);
+}
+
+/**
  * Download Excel export for upload (CSV format)
  */
 function downloadExcelUploadFormat() {
@@ -2472,6 +2561,7 @@ window.addForecastEditorRow = addForecastEditorRow;
 window.clearForecastEditorTable = clearForecastEditorTable;
 window.initializeV1FromV0Explicit = initializeV1FromV0Explicit;
 window.downloadForecastEditorExport = downloadForecastEditorExport;
+window.downloadTotalForecastExport = downloadTotalForecastExport;
 window.downloadExcelUploadFormat = downloadExcelUploadFormat;
 window.triggerForecastFileUpload = triggerForecastFileUpload;
 window.loadForecastFile = loadForecastFile;
