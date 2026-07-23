@@ -1063,11 +1063,11 @@
 
     function getJobComments(jobNumber) {
       const allComments = commentStore[jobNumber] || [];
-      // Filter comments for current FY and RF stage
+      // Comments belong to the financial year, so every RF review in that FY
+      // shares the same conversation while comments from other FYs stay hidden.
       return allComments.filter(comment => {
         const commentFY = comment.fy || comment.financialYear;
-        const commentRF = comment.rf || comment.reviewStage;
-        return commentFY === currentFinancialYear && commentRF === currentReviewStage;
+        return commentFY === currentFinancialYear;
       });
     }
 
@@ -4221,7 +4221,7 @@
               ${filteredWorkGroupLabel ? `<span class="comment-context-tag" title="Comment added while filtered to a work group set">WG: ${escapeHtml(filteredWorkGroupLabel)}</span>` : ''}
               ${filteredEngineerName ? `<span class="comment-context-tag" title="Comment added while filtered to an engineer">Engineer: ${escapeHtml(filteredEngineerName)}</span>` : ''}
             </div>
-            <span class="comment-meta">${formatTimestamp(entry.timestamp)}</span>
+            <span class="comment-meta">${escapeHtml(entry.rf || entry.reviewStage || '')}${entry.rf || entry.reviewStage ? ' • ' : ''}${formatTimestamp(entry.timestamp)}</span>
           </div>
           <div class="comment-body">${escapeHtml(entry.text)}</div>
           ${(entry.rootCause || entry.correctiveAction || entry.owner || entry.dueDate) ? `
