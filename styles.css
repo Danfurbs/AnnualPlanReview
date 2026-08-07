@@ -372,7 +372,8 @@
     .forecast-amend-period { display: flex; flex-direction: column; gap: 5px; padding: 9px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
     .forecast-amend-period label { font-size: 11px; font-weight: 700; color: #475569; }
     .forecast-amend-period input { width: 100%; min-width: 0; text-align: right; }
-    .forecast-amend-original { min-height: 14px; font-size: 10px; color: #92400e; }
+    .forecast-amend-original { min-height: 14px; font-size: 10px; color: #64748b; }
+    .forecast-amend-period:focus-within { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, .14); background: #fff; }
     .forecast-amend-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 12px; }
     .forecast-amend-status { color: #166534; font-size: 12px; font-weight: 600; }
     .wo-flagged { border-left: 4px solid #f6ad55; }

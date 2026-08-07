@@ -2605,6 +2605,13 @@
       return currentForecastCutoff || 'auto';
     }
 
+    function getEffectiveForecastCutoffPeriod() {
+      const cutoffValue = getForecastCutoffValue();
+      if (cutoffValue === 'auto') return getMaxWorkDonePeriod();
+      const numeric = parseInt(String(cutoffValue).replace(/[^0-9]/g, ''), 10);
+      return Number.isNaN(numeric) ? 0 : Math.max(0, Math.min(13, numeric));
+    }
+
     function initForecastCutoffTimeline() {
       const timeline = document.getElementById('forecastCutoffTimeline');
       if (!timeline) return;
@@ -2803,11 +2810,7 @@
       const cutoffValue = getForecastCutoffValue();
       const varianceFilter = document.getElementById('varianceFilter')?.value || 'all';
       const reviewStatusFilter = document.getElementById('reviewStatusFilter')?.value || 'all';
-      const maxWorkDonePeriod = (() => {
-        if (cutoffValue === 'auto') return getMaxWorkDonePeriod();
-        const numeric = parseInt(String(cutoffValue).replace(/[^0-9]/g, ''), 10);
-        return Number.isNaN(numeric) ? 0 : numeric;
-      })();
+      const maxWorkDonePeriod = getEffectiveForecastCutoffPeriod();
 
       // Each plan is a complete, independent snapshot. V0 data only enters V1
       // through an explicit copy action in the forecast editor.
@@ -3325,7 +3328,7 @@
       const cutoffLabel = cutoffValue === 'auto' ? 'Auto' : 'Selected';
       const periodLabel = maxWorkDonePeriod > 0 ? `Period ${maxWorkDonePeriod}` : 'Period N/A';
       const uploadedLabel = workDoneUploadedAt ? ` Work Done uploaded: ${new Date(workDoneUploadedAt).toLocaleString()}.` : '';
-      const message = `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining. Forecasts are managed in the Forecast Builder.${uploadedLabel}`;
+      const message = `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining. Plan v1 can be updated below or in Forecast Builder.${uploadedLabel}`;
       const uploadNote = document.getElementById('uploadModeNote');
       const breakdownNote = document.getElementById('breakdownModeNote');
       if (uploadNote) uploadNote.textContent = message;
@@ -3435,18 +3438,15 @@
         return;
       }
       section.style.display = '';
-      const availableVersions = ['v0', 'v1'].filter(version => getForecastSnapshot(currentFinancialYear, version));
-      if (!availableVersions.length) {
+      const v1Snapshot = getForecastSnapshot(currentFinancialYear, 'v1');
+      if (!v1Snapshot) {
         versionSelect.innerHTML = '';
         workGroupSelect.innerHTML = '';
-        editor.innerHTML = '<div class="forecast-amend-empty">No forecast plan is available for this financial year.</div>';
+        editor.innerHTML = '<div class="forecast-amend-empty">Plan v1 is not available for this financial year. Upload or create Plan v1 in Forecast Builder first.</div>';
         return;
       }
-      versionSelect.innerHTML = availableVersions.map(version =>
-        `<option value="${version}">Plan ${version}${version === 'v1' ? ' (Updated)' : ''}</option>`
-      ).join('');
-      const preferredVersion = breakdownPlanVersion === 'v1' ? 'v1' : 'v0';
-      if (availableVersions.includes(preferredVersion)) versionSelect.value = preferredVersion;
+      versionSelect.innerHTML = '<option value="v1">Plan v1 (Updated)</option>';
+      versionSelect.value = 'v1';
 
       const snapshotJob = getForecastSnapshot(currentFinancialYear, versionSelect.value)?.data.get(job.jn);
       const forecastWorkGroups = new Set(Object.keys(snapshotJob?.wgs || {}).map(normalizeWorkGroupSet));
@@ -3463,23 +3463,23 @@
       if (activeFilter !== 'all' && matchingWorkGroup) workGroupSelect.value = matchingWorkGroup.code;
 
       const drawInputs = () => {
-        const planVersion = versionSelect.value;
+        const planVersion = 'v1';
         const workGroup = workGroupSelect.value;
         const forecastJob = getForecastSnapshot(currentFinancialYear, planVersion)?.data.get(job.jn);
         const storedWorkGroup = Object.keys(forecastJob?.wgs || {}).find(wg => normalizeWorkGroupSet(wg) === normalizeWorkGroupSet(workGroup));
         const values = storedWorkGroup ? forecastJob.wgs[storedWorkGroup] : null;
         const hasForecast = Boolean(storedWorkGroup);
         const workGroupLabel = window.workGroupSets?.get(workGroup) || workGroup;
-        editor.innerHTML = `<div class="forecast-amend-context"><span><strong>${escapeHtml(workGroup)}</strong> — ${escapeHtml(workGroupLabel)}</span><span>${hasForecast ? 'Editing existing forecast' : 'New work group forecast · values start at zero'}</span></div><div class="forecast-amend-grid">${Array.from({ length: 13 }, (_, index) => {
+        const originalJob = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn);
+        const originalWorkGroup = Object.keys(originalJob?.wgs || {}).find(wg => normalizeWorkGroupSet(wg) === normalizeWorkGroupSet(workGroup));
+        const originalValues = originalWorkGroup ? originalJob.wgs[originalWorkGroup] : {};
+        editor.innerHTML = `<div class="forecast-amend-context"><span><strong>${escapeHtml(workGroup)}</strong> — ${escapeHtml(workGroupLabel)}</span><span>${hasForecast ? 'Plan v1 values ready to edit' : 'New Plan v1 work group · values start at zero'}</span></div><div class="forecast-amend-grid">${Array.from({ length: 13 }, (_, index) => {
           const period = `P${index + 1}`;
-          const amendment = forecastJob?.amendments?.[getForecastAmendmentKey(workGroup, period)];
-          const original = amendment ? `Originally ${Number(amendment.original).toFixed(2)}` : '';
-          return `<div class="forecast-amend-period"><label for="forecast-amend-${period}">${period}</label><input id="forecast-amend-${period}" data-period="${period}" type="number" step="0.01" value="${Number(values?.[period] || 0)}"><span class="forecast-amend-original">${original}</span></div>`;
-        }).join('')}</div><div class="forecast-amend-actions"><span class="forecast-amend-status" aria-live="polite"></span><button type="button" class="primary-button" id="saveForecastAmendment">Save forecast amendments</button></div>`;
+          return `<div class="forecast-amend-period"><label for="forecast-amend-${period}">${period}</label><span class="forecast-amend-original">Plan v0: ${Number(originalValues?.[period] || 0).toFixed(2)}</span><input id="forecast-amend-${period}" data-period="${period}" type="number" min="0" step="0.01" value="${Number(values?.[period] || 0)}" aria-label="Plan v1 ${period}"></div>`;
+        }).join('')}</div><div class="forecast-amend-actions"><span class="forecast-amend-status" aria-live="polite"></span><button type="button" class="primary-button" id="saveForecastAmendment">Save Plan v1</button></div>`;
         document.getElementById('saveForecastAmendment')?.addEventListener('click', () => saveForecastAmendments(job, planVersion, workGroup));
       };
 
-      versionSelect.onchange = () => renderForecastAmendmentEditor(job);
       workGroupSelect.onchange = drawInputs;
       drawInputs();
     }
@@ -3522,14 +3522,29 @@
         const period = `P${index}`;
         forecastJob.periods[period] = Object.values(forecastJob.wgs).reduce((sum, periods) => sum + Number(periods?.[period] || 0), 0);
       }
-      const saved = await saveForecastToStorageAsync(snapshot.data, snapshot.data.size, currentFinancialYear, planVersion);
-      if (!saved) return;
+      const status = document.querySelector('.forecast-amend-status');
+      const saveButton = document.getElementById('saveForecastAmendment');
+      if (status) status.textContent = 'Saving to server…';
+      if (saveButton) saveButton.disabled = true;
+      let saved;
+      if (window.isApiEnabled?.() && window.saveForecastJobToApi) {
+        saved = await window.saveForecastJobToApi(job.jn, forecastJob, currentFinancialYear, planVersion);
+        if (saved) rememberForecastSnapshot(snapshot.data, snapshot.data.size, currentFinancialYear, planVersion);
+      } else {
+        saved = await saveForecastToStorageAsync(snapshot.data, snapshot.data.size, currentFinancialYear, planVersion);
+      }
+      if (saveButton) saveButton.disabled = false;
+      if (!saved) {
+        if (status) status.textContent = 'Save failed — changes were not confirmed by the server';
+        window.Toast?.error('Plan v1 was not saved. Please try again.');
+        return;
+      }
       if (currentPlanVersion === planVersion) fData = cloneForecastData(snapshot.data);
       render();
       const refreshedJob = window.currentJobsMap.get(job.jn);
       if (refreshedJob) showBreakdown(refreshedJob);
-      const status = document.querySelector('.forecast-amend-status');
-      if (status) status.textContent = `Plan ${planVersion} saved`;
+      const refreshedStatus = document.querySelector('.forecast-amend-status');
+      if (refreshedStatus) refreshedStatus.textContent = window.isApiEnabled?.() ? 'Plan v1 saved to server' : 'Plan v1 saved locally';
     }
 
     function openForecastComparison() {
@@ -3732,18 +3747,22 @@
       const v1Periods = job.isGroupRollup
         ? getForecastPeriodsForGroup(rollupJobNumbers, wgFilter, 'v1')
         : getForecastPeriodsForJob(job.jn, wgFilter, 'v1');
+      const forecastCutoffPeriod = getEffectiveForecastCutoffPeriod();
       
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
         periods.push(`Period ${i}`);
-        cumA += displayData.periods[p].a;
-        cumActual.push(cumA);
+        const workDone = Number(displayData.periods[p].wd) || 0;
+        if (i <= forecastCutoffPeriod) cumA += workDone;
+        // Stop the work-done line at the selected cutoff. Forecast lines use
+        // this same actual cumulative position before continuing with plan.
+        cumActual.push(i <= forecastCutoffPeriod ? cumA : null);
         if (v0Periods) {
-          cumV0 += v0Periods[p] || 0;
+          cumV0 += i <= forecastCutoffPeriod ? workDone : Number(v0Periods[p]) || 0;
           cumPlanV0.push(cumV0);
         }
         if (v1Periods) {
-          cumV1 += v1Periods[p] || 0;
+          cumV1 += i <= forecastCutoffPeriod ? workDone : Number(v1Periods[p]) || 0;
           cumPlanV1.push(cumV1);
         }
       }
@@ -3787,6 +3806,33 @@
         fill: true
       });
 
+      const forecastCutoffLine = {
+        id: 'forecastCutoffLine',
+        afterDatasetsDraw(chart) {
+          if (forecastCutoffPeriod < 1 || forecastCutoffPeriod >= 13) return;
+          const xScale = chart.scales.x;
+          const yScale = chart.scales.y;
+          const leftTick = xScale.getPixelForTick(forecastCutoffPeriod - 1);
+          const rightTick = xScale.getPixelForTick(forecastCutoffPeriod);
+          const x = (leftTick + rightTick) / 2;
+          const { ctx: chartContext } = chart;
+          chartContext.save();
+          chartContext.beginPath();
+          chartContext.setLineDash([6, 5]);
+          chartContext.strokeStyle = '#b45309';
+          chartContext.lineWidth = 2;
+          chartContext.moveTo(x, yScale.top);
+          chartContext.lineTo(x, yScale.bottom);
+          chartContext.stroke();
+          chartContext.setLineDash([]);
+          chartContext.fillStyle = '#92400e';
+          chartContext.font = '600 11px sans-serif';
+          chartContext.textAlign = 'center';
+          chartContext.fillText('Work done ends · Forecast starts', x, yScale.top + 12);
+          chartContext.restore();
+        }
+      };
+
       // Add baseline if it exists and not filtered by workgroup
       // (baseline is route-level, so don't show when viewing a specific workgroup)
       // For group rollups, aggregate baselines from all jobs in the group
@@ -3817,6 +3863,7 @@
           labels: periods,
           datasets
         },
+        plugins: [forecastCutoffLine],
         options: {
           responsive: true,
           maintainAspectRatio: true,
@@ -3824,7 +3871,7 @@
             legend: { position: 'top' },
             tooltip: {
               callbacks: {
-                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`
+                label: (ctx) => ctx.parsed.y == null ? '' : `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`
               }
             }
           },

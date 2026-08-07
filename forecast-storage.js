@@ -235,7 +235,11 @@ async function loadForecastFromStorageAsync(year, planVersion) {
         // The server is authoritative in API mode. Large FY snapshots regularly
         // exceed localStorage's quota, so do not duplicate them in browser
         // storage merely to warm an optional cache.
-        return apiData;
+        // Synchronous consumers (most notably the breakdown chart) read the
+        // in-memory snapshot. Keep it in step with the authoritative API data
+        // so a server-only V1 amendment is visible immediately.
+        rememberForecastSnapshot(apiData.data, apiData.rowCount, year, planVersion);
+        return window.forecastMemorySnapshots.get(`${year}:${planVersion}`);
       }
     } catch (err) {
       console.warn('Failed to load from API, falling back to localStorage:', err);
