@@ -412,6 +412,25 @@ async function saveForecastToApi(forecastData, rowCount, year, planVersion) {
   }
 }
 
+/** Save one edited job without replacing the entire financial-year snapshot. */
+async function saveForecastJobToApi(jobNumber, forecastData, year, planVersion) {
+  if (!isApiEnabled()) return false;
+  const endpoint = `/forecasts/${year}/${planVersion}/job/${encodeURIComponent(jobNumber)}`;
+  const validation = validateSerializedForecastData({ [jobNumber]: forecastData });
+  if (!validation.valid) {
+    window.Toast?.error(`Failed to save forecast: ${validation.error}`);
+    return false;
+  }
+  try {
+    const response = await apiRequest(endpoint, { method: 'POST', body: forecastData });
+    if (response.success) forecastRevisions.set(`${year}:${planVersion}`, response.revision);
+    return response.success === true;
+  } catch (err) {
+    console.error(`Failed to save forecast job to API (POST ${endpoint}):`, err);
+    return false;
+  }
+}
+
 /**
  * Load v1 overrides from API
  * @param {string} year - Fiscal year
@@ -850,6 +869,7 @@ window.toggleApiMode = toggleApiMode;
 window.checkApiHealth = checkApiHealth;
 window.loadForecastFromApi = loadForecastFromApi;
 window.saveForecastToApi = saveForecastToApi;
+window.saveForecastJobToApi = saveForecastJobToApi;
 window.loadV1OverridesFromApi = loadV1OverridesFromApi;
 window.saveV1OverridesToApi = saveV1OverridesToApi;
 window.loadBaselinesFromApi = loadBaselinesFromApi;
