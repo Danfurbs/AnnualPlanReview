@@ -3337,12 +3337,32 @@
       return Object.values(jobData.periods).reduce((sum, value) => sum + (Number(value) || 0), 0);
     }
 
+    function getAggregateForecastPeriods(jobData) {
+      if (!jobData) return {};
+
+      const workGroups = Object.values(jobData.wgs || {});
+      if (!workGroups.length) return jobData.periods || {};
+
+      // Work-group rows are the source of truth for a forecast. Rebuild the
+      // aggregate here so older V1 snapshots whose cached `periods` object was
+      // not recalculated still render their forecast in the breakdown chart.
+      const periods = {};
+      for (let i = 1; i <= 13; i++) {
+        const period = `P${i}`;
+        periods[period] = workGroups.reduce(
+          (total, workGroup) => total + (Number(workGroup?.[period]) || 0),
+          0
+        );
+      }
+      return periods;
+    }
+
     function getForecastPeriodsForJob(jobNumber, wgFilter, planVersion) {
       const snapshot = getForecastSnapshot(currentFinancialYear, planVersion);
       if (!snapshot) return null;
       const jobData = snapshot.data.get(jobNumber);
       if (!jobData) return null;
-      if (!wgFilter || wgFilter === 'all') return jobData.periods || {};
+      if (!wgFilter || wgFilter === 'all') return getAggregateForecastPeriods(jobData);
 
       const directMatch = jobData.wgs?.[wgFilter];
       if (directMatch) return directMatch;
@@ -3376,7 +3396,7 @@
         if (!jobData) return;
 
         if (!normalizedWgFilter) {
-          Object.entries(jobData.periods || {}).forEach(([period, value]) => {
+          Object.entries(getAggregateForecastPeriods(jobData)).forEach(([period, value]) => {
             if (period in totals) {
               totals[period] += Number(value) || 0;
               hasData = true;
