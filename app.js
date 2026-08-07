@@ -3748,21 +3748,28 @@
         ? getForecastPeriodsForGroup(rollupJobNumbers, wgFilter, 'v1')
         : getForecastPeriodsForJob(job.jn, wgFilter, 'v1');
       const forecastCutoffPeriod = getEffectiveForecastCutoffPeriod();
+      // The selected comparison determines which forecast completes the
+      // actuals/projected line. When both plans are displayed, retain v0 as
+      // the comparison baseline rather than silently switching projections.
+      const projectionPlanVersion = breakdownPlanVersion === 'v1' ? 'v1' : 'v0';
+      const projectionPeriods = projectionPlanVersion === 'v1' ? v1Periods : v0Periods;
       
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
         periods.push(`Period ${i}`);
         const workDone = Number(displayData.periods[p].wd) || 0;
-        if (i <= forecastCutoffPeriod) cumA += workDone;
-        // Stop the work-done line at the selected cutoff. Forecast lines use
-        // this same actual cumulative position before continuing with plan.
-        cumActual.push(i <= forecastCutoffPeriod ? cumA : null);
+        cumA += i <= forecastCutoffPeriod
+          ? workDone
+          : Number(projectionPeriods?.[p]) || 0;
+        // Actuals come from the uploaded Work Done file through the cutoff;
+        // the selected comparison forecast completes the remaining periods.
+        cumActual.push(cumA);
         if (v0Periods) {
-          cumV0 += i <= forecastCutoffPeriod ? workDone : Number(v0Periods[p]) || 0;
+          cumV0 += Number(v0Periods[p]) || 0;
           cumPlanV0.push(cumV0);
         }
         if (v1Periods) {
-          cumV1 += i <= forecastCutoffPeriod ? workDone : Number(v1Periods[p]) || 0;
+          cumV1 += Number(v1Periods[p]) || 0;
           cumPlanV1.push(cumV1);
         }
       }
@@ -3798,7 +3805,7 @@
         });
       }
       datasets.push({
-        label: 'Work Done (Cumulative)',
+        label: `Work Done + Forecast ${projectionPlanVersion} (Projected)`,
         data: cumActual,
         borderColor: '#10b981',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
