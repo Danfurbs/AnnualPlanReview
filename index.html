@@ -675,9 +675,17 @@
         <div class="discipline-header">
           <h3>Cumulative Progress</h3>
           <div class="header-actions">
+            <label for="breakdownChartScope" style="font-size: 0.85rem;">View:</label>
+            <select id="breakdownChartScope" onchange="handleBreakdownChartScopeChange()" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 0.85rem;">
+              <option value="overall">Overall</option>
+              <option value="workgroup">Work group set</option>
+              <option value="engineer">Engineer</option>
+            </select>
+            <select id="breakdownChartScopeTarget" aria-label="Cumulative progress selection" onchange="handleBreakdownChartScopeTargetChange()" hidden style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 0.85rem;"></select>
             <button type="button" class="section-toggle" id="compareForecastButton" onclick="openForecastComparison()">Compare Plan v0 vs v1</button>
           </div>
         </div>
+        <div id="breakdownChartScopeBadge" class="wg-compare-badge" aria-live="polite"></div>
         <canvas id="chart"></canvas>
       </div>
 
