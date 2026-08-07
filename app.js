@@ -17,6 +17,9 @@
     let requiresContextSelection = true;
     let disciplineCollapseState = {};
     let currentForecastCutoff = 'auto';
+    let breakdownChartScope = 'overall';
+    let breakdownChartScopeTarget = '';
+    let currentBreakdownJobNumber = null;
 
     // Comment-related (not in modules)
     const COMMENT_CATEGORIES = ['General', 'RF3', 'RF6', 'RF9', 'RF11', 'IME'];
@@ -74,6 +77,35 @@
     }
     // Expose globally for HTML onclick handler
     window.handleBreakdownPlanVersionChange = handleBreakdownPlanVersionChange;
+
+    function getDefaultBreakdownChartScope() {
+      const workGroup = document.getElementById('wgFilter')?.value || 'all';
+      const engineer = document.getElementById('engineerFilter')?.value || 'all';
+      if (workGroup !== 'all') return 'workgroup';
+      if (engineer !== 'all') return 'engineer';
+      return 'overall';
+    }
+
+    function handleBreakdownChartScopeChange() {
+      const select = document.getElementById('breakdownChartScope');
+      if (!select || !['overall', 'workgroup', 'engineer'].includes(select.value)) return;
+      breakdownChartScope = select.value;
+      breakdownChartScopeTarget = '';
+      if (currentCommentJob) {
+        const job = window.currentJobsMap.get(currentCommentJob);
+        if (job) showBreakdown(job);
+      }
+    }
+    window.handleBreakdownChartScopeChange = handleBreakdownChartScopeChange;
+
+    function handleBreakdownChartScopeTargetChange() {
+      breakdownChartScopeTarget = document.getElementById('breakdownChartScopeTarget')?.value || '';
+      if (currentCommentJob) {
+        const job = window.currentJobsMap.get(currentCommentJob);
+        if (job) showBreakdown(job);
+      }
+    }
+    window.handleBreakdownChartScopeTargetChange = handleBreakdownChartScopeTargetChange;
     function getBreakdownComparisonLabel() {
       if (breakdownPlanVersion === 'v1') return 'Comparing against Plan v1';
       if (breakdownPlanVersion === 'both') return 'Comparing against both Plan v0 and Plan v1';
@@ -3422,6 +3454,28 @@
       return hasData ? totals : null;
     }
 
+    function getForecastPeriodsForScope(job, workGroups, planVersion) {
+      if (!workGroups) {
+        return job.isGroupRollup
+          ? getForecastPeriodsForGroup(getAllGroups().find(group => group.id === job.groupId)?.jobNumbers || [], 'all', planVersion)
+          : getForecastPeriodsForJob(job.jn, 'all', planVersion);
+      }
+
+      const totals = Object.fromEntries(Array.from({ length: 13 }, (_, index) => [`P${index + 1}`, 0]));
+      let hasData = false;
+      workGroups.forEach(workGroup => {
+        const periods = job.isGroupRollup
+          ? getForecastPeriodsForGroup(getAllGroups().find(group => group.id === job.groupId)?.jobNumbers || [], workGroup, planVersion)
+          : getForecastPeriodsForJob(job.jn, workGroup, planVersion);
+        if (!periods) return;
+        hasData = true;
+        Object.keys(totals).forEach(period => {
+          totals[period] += Number(periods[period]) || 0;
+        });
+      });
+      return hasData ? totals : null;
+    }
+
     function getForecastAmendmentKey(workGroup, period) {
       return `${workGroup || 'all'}:${period}`;
     }
@@ -3675,6 +3729,14 @@
 
     function showBreakdown(job, options = {}) {
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
+      const engineerFilter = document.getElementById('engineerFilter')?.value || 'all';
+      if (currentBreakdownJobNumber !== job.jn) {
+        breakdownChartScope = getDefaultBreakdownChartScope();
+        breakdownChartScopeTarget = breakdownChartScope === 'workgroup'
+          ? wgFilter
+          : breakdownChartScope === 'engineer' ? engineerFilter : '';
+        currentBreakdownJobNumber = job.jn;
+      }
       const period = normalizePeriodKey(document.getElementById('period')?.value || 'all');
       const wgLabel = wgFilter === 'all' ? '' : ` • ${wgFilter}`;
       const breakdownModal = document.getElementById('breakdown');
@@ -3731,22 +3793,59 @@
       }
       renderForecastAmendmentEditor(job);
 
+      const chartScopeSelect = document.getElementById('breakdownChartScope');
+      const chartScopeTargetSelect = document.getElementById('breakdownChartScopeTarget');
+      const jobWorkGroups = Object.keys(job.wgs || {});
+      const jobWorkGroupSet = new Set(jobWorkGroups.map(normalizeWorkGroupSet));
+      const availableEngineers = (window.getEngineers ? window.getEngineers() : []).filter(engineer =>
+        (window.getEngineerWorkGroups?.(engineer.id) || []).some(workGroup => jobWorkGroupSet.has(normalizeWorkGroupSet(workGroup)))
+      );
+      if (chartScopeSelect) {
+        chartScopeSelect.value = breakdownChartScope;
+      }
+      let chartScopeTargetOptions = [];
+      if (breakdownChartScope === 'workgroup') {
+        chartScopeTargetOptions = jobWorkGroups.map(workGroup => ({
+          value: workGroup,
+          label: window.workGroupSets?.get(workGroup) || workGroup
+        }));
+      } else if (breakdownChartScope === 'engineer') {
+        chartScopeTargetOptions = availableEngineers.map(engineer => ({ value: engineer.id, label: engineer.name }));
+      }
+      if (breakdownChartScope === 'workgroup' && breakdownChartScopeTarget) {
+        const normalizedTarget = normalizeWorkGroupSet(breakdownChartScopeTarget);
+        breakdownChartScopeTarget = chartScopeTargetOptions.find(option => normalizeWorkGroupSet(option.value) === normalizedTarget)?.value || breakdownChartScopeTarget;
+      }
+      if (!chartScopeTargetOptions.some(option => option.value === breakdownChartScopeTarget)) {
+        breakdownChartScopeTarget = chartScopeTargetOptions[0]?.value || '';
+      }
+      if (chartScopeTargetSelect) {
+        chartScopeTargetSelect.hidden = breakdownChartScope === 'overall';
+        chartScopeTargetSelect.innerHTML = chartScopeTargetOptions.length
+          ? chartScopeTargetOptions.map(option => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join('')
+          : '<option value="">No matching data</option>';
+        chartScopeTargetSelect.value = breakdownChartScopeTarget;
+      }
+      const chartScopeWorkGroups = breakdownChartScope === 'workgroup'
+        ? (breakdownChartScopeTarget ? [breakdownChartScopeTarget] : [])
+        : breakdownChartScope === 'engineer'
+          ? (window.getEngineerWorkGroups?.(breakdownChartScopeTarget) || [])
+          : null;
+      const selectedTarget = chartScopeTargetOptions.find(option => option.value === breakdownChartScopeTarget);
+      const chartScopeLabel = breakdownChartScope === 'overall'
+        ? 'Overall'
+        : `${breakdownChartScope === 'workgroup' ? 'Work group set' : 'Engineer'} · ${selectedTarget?.label || 'No matching data'}`;
+      const chartScopeBadge = document.getElementById('breakdownChartScopeBadge');
+      if (chartScopeBadge) chartScopeBadge.textContent = `Showing ${chartScopeLabel}`;
+
       // Build cumulative data
       const periods = [];
       let cumA = 0;
       let cumV0 = 0, cumV1 = 0;
       const cumActual = [];
       const cumPlanV0 = [], cumPlanV1 = [];
-      const rollupGroup = job.isGroupRollup
-        ? getAllGroups().find(group => group.id === job.groupId)
-        : null;
-      const rollupJobNumbers = rollupGroup?.jobNumbers || [];
-      const v0Periods = job.isGroupRollup
-        ? getForecastPeriodsForGroup(rollupJobNumbers, wgFilter, 'v0')
-        : getForecastPeriodsForJob(job.jn, wgFilter, 'v0');
-      const v1Periods = job.isGroupRollup
-        ? getForecastPeriodsForGroup(rollupJobNumbers, wgFilter, 'v1')
-        : getForecastPeriodsForJob(job.jn, wgFilter, 'v1');
+      const v0Periods = getForecastPeriodsForScope(job, chartScopeWorkGroups, 'v0');
+      const v1Periods = getForecastPeriodsForScope(job, chartScopeWorkGroups, 'v1');
       const forecastCutoffPeriod = getEffectiveForecastCutoffPeriod();
       // The selected comparison determines which forecast completes the
       // actuals/projected line. When both plans are displayed, retain v0 as
@@ -3757,7 +3856,12 @@
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
         periods.push(`Period ${i}`);
-        const workDone = Number(displayData.periods[p].wd) || 0;
+        const workDone = chartScopeWorkGroups
+          ? chartScopeWorkGroups.reduce((total, workGroup) => {
+              const normalized = normalizeWorkGroupSet(workGroup);
+              return total + (Number(job.wgs?.[normalized]?.periods?.[p]?.wd) || 0);
+            }, 0)
+          : Number(job.periods[p].wd) || 0;
         cumA += i <= forecastCutoffPeriod
           ? workDone
           : Number(projectionPeriods?.[p]) || 0;
@@ -3851,7 +3955,7 @@
         baselineCumulative = getBaselineCumulative(job.jn, 13);
       }
       const hasBaseline = baselineCumulative.some(val => val > 0);
-      if (hasBaseline && wgFilter === 'all') {
+      if (hasBaseline && breakdownChartScope === 'overall') {
         datasets.push({
           label: 'Prior Submission (Cumulative)',
           data: baselineCumulative,
