@@ -2707,6 +2707,13 @@
       return Number.isNaN(numeric) ? 0 : Math.max(0, Math.min(13, numeric));
     }
 
+    function getMainPageActual(forecastValue, workDonePeriods, period, cutoffPeriod) {
+      const hasReportedWork = Object.prototype.hasOwnProperty.call(workDonePeriods || {}, period);
+      return getPeriodNumber(period) <= cutoffPeriod || hasReportedWork
+        ? Number(workDonePeriods?.[period] || 0)
+        : Number(forecastValue || 0);
+    }
+
     function initForecastCutoffTimeline() {
       const timeline = document.getElementById('forecastCutoffTimeline');
       if (!timeline) return;
@@ -2934,9 +2941,9 @@
           const p = `P${i}`;
           const fv = f?.periods[p]||0;
           const avRaw = a?.periods[p]||0;
-          // Always use forecast mode: periods after cutoff use forecast, before use actual
-          const useForecast = i > maxWorkDonePeriod;
-          const av = useForecast ? fv : avRaw;
+          // A reported period must remain actual even when it falls after a manually
+          // selected cutoff. The cutoff only determines how unreported periods are filled.
+          const av = getMainPageActual(fv, a?.periods, p, maxWorkDonePeriod);
           job.periods[p] = {f:fv, a:av, wd:avRaw, v:av-fv};
           job.tot.f += fv;
           job.tot.a += av;
@@ -2972,9 +2979,12 @@
             const p = `P${i}`;
             const fv = (keys.fKey ? f?.wgs?.[keys.fKey]?.[p] : 0) || 0;
             const avRaw = (keys.aKey ? a?.wgs?.[keys.aKey]?.[p] : 0) || 0;
-            // Always use forecast mode: periods after cutoff use forecast, before use actual
-            const useForecast = i > maxWorkDonePeriod;
-            const av = useForecast ? fv : avRaw;
+            const av = getMainPageActual(
+              fv,
+              keys.aKey ? a?.wgs?.[keys.aKey] : null,
+              p,
+              maxWorkDonePeriod
+            );
             job.wgs[normalized].periods[p] = {f: fv, a: av, wd: avRaw, v: av - fv};
           }
         });
