@@ -4020,7 +4020,7 @@
         const v1Periods = getForecastWorkGroupPeriods(v1BreakdownJob, workGroup);
         const v1Value = Number((v1Periods || getForecastWorkGroupPeriods(v0BreakdownJob, workGroup))?.[period] || 0);
         const changed = Math.abs(v1Value - v0Value) >= 0.0001;
-        return `<input class="wg-plan-v1-input" data-work-group="${escapeHtml(workGroup)}" data-period="${period}" data-original="${v0Value}" type="number" min="0" step="0.01" value="${v1Value}" style="width:42px;text-align:center" aria-label="Plan v1 ${escapeHtml(workGroup)} ${period}"><span class="forecast-amend-original"${changed ? '' : ' hidden'}>was ${v0Value.toFixed(1)}</span>`;
+        return `<span class="wg-plan-v1-field"><input class="wg-plan-v1-input" data-work-group="${escapeHtml(workGroup)}" data-period="${period}" data-original="${v0Value}" type="number" min="0" step="0.01" value="${v1Value}" aria-label="Plan v1 ${escapeHtml(workGroup)} ${period}"><span class="forecast-amend-original"${changed ? '' : ' hidden'}>was ${v0Value.toFixed(1)}</span></span>`;
       };
       let tableHTML = '<thead><tr><th>Work Group</th>';
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
