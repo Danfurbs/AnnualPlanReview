@@ -156,13 +156,13 @@
       fData = null;
       const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
-        fData = forecastCache.data;
+        fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : forecastCache.data;
         updateWorkGroupFilterOptions();
         console.log(`✓ Switched to ${newPlanVersion}: Forecast loaded (${window.isApiEnabled() ? 'API' : 'local'})`);
       } else {
         const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
-          fData = libraryForecast.data;
+          fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : libraryForecast.data;
           updateWorkGroupFilterOptions();
           const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
           console.log(`✓ Switched to ${newPlanVersion}: ${source} forecast loaded`);
@@ -314,13 +314,13 @@
       fData = null;
       const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
-        fData = forecastCache.data;
+        fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : forecastCache.data;
         updateWorkGroupFilterOptions();
         console.log('✓ Forecast loaded', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '', window.isApiEnabled() ? '[API]' : '[local]');
       } else {
         const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
-          fData = libraryForecast.data;
+          fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : libraryForecast.data;
           updateWorkGroupFilterOptions();
           const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
           console.log(`✓ Forecast loaded from ${source}`);
@@ -383,13 +383,13 @@
       fData = null;
       const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
-        fData = forecastCache.data;
+        fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : forecastCache.data;
         updateWorkGroupFilterOptions();
         console.log('✓ Forecast loaded', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '', window.isApiEnabled() ? '[API]' : '[local]');
       } else {
         const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
         if (libraryForecast) {
-          fData = libraryForecast.data;
+          fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : libraryForecast.data;
           updateWorkGroupFilterOptions();
           const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
           console.log(`✓ Forecast loaded from ${source}`);
@@ -438,7 +438,9 @@
     }
 
     function getJobForecastFingerprint(jobNumber, year, planVersion) {
-      const job = getForecastSnapshot(year, planVersion)?.data.get(jobNumber);
+      const job = planVersion === 'v1'
+        ? getEffectiveForecastJob(year, jobNumber)
+        : getForecastSnapshot(year, planVersion)?.data.get(jobNumber);
       if (!job) return null;
       const normalized = {};
       for (let index = 1; index <= 13; index++) {
@@ -1272,14 +1274,14 @@
         await loadWorkDoneStoreAsync(currentFinancialYear);
         const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
         if (forecastCache) {
-          fData = forecastCache.data;
+          fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : forecastCache.data;
           updateWorkGroupFilterOptions();
           console.log('✓ Forecast loaded on init', forecastCache.savedAt ? `(${forecastCache.savedAt})` : '', window.isApiEnabled() ? '[API]' : '[local]');
         } else {
           // Load from GitHub or library if not in storage/API
           const libraryForecast = await loadForecastFromLibraryAsync(currentFinancialYear, currentPlanVersion);
           if (libraryForecast) {
-            fData = libraryForecast.data;
+            fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : libraryForecast.data;
             updateWorkGroupFilterOptions();
             const source = libraryForecast.source === 'github' ? 'GitHub' : 'library';
             console.log(`✓ Forecast loaded from ${source} on init`);
@@ -2460,7 +2462,10 @@
       const planVersion = currentPlanVersion || 'v0';
 
       // Load forecast data
-      const forecastSnapshot = getForecastSnapshot(year, planVersion);
+      // Plan v1 is stored sparsely, so exports must use its complete read-time projection.
+      const forecastSnapshot = planVersion === 'v1'
+        ? getEffectiveForecastSnapshot(year)
+        : getForecastSnapshot(year, planVersion);
       const forecastData = forecastSnapshot?.data || new Map();
 
       // Get all standard jobs
@@ -3455,7 +3460,9 @@
     }
 
     function getForecastPeriodsForJob(jobNumber, wgFilter, planVersion) {
-      const snapshot = getForecastSnapshot(currentFinancialYear, planVersion);
+      const snapshot = planVersion === 'v1'
+        ? getEffectiveForecastSnapshot(currentFinancialYear)
+        : getForecastSnapshot(currentFinancialYear, planVersion);
       if (!snapshot) return null;
       const jobData = snapshot.data.get(jobNumber);
       if (!jobData) return null;
@@ -3475,7 +3482,9 @@
     }
 
     function getForecastPeriodsForGroup(jobNumbers, wgFilter, planVersion) {
-      const snapshot = getForecastSnapshot(currentFinancialYear, planVersion);
+      const snapshot = planVersion === 'v1'
+        ? getEffectiveForecastSnapshot(currentFinancialYear)
+        : getForecastSnapshot(currentFinancialYear, planVersion);
       if (!snapshot || !Array.isArray(jobNumbers) || !jobNumbers.length) return null;
 
       const totals = {};
@@ -3538,56 +3547,81 @@
       return hasData ? totals : null;
     }
 
-    async function saveBreakdownPlanV1(job) {
-      const dirtyInputs = [...document.querySelectorAll('#wgTable .wg-plan-v1-input[data-dirty="true"]')];
-      const status = document.getElementById('breakdownForecastStatus');
-      if (!dirtyInputs.length) {
-        if (status) status.textContent = 'No unsaved Plan v1 changes';
-        return;
+    function resolveForecastWorkGroupPeriods(forecastJob, workGroup) {
+      const stored = Object.keys(forecastJob?.wgs || {}).find(
+        candidate => normalizeWorkGroupSet(candidate) === normalizeWorkGroupSet(workGroup)
+      );
+      return stored ? forecastJob.wgs[stored] : null;
+    }
+
+    let breakdownPlanEditContext = null;
+
+    function openWorkGroupPlanEditor(job, workGroup) {
+      const modal = document.getElementById('workGroupPlanEditModal');
+      const grid = document.getElementById('workGroupPlanEditGrid');
+      if (!modal || !grid) return;
+      const effectivePeriods = resolveForecastWorkGroupPeriods(getEffectiveForecastJob(currentFinancialYear, job.jn), workGroup) || {};
+      const v0Periods = resolveForecastWorkGroupPeriods(getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn), workGroup) || {};
+      breakdownPlanEditContext = { job, workGroup };
+      document.getElementById('workGroupPlanEditTitle').textContent = window.workGroupSets?.get(workGroup) || workGroup;
+      document.getElementById('workGroupPlanEditMeta').textContent = `${job.jn} · Plan v1 override`;
+      grid.innerHTML = Array.from({ length: 13 }, (_, index) => {
+        const period = `P${index + 1}`;
+        const value = Number(effectivePeriods[period] || 0);
+        const v0Value = Number(v0Periods[period] || 0);
+        return `<label class="wg-plan-edit-period"><span>${period}</span><input data-period="${period}" type="number" min="0" step="0.01" value="${value}" aria-label="Plan v1 ${escapeHtml(workGroup)} ${period}"><small>Plan v0: ${v0Value.toFixed(1)}</small></label>`;
+      }).join('');
+      modal.classList.add('open');
+      grid.querySelector('input')?.focus();
+    }
+
+    function closeWorkGroupPlanEditor() {
+      document.getElementById('workGroupPlanEditModal')?.classList.remove('open');
+      breakdownPlanEditContext = null;
+    }
+
+    async function saveBreakdownPlanV1() {
+      if (!breakdownPlanEditContext) return;
+      const { job, workGroup } = breakdownPlanEditContext;
+      const inputs = [...document.querySelectorAll('#workGroupPlanEditGrid input[data-period]')];
+      const periods = {};
+      for (const input of inputs) {
+        const value = Number(input.value);
+        if (!Number.isFinite(value) || value < 0) {
+          alert(`Enter a valid non-negative value for ${input.dataset.period}.`);
+          input.focus();
+          return;
+        }
+        periods[input.dataset.period] = value;
       }
+
+      const saveButton = document.getElementById('saveWorkGroupPlanEdit');
+      if (saveButton) saveButton.disabled = true;
       let snapshot = await getForecastSnapshotAsync(currentFinancialYear, 'v1');
-      if (!snapshot) {
-        const v0Snapshot = getForecastSnapshot(currentFinancialYear, 'v0');
-        snapshot = { data: v0Snapshot ? cloneForecastData(v0Snapshot.data) : new Map(), rowCount: v0Snapshot?.rowCount || 0 };
-      }
+      if (!snapshot) snapshot = { data: new Map(), rowCount: 0 };
       let forecastJob = snapshot.data.get(job.jn);
-      let seededWorkGroupCount = 0;
       if (!forecastJob) {
-        const v0Job = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn);
-        // Seed an untouched v1 job from v0 so an inline one-work-group edit cannot silently drop its other work groups.
-        forecastJob = v0Job ? deepCloneJobEntry(v0Job) : { periods: {}, wgs: {}, comments: {}, amendments: {} };
-        seededWorkGroupCount = Object.keys(forecastJob.wgs || {}).length;
+        forecastJob = { periods: {}, wgs: {}, comments: {}, amendments: {} };
         snapshot.data.set(job.jn, forecastJob);
       }
       forecastJob.periods ||= {};
       forecastJob.wgs ||= {};
       forecastJob.comments ||= {};
       forecastJob.amendments ||= {};
-      for (const input of dirtyInputs) {
-        const next = Number(input.value);
-        if (!Number.isFinite(next) || next < 0) {
-          alert(`Enter a valid non-negative value for ${input.dataset.period}.`);
-          input.focus();
-          return;
-        }
-        const storedWorkGroup = Object.keys(forecastJob.wgs).find(candidate => normalizeWorkGroupSet(candidate) === normalizeWorkGroupSet(input.dataset.workGroup));
-        const workGroup = storedWorkGroup || input.dataset.workGroup;
-        forecastJob.wgs[workGroup] ||= {};
-        const previous = Number(forecastJob.wgs[workGroup][input.dataset.period] || 0);
-        if (Math.abs(next - previous) >= 0.0001) {
-          const amendmentKey = `${workGroup}:${input.dataset.period}`;
+      const storedWorkGroup = Object.keys(forecastJob.wgs).find(candidate => normalizeWorkGroupSet(candidate) === normalizeWorkGroupSet(workGroup));
+      const workGroupKey = storedWorkGroup || workGroup;
+      const previousPeriods = resolveForecastWorkGroupPeriods(getEffectiveForecastJob(currentFinancialYear, job.jn), workGroup) || {};
+      Object.entries(periods).forEach(([period, value]) => {
+        const previous = Number(previousPeriods[period] || 0);
+        if (Math.abs(value - previous) >= 0.0001) {
+          const amendmentKey = `${workGroupKey}:${period}`;
           forecastJob.amendments[amendmentKey] ||= { original: previous };
           forecastJob.amendments[amendmentKey].updatedAt = new Date().toISOString();
-          forecastJob.wgs[workGroup][input.dataset.period] = next;
         }
-      }
-      for (let index = 1; index <= 13; index++) {
-        const period = `P${index}`;
-        forecastJob.periods[period] = Object.values(forecastJob.wgs).reduce((sum, periods) => sum + Number(periods?.[period] || 0), 0);
-      }
-      if (status) status.textContent = `${seededWorkGroupCount ? `Copied ${seededWorkGroupCount} work group(s) from Plan v0 · ` : ''}Saving…`;
-      const saveButton = document.getElementById('saveBreakdownPlanV1');
-      if (saveButton) saveButton.disabled = true;
+      });
+      forecastJob.wgs[workGroupKey] = periods;
+      forecastJob.periods = recalculatePeriodsFromWgs(forecastJob.wgs);
+
       let saved;
       if (window.isApiEnabled?.() && window.saveForecastJobToApi) {
         saved = await window.saveForecastJobToApi(job.jn, forecastJob, currentFinancialYear, 'v1');
@@ -3597,19 +3631,20 @@
       }
       if (saveButton) saveButton.disabled = false;
       if (!saved) {
-        if (status) status.textContent = 'Save failed — changes were not confirmed';
         window.Toast?.error('Plan v1 was not saved. Please try again.');
         return;
       }
       await addToV1OverridesAsync(currentFinancialYear, [job.jn]);
-      if (currentPlanVersion === 'v1') fData = cloneForecastData(snapshot.data);
+      if (currentPlanVersion === 'v1') fData = getEffectiveForecastSnapshot(currentFinancialYear).data;
+      closeWorkGroupPlanEditor();
       render();
-      const refreshedJob = window.currentJobsMap.get(job.jn) || job;
-      showBreakdown(refreshedJob);
-      const refreshedStatus = document.getElementById('breakdownForecastStatus');
-      if (refreshedStatus) refreshedStatus.textContent = window.isApiEnabled?.() ? 'Plan v1 saved to server' : 'Plan v1 saved locally';
+      showBreakdown(window.currentJobsMap.get(job.jn) || job);
+      const status = document.getElementById('breakdownForecastStatus');
+      if (status) status.textContent = window.isApiEnabled?.() ? 'Plan v1 saved to server' : 'Plan v1 saved locally';
     }
 
+    window.openWorkGroupPlanEditor = openWorkGroupPlanEditor;
+    window.closeWorkGroupPlanEditor = closeWorkGroupPlanEditor;
     window.saveBreakdownPlanV1 = saveBreakdownPlanV1;
 
     function openForecastComparison() {
@@ -3635,6 +3670,7 @@
       if (!table) return;
       const v0Snapshot = getForecastSnapshot(currentFinancialYear, 'v0');
       const v1SnapshotRaw = getForecastSnapshot(currentFinancialYear, 'v1');
+      const v1Snapshot = getEffectiveForecastSnapshot(currentFinancialYear);
       if (!v0Snapshot) {
         table.innerHTML = '<thead><tr><th>Forecast comparison</th></tr></thead><tbody><tr><td class="wo-empty">Plan v0 forecast must be available to compare.</td></tr></tbody>';
         if (meta) {
@@ -3643,8 +3679,8 @@
         return;
       }
 
-      // Compare the two stored snapshots as-is; missing V1 rows stay missing.
-      const v1Data = v1SnapshotRaw?.data || new Map();
+      // Compare v0 with the complete projection of sparse v1 overrides.
+      const v1Data = v1Snapshot.data;
 
       const allJobs = new Set([...(v0Snapshot.data.keys()), ...(v1Data.keys())]);
       const rows = [];
@@ -4004,8 +4040,7 @@
       
       // Build work group table
       const wgTable = document.getElementById('wgTable');
-      // Selecting V1 is enough to enable inline planning. Save safely seeds a
-      // missing V1 snapshot from V0 instead of forcing a Forecast Builder trip.
+      // Work-group edits are available only while viewing v1; the popup saves a sparse override.
       const canEditPlanV1 = !job.isGroupRollup && ['v1', 'both'].includes(breakdownPlanVersion);
       const v0BreakdownJob = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn);
       const v1BreakdownJob = getForecastSnapshot(currentFinancialYear, 'v1')?.data.get(job.jn);
@@ -4015,14 +4050,7 @@
         const stored = findForecastWorkGroup(forecastJob, workGroup);
         return stored ? forecastJob.wgs[stored] : null;
       };
-      const renderPlannedCell = (workGroup, period, fallbackValue) => {
-        if (!canEditPlanV1) return Number(fallbackValue || 0).toFixed(1);
-        const v0Value = Number(getForecastWorkGroupPeriods(v0BreakdownJob, workGroup)?.[period] || 0);
-        const v1Periods = getForecastWorkGroupPeriods(v1BreakdownJob, workGroup);
-        const v1Value = Number((v1Periods || getForecastWorkGroupPeriods(v0BreakdownJob, workGroup))?.[period] || 0);
-        const changed = Math.abs(v1Value - v0Value) >= 0.0001;
-        return `<span class="wg-plan-v1-field"><input class="wg-plan-v1-input" data-work-group="${escapeHtml(workGroup)}" data-period="${period}" data-original="${v0Value}" type="number" min="0" step="0.01" value="${v1Value}" aria-label="Plan v1 ${escapeHtml(workGroup)} ${period}"><span class="forecast-amend-original"${changed ? '' : ' hidden'}>was ${v0Value.toFixed(1)}</span></span>`;
-      };
+      const renderPlannedCell = (_workGroup, _period, fallbackValue) => Number(fallbackValue || 0).toFixed(1);
       let tableHTML = '<thead><tr><th>Work Group</th>';
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
       tableHTML += '<th>Total</th></tr></thead><tbody>';
@@ -4094,7 +4122,7 @@
             let rowTotal = 0;
             const summaryOpen = isFiltered;
             const wgDescription = window.workGroupSets?.get(wg) || wg;
-            tableHTML += `<tr class="wg-summary engineer-row${summaryOpen ? ' is-open' : ''}" data-wg="${idx}" data-eng="${engineer.id}"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
+            tableHTML += `<tr class="wg-summary engineer-row${summaryOpen ? ' is-open' : ''}" data-wg="${idx}" data-eng="${engineer.id}"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span>${canEditPlanV1 ? `<button type="button" class="wg-plan-edit-button" data-edit-work-group="${escapeHtml(wg)}" aria-label="Edit Plan v1 for ${escapeHtml(wgDescription)}">✎</button>${getForecastWorkGroupPeriods(v1BreakdownJob, wg) ? '<span class="wg-plan-edited">Edited</span>' : ''}` : ''}</strong></td>`;
             for(let i=1; i<=13; i++) {
               const p = `P${i}`;
               const d = data.periods[p] || {f: 0, v: 0};
@@ -4158,7 +4186,7 @@
             const summaryOpen = isFiltered;
             const wgDescription = window.workGroupSets?.get(wg) || wg;
             const engRowClass = engineerGroups.size > 0 ? ' engineer-row' : '';
-            tableHTML += `<tr class="wg-summary${engRowClass}${summaryOpen ? ' is-open' : ''}" data-wg="${idx}" data-eng="ungrouped"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span></strong></td>`;
+            tableHTML += `<tr class="wg-summary${engRowClass}${summaryOpen ? ' is-open' : ''}" data-wg="${idx}" data-eng="ungrouped"><td><strong>${escapeHtml(wgDescription)} <span class="wg-toggle">${summaryOpen ? 'Hide details' : 'Show details'}</span>${canEditPlanV1 ? `<button type="button" class="wg-plan-edit-button" data-edit-work-group="${escapeHtml(wg)}" aria-label="Edit Plan v1 for ${escapeHtml(wgDescription)}">✎</button>${getForecastWorkGroupPeriods(v1BreakdownJob, wg) ? '<span class="wg-plan-edited">Edited</span>' : ''}` : ''}</strong></td>`;
             for(let i=1; i<=13; i++) {
               const p = `P${i}`;
               const d = data.periods[p] || {f: 0, v: 0};
@@ -4197,63 +4225,13 @@
       tableHTML += '</tbody>';
       wgTable.innerHTML = tableHTML;
 
-      const refreshEditableWorkGroup = (input) => {
-        input.dataset.dirty = 'true';
-        const originalLabel = input.nextElementSibling;
-        if (originalLabel?.classList.contains('forecast-amend-original')) {
-          originalLabel.hidden = Math.abs((Number(input.value) || 0) - Number(input.dataset.original || 0)) < 0.0001;
-        }
-        const detailRow = input.closest('.wg-detail');
-        const workGroupKey = detailRow?.dataset.wg;
-        if (!detailRow || workGroupKey == null) return;
-        const plannedInputs = [...detailRow.querySelectorAll('.wg-plan-v1-input')];
-        const plannedTotal = plannedInputs.reduce((sum, field) => sum + (Number(field.value) || 0), 0);
-        const plannedTotalCell = detailRow.querySelector('[data-detail-total="f"] strong');
-        if (plannedTotalCell) plannedTotalCell.textContent = plannedTotal.toFixed(1);
-
-        const varianceRow = [...wgTable.querySelectorAll(`.wg-detail[data-wg="${workGroupKey}"]`)]
-          .find(row => row.querySelector('[data-detail-key="v"]'));
-        let varianceTotal = 0;
-        plannedInputs.forEach((field, index) => {
-          const actualCell = [...wgTable.querySelectorAll(`.wg-detail[data-wg="${workGroupKey}"]`)]
-            .find(row => row.querySelector('[data-detail-key="a"]'))?.querySelectorAll('[data-detail-key="a"]')[index];
-          const varianceCell = varianceRow?.querySelectorAll('[data-detail-key="v"]')[index];
-          const variance = (Number(actualCell?.textContent) || 0) - (Number(field.value) || 0);
-          varianceTotal += variance;
-          if (varianceCell) varianceCell.textContent = `${variance > 0 ? '+' : ''}${variance.toFixed(1)}`;
+      wgTable.querySelectorAll('.wg-plan-edit-button').forEach(button => {
+        button.addEventListener('click', event => {
+          event.stopPropagation();
+          openWorkGroupPlanEditor(job, button.dataset.editWorkGroup);
         });
-        const varianceTotalCell = varianceRow?.querySelector('[data-detail-total="v"] strong');
-        if (varianceTotalCell) varianceTotalCell.textContent = `${varianceTotal > 0 ? '+' : ''}${varianceTotal.toFixed(1)}`;
+      });
 
-        const summaryRow = wgTable.querySelector(`.wg-summary[data-wg="${workGroupKey}"]`);
-        if (summaryRow) {
-          const values = wgDisplayMode === 'forecast'
-            ? plannedInputs.map(field => Number(field.value) || 0)
-            : [...varianceRow.querySelectorAll('[data-detail-key="v"]')].map(cell => Number(cell.textContent) || 0);
-          [...summaryRow.children].slice(1, 14).forEach((cell, index) => {
-            const value = values[index] || 0;
-            cell.textContent = `${wgDisplayMode === 'variance' && value > 0 ? '+' : ''}${value.toFixed(1)}`;
-          });
-          const total = values.reduce((sum, value) => sum + value, 0);
-          summaryRow.lastElementChild.innerHTML = `<strong>${wgDisplayMode === 'variance' && total > 0 ? '+' : ''}${total.toFixed(1)}</strong>`;
-        }
-        const engineerId = detailRow.dataset.eng;
-        const engineerSummaryRows = [...wgTable.querySelectorAll(`.wg-summary[data-eng="${engineerId}"]`)];
-        const subtotalRow = wgTable.querySelector(`.engineer-subtotal[data-eng="${engineerId}"]`);
-        if (subtotalRow) {
-          const subtotals = Array.from({ length: 13 }, (_, index) => engineerSummaryRows.reduce((sum, row) => sum + (Number(row.children[index + 1]?.textContent) || 0), 0));
-          subtotals.forEach((value, index) => { subtotalRow.children[index + 1].textContent = `${wgDisplayMode === 'variance' && value > 0 ? '+' : ''}${value.toFixed(1)}`; });
-          const total = subtotals.reduce((sum, value) => sum + value, 0);
-          subtotalRow.lastElementChild.innerHTML = `<strong>${wgDisplayMode === 'variance' && total > 0 ? '+' : ''}${total.toFixed(1)}</strong>`;
-        }
-      };
-      wgTable.querySelectorAll('.wg-plan-v1-input').forEach(input => input.addEventListener('input', () => refreshEditableWorkGroup(input)));
-
-      const savePlanButton = document.getElementById('saveBreakdownPlanV1');
-      if (savePlanButton) {
-        savePlanButton.style.display = canEditPlanV1 ? '' : 'none';
-        savePlanButton.onclick = () => saveBreakdownPlanV1(job);
-      }
       const reviewButton = document.getElementById('markBreakdownReviewed');
       if (reviewButton) {
         const reviewStatus = getJobReviewStatus(job.jn, currentFinancialYear, currentReviewStage);

@@ -529,9 +529,8 @@
         <label for="fullForecastUploadPlan">Plan to replace</label>
         <select id="fullForecastUploadPlan">
           <option value="v0">Plan v0 (Original)</option>
-          <option value="v1">Plan v1 (Updated)</option>
         </select>
-        <p class="helper-text">The upload must use the same columns as “Export All Work Groups”. It will replace the selected plan for the Forecast Builder year.</p>
+        <p class="helper-text">This upload replaces the initial annual plan (v0) for the Forecast Builder year. Make Plan v1 changes through the job breakdown or bulk work-group editor in the app.</p>
         <label class="forecast-upload-checkbox"><input id="fullForecastIncludeComments" type="checkbox" checked> Include comments from the upload</label>
         <p class="helper-text">Uncheck to ignore uploaded comments and clear every existing workgroup comment in the replaced plan.</p>
       </div>
@@ -715,7 +714,6 @@
           <div class="forecast-amend-actions breakdown-review-actions">
             <span id="breakdownForecastStatus" class="forecast-amend-status" aria-live="polite"></span>
             <span id="breakdownReviewStatus" class="job-pill" aria-live="polite"></span>
-            <button type="button" class="primary-button" id="saveBreakdownPlanV1">Save Plan v1</button>
             <button type="button" class="success" id="markBreakdownReviewed">Mark Reviewed</button>
           </div>
         </div>
@@ -783,6 +781,23 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="workGroupPlanEditModal" class="modal">
+    <div class="modal-content modal-content--wide wg-plan-edit-modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="workGroupPlanEditTitle">Edit work group plan</h2>
+          <p class="helper-text" id="workGroupPlanEditMeta"></p>
+        </div>
+        <button type="button" class="close" onclick="closeWorkGroupPlanEditor()" aria-label="Close">&times;</button>
+      </div>
+      <div id="workGroupPlanEditGrid" class="wg-plan-edit-grid"></div>
+      <div class="modal-actions">
+        <button type="button" class="group-action-button" onclick="closeWorkGroupPlanEditor()">Cancel</button>
+        <button type="button" class="primary-button" id="saveWorkGroupPlanEdit" onclick="saveBreakdownPlanV1()">Save Plan v1 override</button>
       </div>
     </div>
   </div>

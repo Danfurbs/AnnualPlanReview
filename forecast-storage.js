@@ -579,6 +579,46 @@ function getForecastSnapshot(year, planVersion) {
   return loadForecastFromLibrary(year, planVersion);
 }
 
+/** Rebuild job-level period totals from the work-group source of truth. */
+function recalculatePeriodsFromWgs(wgs) {
+  const periods = {};
+  for (let index = 1; index <= 13; index++) {
+    const period = `P${index}`;
+    periods[period] = Object.values(wgs || {}).reduce(
+      (total, workGroup) => total + (Number(workGroup?.[period]) || 0),
+      0
+    );
+  }
+  return periods;
+}
+
+/** Resolve the complete Plan v1 view by layering its sparse WG overrides on v0. */
+function getEffectiveForecastJob(year, jobNumber) {
+  const v0Job = getForecastSnapshot(year, 'v0')?.data.get(jobNumber);
+  const v1Job = getForecastSnapshot(year, 'v1')?.data.get(jobNumber);
+  if (!v0Job && !v1Job) return null;
+
+  const wgs = { ...(v0Job?.wgs || {}) };
+  Object.entries(v1Job?.wgs || {}).forEach(([workGroup, data]) => {
+    wgs[workGroup] = data;
+  });
+  const comments = { ...(v0Job?.comments || {}), ...(v1Job?.comments || {}) };
+  return { periods: recalculatePeriodsFromWgs(wgs), wgs, comments };
+}
+
+/** Return the complete, read-time Plan v1 projection for every v0/v1 job. */
+function getEffectiveForecastSnapshot(year) {
+  const v0Snapshot = getForecastSnapshot(year, 'v0');
+  const v1Snapshot = getForecastSnapshot(year, 'v1');
+  const jobNumbers = new Set([
+    ...(v0Snapshot?.data.keys() || []),
+    ...(v1Snapshot?.data.keys() || [])
+  ]);
+  const data = new Map();
+  jobNumbers.forEach(jobNumber => data.set(jobNumber, getEffectiveForecastJob(year, jobNumber)));
+  return { data };
+}
+
 /**
  * Get forecast data from storage/API, GitHub, or library (async version)
  * Priority: API (if enabled) > localStorage > GitHub > FORECAST_LIBRARY
@@ -936,6 +976,9 @@ window.loadForecastFromGitHub = loadForecastFromGitHub;
 window.loadForecastFromLibraryAsync = loadForecastFromLibraryAsync;
 window.getForecastSnapshot = getForecastSnapshot;
 window.getForecastSnapshotAsync = getForecastSnapshotAsync;
+window.recalculatePeriodsFromWgs = recalculatePeriodsFromWgs;
+window.getEffectiveForecastJob = getEffectiveForecastJob;
+window.getEffectiveForecastSnapshot = getEffectiveForecastSnapshot;
 window.exportForecastFile = exportForecastFile;
 window.importForecastFile = importForecastFile;
 window.getForecastPeriodsForJob = getForecastPeriodsForJob;
