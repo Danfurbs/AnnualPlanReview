@@ -1394,7 +1394,10 @@
 
     function getWorkGroupOptions() {
       const names = new Set();
-      [fData, window.wData].forEach(source => {
+      const forecastSnapshot = currentPlanVersion === 'v1'
+        ? getEffectiveForecastSnapshot(currentFinancialYear)
+        : getForecastSnapshot(currentFinancialYear, 'v0');
+      [forecastSnapshot?.data, window.wData].forEach(source => {
         if (!source) return;
         source.forEach(job => {
           Object.keys(job.wgs || {}).forEach(wg => {
@@ -2904,9 +2907,10 @@
       const reviewStatusFilter = document.getElementById('reviewStatusFilter')?.value || 'all';
       const maxWorkDonePeriod = getEffectiveForecastCutoffPeriod();
 
-      // Each plan is a complete, independent snapshot. V0 data only enters V1
-      // through an explicit copy action in the forecast editor.
-      const forecastDataToUse = fData;
+      const forecastSnapshot = currentPlanVersion === 'v1'
+        ? getEffectiveForecastSnapshot(currentFinancialYear)
+        : getForecastSnapshot(currentFinancialYear, 'v0');
+      const forecastDataToUse = forecastSnapshot?.data || new Map();
 
       const all = new Set([...(forecastDataToUse?.keys()||[]), ...(window.wData?.keys()||[])]);
       const baseJobs = [];
@@ -3118,7 +3122,7 @@
       });
 
       const cont = document.getElementById('jobs');
-      if (!fData || !fData.size) {
+      if (!forecastDataToUse.size) {
         cont.innerHTML = `<div class="discipline-section"><h3>No forecast loaded for ${currentFinancialYear} ${currentPlanVersion}</h3><p>Upload a forecast file or build one in Forecast Builder.</p></div>`;
         return;
       }
