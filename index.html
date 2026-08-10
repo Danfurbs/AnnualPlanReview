@@ -472,7 +472,7 @@
         <div class="forecast-card">
           <h4>Quick actions</h4>
           <div class="forecast-action-list">
-            <button type="button" class="group-action-button" onclick="exportBaselineDataFile()">Export Prior Submissions</button>
+            <button type="button" class="group-action-button" onclick="exportSjnLifetimeTargetDataFile()">Export Prior Submissions</button>
             <button type="button" class="group-action-button" onclick="triggerBaselineImport()">Import Prior Submissions</button>
             <input type="file" id="baselineFileInput" accept="application/json" class="is-hidden" onchange="handleBaselineImport(event)">
             <button type="button" class="group-action-button" onclick="clearAllBaselines()">Clear All Prior Submissions</button>
@@ -689,27 +689,6 @@
         <canvas id="chart"></canvas>
       </div>
 
-      <div class="breakdown-section" id="forecastAmendmentSection">
-        <div class="discipline-header">
-          <div>
-            <h3>Update Plan v1 Forecast</h3>
-            <p class="helper-text">Select a work group, review the original Plan v0 values, then enter the updated Plan v1 values and save.</p>
-          </div>
-          <div class="header-actions forecast-amend-controls">
-            <div class="forecast-amend-field is-hidden">
-              <label for="forecastAmendVersion">Plan</label>
-              <select id="forecastAmendVersion"></select>
-            </div>
-            <div class="forecast-amend-field forecast-amend-field--work-group">
-              <label for="forecastAmendWorkGroup">Work group set</label>
-              <select id="forecastAmendWorkGroup"></select>
-            </div>
-            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('forecastAmendmentEditor', this)">Collapse</button>
-          </div>
-        </div>
-        <div class="collapsible-content forecast-amend-editor" id="forecastAmendmentEditor"></div>
-      </div>
-
       <div class="breakdown-section">
         <div class="discipline-header">
           <h3>Work Group Performance by Period</h3>
@@ -732,6 +711,12 @@
           <div id="wgCompareBadge" class="wg-compare-badge"></div>
           <div style="overflow-x: auto;">
             <table class="wg-table" id="wgTable"></table>
+          </div>
+          <div class="forecast-amend-actions breakdown-review-actions">
+            <span id="breakdownForecastStatus" class="forecast-amend-status" aria-live="polite"></span>
+            <span id="breakdownReviewStatus" class="job-pill" aria-live="polite"></span>
+            <button type="button" class="primary-button" id="saveBreakdownPlanV1">Save Plan v1</button>
+            <button type="button" class="success" id="markBreakdownReviewed">Mark Reviewed</button>
           </div>
         </div>
       </div>

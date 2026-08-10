@@ -474,7 +474,7 @@ class DatabaseServicePG {
    * Get baseline for a specific job
    * @param {string} jobNumber
    */
-  async getBaseline(jobNumber) {
+  async getSjnLifetimeTarget(jobNumber) {
     await this.ready;
     const result = await this.pool.query(
       'SELECT total_value FROM baselines WHERE job_number = $1',

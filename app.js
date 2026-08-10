@@ -213,6 +213,7 @@
           const apiData = await window.loadReviewsFromApi();
           if (apiData) {
             reviewStore = apiData;
+            migrateLegacyReviewStore();
             localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(reviewStore));
             return;
           }
@@ -224,9 +225,30 @@
       try {
         const raw = localStorage.getItem(REVIEW_STORAGE_KEY);
         reviewStore = raw ? JSON.parse(raw) : {};
+        migrateLegacyReviewStore();
       } catch (err) {
         console.warn('Failed to load review store:', err);
         reviewStore = {};
+      }
+    }
+
+    function migrateLegacyReviewStore() {
+      let migrated = 0;
+      Object.entries(reviewStore || {}).forEach(([jobNumber, jobReviews]) => {
+        if (!jobReviews || typeof jobReviews !== 'object') return;
+        Object.entries(jobReviews).forEach(([key, value]) => {
+          if (key !== '_legacy' && value?.reviewedAt) {
+            jobReviews._legacy ||= {};
+            jobReviews._legacy[key] = value;
+            delete jobReviews[key];
+            migrated++;
+          }
+        });
+        if (!Object.keys(jobReviews).length) delete reviewStore[jobNumber];
+      });
+      if (migrated) {
+        console.info(`Migrated ${migrated} legacy review entr${migrated === 1 ? 'y' : 'ies'} without fingerprints; they now require review.`);
+        saveReviewStore();
       }
     }
 
@@ -415,27 +437,60 @@
       document.getElementById('stageModal')?.classList.remove('open');
     }
 
-    function isJobReviewed(jobNumber, stage) {
-      return Boolean(reviewStore?.[jobNumber]?.[stage]);
+    function getJobForecastFingerprint(jobNumber, year, planVersion) {
+      const job = getForecastSnapshot(year, planVersion)?.data.get(jobNumber);
+      if (!job) return null;
+      const normalized = {};
+      for (let index = 1; index <= 13; index++) {
+        const period = `P${index}`;
+        normalized[period] = Number(job.periods?.[period] || 0);
+      }
+      return JSON.stringify(normalized);
     }
 
-    function markJobReviewed(jobNumber, stage) {
+    function getJobReviewStatus(jobNumber, year = currentFinancialYear, stage = currentReviewStage) {
+      const review = reviewStore?.[jobNumber]?.[year]?.[stage];
+      if (!review?.reviewedAt) return 'not_reviewed';
+      const currentV0 = getJobForecastFingerprint(jobNumber, year, 'v0');
+      const currentV1 = getJobForecastFingerprint(jobNumber, year, 'v1');
+      if (currentV0 !== review.v0Fingerprint || currentV1 !== review.v1Fingerprint) return 'needs_re_review';
+      return review.v1Fingerprint !== null && review.v1Fingerprint !== review.v0Fingerprint
+        ? 'reviewed_v1_updated'
+        : 'reviewed_v0_held';
+    }
+
+    function isJobReviewed(jobNumber, stage = currentReviewStage, year = currentFinancialYear) {
+      const status = getJobReviewStatus(jobNumber, year, stage);
+      return status !== 'not_reviewed' && status !== 'needs_re_review';
+    }
+
+    function markJobReviewed(jobNumber, stage = currentReviewStage, year = currentFinancialYear) {
       if (!reviewStore[jobNumber]) reviewStore[jobNumber] = {};
-      reviewStore[jobNumber][stage] = {
-        reviewedAt: new Date().toISOString()
+      if (!reviewStore[jobNumber][year]) reviewStore[jobNumber][year] = {};
+      reviewStore[jobNumber][year][stage] = {
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: '',
+        v0Fingerprint: getJobForecastFingerprint(jobNumber, year, 'v0'),
+        v1Fingerprint: getJobForecastFingerprint(jobNumber, year, 'v1')
       };
       saveReviewStoreAsync();
     }
 
-    function reopenJobReview(jobNumber, stage) {
+    function reopenJobReview(jobNumber, stage = currentReviewStage, year = currentFinancialYear) {
       if (!reviewStore[jobNumber]) return;
-      if (!reviewStore[jobNumber][stage]) return;
-      delete reviewStore[jobNumber][stage];
+      if (!reviewStore[jobNumber][year]?.[stage]) return;
+      delete reviewStore[jobNumber][year][stage];
+      if (!Object.keys(reviewStore[jobNumber][year]).length) delete reviewStore[jobNumber][year];
       if (!Object.keys(reviewStore[jobNumber]).length) {
         delete reviewStore[jobNumber];
       }
       saveReviewStoreAsync();
     }
+
+    window.getJobReviewStatus = getJobReviewStatus;
+    window.isJobReviewed = isJobReviewed;
+    window.markJobReviewed = markJobReviewed;
+    window.reopenJobReview = reopenJobReview;
 
     function renderPreservingScroll() {
       const scrollX = window.scrollX;
@@ -3159,8 +3214,15 @@
           const vc = pd.v>0 ? 'positive' : pd.v<0 ? 'negative' : 'neutral';
           const isGroupRollup = Boolean(j.isGroupRollup);
           const isPriority = !isGroupRollup && ['009112', '009113'].includes(j.jn);
-          const isReviewed = !isGroupRollup && isJobReviewed(j.jn, reviewStage);
-          const statusLabel = isGroupRollup ? 'Group Rollup' : (isReviewed ? 'Reviewed' : 'Needs Review');
+          const reviewStatus = isGroupRollup ? 'not_reviewed' : getJobReviewStatus(j.jn, currentFinancialYear, reviewStage);
+          const isReviewed = !isGroupRollup && !['not_reviewed', 'needs_re_review'].includes(reviewStatus);
+          const reviewStatusLabels = {
+            reviewed_v0_held: 'Reviewed · v0 held',
+            reviewed_v1_updated: 'Reviewed · v1 updated',
+            needs_re_review: 'Needs re-review',
+            not_reviewed: 'Needs Review'
+          };
+          const statusLabel = isGroupRollup ? 'Group Rollup' : reviewStatusLabels[reviewStatus];
           const statusClass = isGroupRollup ? 'group-rollup' : (isReviewed ? 'reviewed' : 'needs-review');
           const commentCount = isGroupRollup ? 0 : getJobComments(j.jn).length;
           const varianceValue = `${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)}`;
@@ -3300,7 +3362,7 @@
                 ${!isGroupRollup ? `
                   <div class="job-info-row">
                     <div class="job-rag-indicator rag-${healthStatus?.status === 'critical' ? 'red' : healthStatus?.status === 'warning' ? 'amber' : 'green'}"></div>
-                    <span class="job-info-text">${commentCount} comment${commentCount === 1 ? '' : 's'} • ${actualWorkOrderCount} work order${actualWorkOrderCount === 1 ? '' : 's'} • ${workGroupCount} work group${workGroupCount === 1 ? '' : 's'} with forecast • ${isReviewed ? 'Reviewed' : 'Needs review'}</span>
+                    <span class="job-info-text">${commentCount} comment${commentCount === 1 ? '' : 's'} • ${actualWorkOrderCount} work order${actualWorkOrderCount === 1 ? '' : 's'} • ${workGroupCount} work group${workGroupCount === 1 ? '' : 's'} with forecast • ${statusLabel}</span>
                   </div>
                 ` : ''}
               </div>
@@ -3476,130 +3538,79 @@
       return hasData ? totals : null;
     }
 
-    function getForecastAmendmentKey(workGroup, period) {
-      return `${workGroup || 'all'}:${period}`;
-    }
-
-    function renderForecastAmendmentEditor(job) {
-      const section = document.getElementById('forecastAmendmentSection');
-      const versionSelect = document.getElementById('forecastAmendVersion');
-      const workGroupSelect = document.getElementById('forecastAmendWorkGroup');
-      const editor = document.getElementById('forecastAmendmentEditor');
-      if (!section || !versionSelect || !workGroupSelect || !editor) return;
-
-      if (job.isGroupRollup) {
-        section.style.display = 'none';
+    async function saveBreakdownPlanV1(job) {
+      const dirtyInputs = [...document.querySelectorAll('#wgTable .wg-plan-v1-input[data-dirty="true"]')];
+      const status = document.getElementById('breakdownForecastStatus');
+      if (!dirtyInputs.length) {
+        if (status) status.textContent = 'No unsaved Plan v1 changes';
         return;
       }
-      section.style.display = '';
-      const v1Snapshot = getForecastSnapshot(currentFinancialYear, 'v1');
-      if (!v1Snapshot) {
-        versionSelect.innerHTML = '';
-        workGroupSelect.innerHTML = '';
-        editor.innerHTML = '<div class="forecast-amend-empty">Plan v1 is not available for this financial year. Upload or create Plan v1 in Forecast Builder first.</div>';
-        return;
-      }
-      versionSelect.innerHTML = '<option value="v1">Plan v1 (Updated)</option>';
-      versionSelect.value = 'v1';
-
-      const snapshotJob = getForecastSnapshot(currentFinancialYear, versionSelect.value)?.data.get(job.jn);
-      const forecastWorkGroups = new Set(Object.keys(snapshotJob?.wgs || {}).map(normalizeWorkGroupSet));
-      const workGroups = [...(window.workGroupSets || new Map()).entries()]
-        .filter(([, description]) => !String(description).includes('RETIRED') && !String(description).includes('DO NOT USE'))
-        .map(([code, description]) => ({ code, description }))
-        .sort((a, b) => a.code.localeCompare(b.code));
-      workGroupSelect.innerHTML = workGroups.map(({ code, description }) => {
-        const availability = forecastWorkGroups.has(normalizeWorkGroupSet(code)) ? '' : ' — No forecast';
-        return `<option value="${escapeHtml(code)}">${escapeHtml(code)} — ${escapeHtml(description)}${availability}</option>`;
-      }).join('');
-      const activeFilter = document.getElementById('wgFilter')?.value || 'all';
-      const matchingWorkGroup = workGroups.find(wg => normalizeWorkGroupSet(wg.code) === normalizeWorkGroupSet(activeFilter));
-      if (activeFilter !== 'all' && matchingWorkGroup) workGroupSelect.value = matchingWorkGroup.code;
-
-      const drawInputs = () => {
-        const planVersion = 'v1';
-        const workGroup = workGroupSelect.value;
-        const forecastJob = getForecastSnapshot(currentFinancialYear, planVersion)?.data.get(job.jn);
-        const storedWorkGroup = Object.keys(forecastJob?.wgs || {}).find(wg => normalizeWorkGroupSet(wg) === normalizeWorkGroupSet(workGroup));
-        const values = storedWorkGroup ? forecastJob.wgs[storedWorkGroup] : null;
-        const hasForecast = Boolean(storedWorkGroup);
-        const workGroupLabel = window.workGroupSets?.get(workGroup) || workGroup;
-        const originalJob = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn);
-        const originalWorkGroup = Object.keys(originalJob?.wgs || {}).find(wg => normalizeWorkGroupSet(wg) === normalizeWorkGroupSet(workGroup));
-        const originalValues = originalWorkGroup ? originalJob.wgs[originalWorkGroup] : {};
-        editor.innerHTML = `<div class="forecast-amend-context"><span><strong>${escapeHtml(workGroup)}</strong> — ${escapeHtml(workGroupLabel)}</span><span>${hasForecast ? 'Plan v1 values ready to edit' : 'New Plan v1 work group · values start at zero'}</span></div><div class="forecast-amend-grid">${Array.from({ length: 13 }, (_, index) => {
-          const period = `P${index + 1}`;
-          return `<div class="forecast-amend-period"><label for="forecast-amend-${period}">${period}</label><span class="forecast-amend-original">Plan v0: ${Number(originalValues?.[period] || 0).toFixed(2)}</span><input id="forecast-amend-${period}" data-period="${period}" type="number" min="0" step="0.01" value="${Number(values?.[period] || 0)}" aria-label="Plan v1 ${period}"></div>`;
-        }).join('')}</div><div class="forecast-amend-actions"><span class="forecast-amend-status" aria-live="polite"></span><button type="button" class="primary-button" id="saveForecastAmendment">Save Plan v1</button></div>`;
-        document.getElementById('saveForecastAmendment')?.addEventListener('click', () => saveForecastAmendments(job, planVersion, workGroup));
-      };
-
-      workGroupSelect.onchange = drawInputs;
-      drawInputs();
-    }
-
-    async function saveForecastAmendments(job, planVersion, workGroup) {
-      const snapshot = await getForecastSnapshotAsync(currentFinancialYear, planVersion);
-      if (!snapshot || !workGroup) {
-        alert(!snapshot ? `No Plan ${planVersion} forecast exists.` : 'Select a work group set to update.');
+      const snapshot = await getForecastSnapshotAsync(currentFinancialYear, 'v1');
+      if (!snapshot) {
+        alert('No Plan v1 forecast exists. Create Plan v1 in Forecast Builder first.');
         return;
       }
       let forecastJob = snapshot.data.get(job.jn);
+      let seededWorkGroupCount = 0;
       if (!forecastJob) {
-        forecastJob = { periods: {}, wgs: {}, comments: {}, amendments: {} };
+        const v0Job = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn);
+        // Seed an untouched v1 job from v0 so an inline one-work-group edit cannot silently drop its other work groups.
+        forecastJob = v0Job ? deepCloneJobEntry(v0Job) : { periods: {}, wgs: {}, comments: {}, amendments: {} };
+        seededWorkGroupCount = Object.keys(forecastJob.wgs || {}).length;
         snapshot.data.set(job.jn, forecastJob);
       }
       forecastJob.periods ||= {};
       forecastJob.wgs ||= {};
+      forecastJob.comments ||= {};
       forecastJob.amendments ||= {};
-      const storedWorkGroup = Object.keys(forecastJob.wgs).find(wg => normalizeWorkGroupSet(wg) === normalizeWorkGroupSet(workGroup));
-      const targetWorkGroup = storedWorkGroup || workGroup;
-      const target = (forecastJob.wgs[targetWorkGroup] ||= {});
-      for (let index = 1; index <= 13; index++) {
-        const period = `P${index}`;
-        const input = document.querySelector(`#forecastAmendmentEditor input[data-period="${period}"]`);
-        const next = Number(input?.value);
+      for (const input of dirtyInputs) {
+        const next = Number(input.value);
         if (!Number.isFinite(next) || next < 0) {
-          alert(`Enter a valid non-negative value for ${period}.`);
-          input?.focus();
+          alert(`Enter a valid non-negative value for ${input.dataset.period}.`);
+          input.focus();
           return;
         }
-        const previous = Number(target[period] || 0);
-        const key = getForecastAmendmentKey(workGroup, period);
+        const storedWorkGroup = Object.keys(forecastJob.wgs).find(candidate => normalizeWorkGroupSet(candidate) === normalizeWorkGroupSet(input.dataset.workGroup));
+        const workGroup = storedWorkGroup || input.dataset.workGroup;
+        forecastJob.wgs[workGroup] ||= {};
+        const previous = Number(forecastJob.wgs[workGroup][input.dataset.period] || 0);
         if (Math.abs(next - previous) >= 0.0001) {
-          forecastJob.amendments[key] ||= { original: previous };
-          forecastJob.amendments[key].updatedAt = new Date().toISOString();
-          target[period] = next;
+          const amendmentKey = `${workGroup}:${input.dataset.period}`;
+          forecastJob.amendments[amendmentKey] ||= { original: previous };
+          forecastJob.amendments[amendmentKey].updatedAt = new Date().toISOString();
+          forecastJob.wgs[workGroup][input.dataset.period] = next;
         }
       }
       for (let index = 1; index <= 13; index++) {
         const period = `P${index}`;
         forecastJob.periods[period] = Object.values(forecastJob.wgs).reduce((sum, periods) => sum + Number(periods?.[period] || 0), 0);
       }
-      const status = document.querySelector('.forecast-amend-status');
-      const saveButton = document.getElementById('saveForecastAmendment');
-      if (status) status.textContent = 'Saving to server…';
+      if (status) status.textContent = `${seededWorkGroupCount ? `Copied ${seededWorkGroupCount} work group(s) from Plan v0 · ` : ''}Saving…`;
+      const saveButton = document.getElementById('saveBreakdownPlanV1');
       if (saveButton) saveButton.disabled = true;
       let saved;
       if (window.isApiEnabled?.() && window.saveForecastJobToApi) {
-        saved = await window.saveForecastJobToApi(job.jn, forecastJob, currentFinancialYear, planVersion);
-        if (saved) rememberForecastSnapshot(snapshot.data, snapshot.data.size, currentFinancialYear, planVersion);
+        saved = await window.saveForecastJobToApi(job.jn, forecastJob, currentFinancialYear, 'v1');
+        if (saved) rememberForecastSnapshot(snapshot.data, snapshot.data.size, currentFinancialYear, 'v1');
       } else {
-        saved = await saveForecastToStorageAsync(snapshot.data, snapshot.data.size, currentFinancialYear, planVersion);
+        saved = await saveForecastToStorageAsync(snapshot.data, snapshot.data.size, currentFinancialYear, 'v1');
       }
       if (saveButton) saveButton.disabled = false;
       if (!saved) {
-        if (status) status.textContent = 'Save failed — changes were not confirmed by the server';
+        if (status) status.textContent = 'Save failed — changes were not confirmed';
         window.Toast?.error('Plan v1 was not saved. Please try again.');
         return;
       }
-      if (currentPlanVersion === planVersion) fData = cloneForecastData(snapshot.data);
+      await addToV1OverridesAsync(currentFinancialYear, [job.jn]);
+      if (currentPlanVersion === 'v1') fData = cloneForecastData(snapshot.data);
       render();
-      const refreshedJob = window.currentJobsMap.get(job.jn);
-      if (refreshedJob) showBreakdown(refreshedJob);
-      const refreshedStatus = document.querySelector('.forecast-amend-status');
+      const refreshedJob = window.currentJobsMap.get(job.jn) || job;
+      showBreakdown(refreshedJob);
+      const refreshedStatus = document.getElementById('breakdownForecastStatus');
       if (refreshedStatus) refreshedStatus.textContent = window.isApiEnabled?.() ? 'Plan v1 saved to server' : 'Plan v1 saved locally';
     }
+
+    window.saveBreakdownPlanV1 = saveBreakdownPlanV1;
 
     function openForecastComparison() {
       if (!currentFinancialYear || !currentReviewStage) {
@@ -3791,7 +3802,6 @@
       if (wgDisplaySelect) {
         wgDisplaySelect.value = wgDisplayMode;
       }
-      renderForecastAmendmentEditor(job);
 
       const chartScopeSelect = document.getElementById('breakdownChartScope');
       const chartScopeTargetSelect = document.getElementById('breakdownChartScopeTarget');
@@ -3950,9 +3960,9 @@
       let baselineCumulative;
       if (job.isGroupRollup) {
         const group = getAllGroups().find(g => g.id === job.groupId);
-        baselineCumulative = group ? getGroupBaselineCumulative(group.jobNumbers, 13) : Array(13).fill(0);
+        baselineCumulative = group ? getGroupSjnLifetimeTargetCumulative(group.jobNumbers, 13) : Array(13).fill(0);
       } else {
-        baselineCumulative = getBaselineCumulative(job.jn, 13);
+        baselineCumulative = getSjnLifetimeTargetCumulative(job.jn, 13);
       }
       const hasBaseline = baselineCumulative.some(val => val > 0);
       if (hasBaseline && breakdownChartScope === 'overall') {
@@ -3994,6 +4004,24 @@
       
       // Build work group table
       const wgTable = document.getElementById('wgTable');
+      const canEditPlanV1 = !job.isGroupRollup && ['v1', 'both'].includes(breakdownPlanVersion)
+        && Boolean(getForecastSnapshot(currentFinancialYear, 'v1'));
+      const v0BreakdownJob = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn);
+      const v1BreakdownJob = getForecastSnapshot(currentFinancialYear, 'v1')?.data.get(job.jn);
+      const findForecastWorkGroup = (forecastJob, workGroup) => Object.keys(forecastJob?.wgs || {})
+        .find(candidate => normalizeWorkGroupSet(candidate) === normalizeWorkGroupSet(workGroup));
+      const getForecastWorkGroupPeriods = (forecastJob, workGroup) => {
+        const stored = findForecastWorkGroup(forecastJob, workGroup);
+        return stored ? forecastJob.wgs[stored] : null;
+      };
+      const renderPlannedCell = (workGroup, period, fallbackValue) => {
+        if (!canEditPlanV1) return Number(fallbackValue || 0).toFixed(1);
+        const v0Value = Number(getForecastWorkGroupPeriods(v0BreakdownJob, workGroup)?.[period] || 0);
+        const v1Periods = getForecastWorkGroupPeriods(v1BreakdownJob, workGroup);
+        const v1Value = Number((v1Periods || getForecastWorkGroupPeriods(v0BreakdownJob, workGroup))?.[period] || 0);
+        const changed = Math.abs(v1Value - v0Value) >= 0.0001;
+        return `<input class="wg-plan-v1-input" data-work-group="${escapeHtml(workGroup)}" data-period="${period}" data-original="${v0Value}" type="number" min="0" step="0.01" value="${v1Value}" style="width:42px;text-align:center" aria-label="Plan v1 ${escapeHtml(workGroup)} ${period}"><span class="forecast-amend-original"${changed ? '' : ' hidden'}>was ${v0Value.toFixed(1)}</span>`;
+      };
       let tableHTML = '<thead><tr><th>Work Group</th>';
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
       tableHTML += '<th>Total</th></tr></thead><tbody>';
@@ -4093,10 +4121,10 @@
                 const val = d[key] || 0;
                 detailTotal += val;
                 const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
-                tableHTML += `<td class="${cl}">${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}</td>`;
+                tableHTML += `<td class="${cl}" data-detail-key="${key}" data-period="${p}">${key === 'f' ? renderPlannedCell(wg, p, val) : `${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}`}</td>`;
               }
               const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
-              tableHTML += `<td class="${tcl}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+              tableHTML += `<td class="${tcl}" data-detail-total="${key}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
             });
           });
 
@@ -4157,16 +4185,96 @@
                 const val = d[key] || 0;
                 detailTotal += val;
                 const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
-                tableHTML += `<td class="${cl}">${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}</td>`;
+                tableHTML += `<td class="${cl}" data-detail-key="${key}" data-period="${p}">${key === 'f' ? renderPlannedCell(wg, p, val) : `${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}`}</td>`;
               }
               const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
-              tableHTML += `<td class="${tcl}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+              tableHTML += `<td class="${tcl}" data-detail-total="${key}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
             });
           });
         }
       }
       tableHTML += '</tbody>';
       wgTable.innerHTML = tableHTML;
+
+      const refreshEditableWorkGroup = (input) => {
+        input.dataset.dirty = 'true';
+        const originalLabel = input.nextElementSibling;
+        if (originalLabel?.classList.contains('forecast-amend-original')) {
+          originalLabel.hidden = Math.abs((Number(input.value) || 0) - Number(input.dataset.original || 0)) < 0.0001;
+        }
+        const detailRow = input.closest('.wg-detail');
+        const workGroupKey = detailRow?.dataset.wg;
+        if (!detailRow || workGroupKey == null) return;
+        const plannedInputs = [...detailRow.querySelectorAll('.wg-plan-v1-input')];
+        const plannedTotal = plannedInputs.reduce((sum, field) => sum + (Number(field.value) || 0), 0);
+        const plannedTotalCell = detailRow.querySelector('[data-detail-total="f"] strong');
+        if (plannedTotalCell) plannedTotalCell.textContent = plannedTotal.toFixed(1);
+
+        const varianceRow = [...wgTable.querySelectorAll(`.wg-detail[data-wg="${workGroupKey}"]`)]
+          .find(row => row.querySelector('[data-detail-key="v"]'));
+        let varianceTotal = 0;
+        plannedInputs.forEach((field, index) => {
+          const actualCell = [...wgTable.querySelectorAll(`.wg-detail[data-wg="${workGroupKey}"]`)]
+            .find(row => row.querySelector('[data-detail-key="a"]'))?.querySelectorAll('[data-detail-key="a"]')[index];
+          const varianceCell = varianceRow?.querySelectorAll('[data-detail-key="v"]')[index];
+          const variance = (Number(actualCell?.textContent) || 0) - (Number(field.value) || 0);
+          varianceTotal += variance;
+          if (varianceCell) varianceCell.textContent = `${variance > 0 ? '+' : ''}${variance.toFixed(1)}`;
+        });
+        const varianceTotalCell = varianceRow?.querySelector('[data-detail-total="v"] strong');
+        if (varianceTotalCell) varianceTotalCell.textContent = `${varianceTotal > 0 ? '+' : ''}${varianceTotal.toFixed(1)}`;
+
+        const summaryRow = wgTable.querySelector(`.wg-summary[data-wg="${workGroupKey}"]`);
+        if (summaryRow) {
+          const values = wgDisplayMode === 'forecast'
+            ? plannedInputs.map(field => Number(field.value) || 0)
+            : [...varianceRow.querySelectorAll('[data-detail-key="v"]')].map(cell => Number(cell.textContent) || 0);
+          [...summaryRow.children].slice(1, 14).forEach((cell, index) => {
+            const value = values[index] || 0;
+            cell.textContent = `${wgDisplayMode === 'variance' && value > 0 ? '+' : ''}${value.toFixed(1)}`;
+          });
+          const total = values.reduce((sum, value) => sum + value, 0);
+          summaryRow.lastElementChild.innerHTML = `<strong>${wgDisplayMode === 'variance' && total > 0 ? '+' : ''}${total.toFixed(1)}</strong>`;
+        }
+        const engineerId = detailRow.dataset.eng;
+        const engineerSummaryRows = [...wgTable.querySelectorAll(`.wg-summary[data-eng="${engineerId}"]`)];
+        const subtotalRow = wgTable.querySelector(`.engineer-subtotal[data-eng="${engineerId}"]`);
+        if (subtotalRow) {
+          const subtotals = Array.from({ length: 13 }, (_, index) => engineerSummaryRows.reduce((sum, row) => sum + (Number(row.children[index + 1]?.textContent) || 0), 0));
+          subtotals.forEach((value, index) => { subtotalRow.children[index + 1].textContent = `${wgDisplayMode === 'variance' && value > 0 ? '+' : ''}${value.toFixed(1)}`; });
+          const total = subtotals.reduce((sum, value) => sum + value, 0);
+          subtotalRow.lastElementChild.innerHTML = `<strong>${wgDisplayMode === 'variance' && total > 0 ? '+' : ''}${total.toFixed(1)}</strong>`;
+        }
+      };
+      wgTable.querySelectorAll('.wg-plan-v1-input').forEach(input => input.addEventListener('input', () => refreshEditableWorkGroup(input)));
+
+      const savePlanButton = document.getElementById('saveBreakdownPlanV1');
+      if (savePlanButton) {
+        savePlanButton.style.display = canEditPlanV1 ? '' : 'none';
+        savePlanButton.onclick = () => saveBreakdownPlanV1(job);
+      }
+      const reviewButton = document.getElementById('markBreakdownReviewed');
+      if (reviewButton) {
+        const reviewStatus = getJobReviewStatus(job.jn, currentFinancialYear, currentReviewStage);
+        const reviewStatusLabels = {
+          reviewed_v0_held: 'Reviewed · v0 held',
+          reviewed_v1_updated: 'Reviewed · v1 updated',
+          needs_re_review: 'Needs re-review',
+          not_reviewed: 'Not reviewed'
+        };
+        const reviewStatusPill = document.getElementById('breakdownReviewStatus');
+        if (reviewStatusPill) {
+          reviewStatusPill.textContent = reviewStatusLabels[reviewStatus];
+          reviewStatusPill.className = `job-pill ${isJobReviewed(job.jn) ? 'reviewed' : 'needs-review'}`;
+        }
+        reviewButton.textContent = reviewStatus === 'needs_re_review' ? 'Mark Reviewed Again' : 'Mark Reviewed';
+        reviewButton.style.display = job.isGroupRollup || isJobReviewed(job.jn) ? 'none' : '';
+        reviewButton.onclick = () => {
+          markJobReviewed(job.jn, currentReviewStage, currentFinancialYear);
+          showBreakdown(job);
+          renderPreservingScroll();
+        };
+      }
 
       // Engineer header click to expand/collapse
       wgTable.querySelectorAll('.engineer-header').forEach(row => {

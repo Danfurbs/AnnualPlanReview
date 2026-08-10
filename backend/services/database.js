@@ -223,7 +223,7 @@ class DatabaseService {
         VALUES (?, ?, CURRENT_TIMESTAMP)
       `),
 
-      getBaseline: this.db.prepare(`
+      getSjnLifetimeTarget: this.db.prepare(`
         SELECT * FROM baselines WHERE job_number = ?
       `),
 
@@ -535,8 +535,8 @@ class DatabaseService {
    * Get baseline for a specific job
    * @param {string} jobNumber
    */
-  getBaseline(jobNumber) {
-    const row = this.stmts.getBaseline.get(jobNumber);
+  getSjnLifetimeTarget(jobNumber) {
+    const row = this.stmts.getSjnLifetimeTarget.get(jobNumber);
     return row ? row.total_value : null;
   }
 
