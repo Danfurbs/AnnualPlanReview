@@ -91,6 +91,10 @@ loadApiConfig();
 const inFlightRequests = new Map();
 const forecastRevisions = new Map();
 let reviewRevision = 0;
+// Review writes replace the complete server-side snapshot and use an optimistic
+// revision. Keep them in order so rapid status changes cannot all leave with the
+// same expected revision and cause avoidable 409 responses.
+let reviewSaveQueue = Promise.resolve();
 
 /**
  * Generate a cache key for request deduplication
@@ -246,9 +250,13 @@ async function apiRequest(endpoint, options = {}) {
   inFlightRequests.set(cacheKey, requestPromise);
 
   // Clean up tracking when request completes (success or failure)
-  requestPromise.finally(() => {
-    inFlightRequests.delete(cacheKey);
-  });
+  // Do not use a discarded `finally()` promise here: when requestPromise rejects,
+  // that derived promise would also reject and can be reported as an unhandled
+  // rejection even when the caller correctly handles the original request.
+  requestPromise.then(
+    () => inFlightRequests.delete(cacheKey),
+    () => inFlightRequests.delete(cacheKey)
+  );
 
   return requestPromise;
 }
@@ -841,20 +849,30 @@ async function loadReviewsFromApi() {
   }
 }
 
-async function saveReviewsToApi(reviewStore) {
+function saveReviewsToApi(reviewStore) {
   if (!isApiEnabled()) return false;
-  try {
-    const response = await apiRequest('/reviews/bulk', {
-      method: 'POST',
-      body: { reviewStore: reviewStore || {}, expectedRevision: reviewRevision }
-    });
-    if (response.success) reviewRevision = response.revision;
-    return response.success === true;
-  } catch (err) {
-    if (err.status === 409) window.Toast?.error('Review statuses changed in another session. Reload before saving again.');
-    console.error('Failed to save reviews to API:', err);
-    return false;
-  }
+  // The store is mutable and subsequent clicks may change it before this queued
+  // operation starts, so capture exactly the state represented by this save.
+  const snapshot = JSON.parse(JSON.stringify(reviewStore || {}));
+
+  const saveOperation = reviewSaveQueue.then(async () => {
+    try {
+      const response = await apiRequest('/reviews/bulk', {
+        method: 'POST',
+        body: { reviewStore: snapshot, expectedRevision: reviewRevision }
+      });
+      if (response.success) reviewRevision = response.revision;
+      return response.success === true;
+    } catch (err) {
+      if (err.status === 409) window.Toast?.error('Review statuses changed in another session. Reload before saving again.');
+      console.error('Failed to save reviews to API:', err);
+      return false;
+    }
+  });
+
+  // A failed save must not prevent later user actions from being attempted.
+  reviewSaveQueue = saveOperation.then(() => undefined, () => undefined);
+  return saveOperation;
 }
 // ========== Health Check ==========
 
