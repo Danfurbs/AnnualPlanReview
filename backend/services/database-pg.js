@@ -98,11 +98,19 @@ class DatabaseServicePG {
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS review_statuses (
         job_number VARCHAR(50) NOT NULL,
+        fiscal_year VARCHAR(10) NOT NULL,
         rf_stage VARCHAR(50) NOT NULL,
         reviewed_at VARCHAR(50) NOT NULL,
-        PRIMARY KEY(job_number, rf_stage)
+        PRIMARY KEY(job_number, fiscal_year, rf_stage)
       )
     `);
+    // Upgrade the original job/RF-only table without assigning its ambiguous
+    // records to an arbitrary financial year.
+    await this.pool.query(`ALTER TABLE review_statuses ADD COLUMN IF NOT EXISTS fiscal_year VARCHAR(10)`);
+    await this.pool.query(`UPDATE review_statuses SET fiscal_year = '' WHERE fiscal_year IS NULL`);
+    await this.pool.query(`ALTER TABLE review_statuses ALTER COLUMN fiscal_year SET NOT NULL`);
+    await this.pool.query(`ALTER TABLE review_statuses DROP CONSTRAINT IF EXISTS review_statuses_pkey`);
+    await this.pool.query(`ALTER TABLE review_statuses ADD CONSTRAINT review_statuses_pkey PRIMARY KEY (job_number, fiscal_year, rf_stage)`);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS work_order_amendments (
         id INTEGER PRIMARY KEY,
@@ -821,13 +829,15 @@ class DatabaseServicePG {
       const current = revisionResult.rows[0].revision;
       if (current !== expectedRevision) throw revisionConflict();
       await client.query('DELETE FROM review_statuses');
-      for (const [jobNumber, stages] of Object.entries(reviewStore || {})) {
-        for (const [stage, value] of Object.entries(stages || {})) {
-          await client.query(
-            `INSERT INTO review_statuses (job_number, rf_stage, reviewed_at) VALUES ($1,$2,$3)
-             ON CONFLICT (job_number, rf_stage) DO UPDATE SET reviewed_at = EXCLUDED.reviewed_at`,
-            [jobNumber, stage, value?.reviewedAt || new Date().toISOString()]
-          );
+      for (const [jobNumber, years] of Object.entries(reviewStore || {})) {
+        for (const [fiscalYear, stages] of Object.entries(years || {})) {
+          for (const [stage, value] of Object.entries(stages || {})) {
+            await client.query(
+              `INSERT INTO review_statuses (job_number, fiscal_year, rf_stage, reviewed_at) VALUES ($1,$2,$3,$4)
+               ON CONFLICT (job_number, fiscal_year, rf_stage) DO UPDATE SET reviewed_at = EXCLUDED.reviewed_at`,
+              [jobNumber, fiscalYear, stage, value?.reviewedAt || new Date().toISOString()]
+            );
+          }
         }
       }
       const revision = current + 1;
@@ -848,7 +858,8 @@ class DatabaseServicePG {
     const out = {};
     result.rows.forEach(row => {
       if (!out[row.job_number]) out[row.job_number] = {};
-      out[row.job_number][row.rf_stage] = { reviewedAt: row.reviewed_at };
+      if (!out[row.job_number][row.fiscal_year]) out[row.job_number][row.fiscal_year] = {};
+      out[row.job_number][row.fiscal_year][row.rf_stage] = { reviewedAt: row.reviewed_at };
     });
     return out;
   }

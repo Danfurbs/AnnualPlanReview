@@ -69,3 +69,63 @@ test('empty V1 override replacement deletes the existing FY set', async () => {
   assert.equal(fixture.calls.some(call => call.sql === 'COMMIT'), true);
   assert.equal(fixture.wasReleased(), true);
 });
+
+test('review statuses persist with financial year and RF stage dimensions', async () => {
+  const fixture = serviceWithClient(sql => {
+    if (sql.includes('SELECT revision')) return { rows: [{ revision: 0 }] };
+    return { rows: [] };
+  });
+  const store = {
+    '001234': {
+      FY27: { RF3: { reviewedAt: '2026-01-01T00:00:00.000Z' } },
+      FY28: { RF3: { reviewedAt: '2026-02-01T00:00:00.000Z' } }
+    }
+  };
+
+  assert.equal(await fixture.service.saveAllReviewStatuses(store, 0), 1);
+  const inserts = fixture.calls.filter(call => call.sql.includes('INSERT INTO review_statuses'));
+  assert.deepEqual(inserts.map(call => call.params), [
+    ['001234', 'FY27', 'RF3', '2026-01-01T00:00:00.000Z'],
+    ['001234', 'FY28', 'RF3', '2026-02-01T00:00:00.000Z']
+  ]);
+  assert.equal(inserts.every(call => call.sql.includes('job_number, fiscal_year, rf_stage')), true);
+});
+
+test('loaded review statuses restore the job/FY/RF hierarchy', async () => {
+  const service = Object.create(DatabaseServicePG.prototype);
+  service.ready = Promise.resolve();
+  service.pool = { query: async () => ({ rows: [
+    { job_number: '001234', fiscal_year: 'FY27', rf_stage: 'RF6', reviewed_at: '2026-01-01T00:00:00.000Z' }
+  ] }) };
+
+  assert.deepEqual(await service.getAllReviewStatuses(), {
+    '001234': { FY27: { RF6: { reviewedAt: '2026-01-01T00:00:00.000Z' } } }
+  });
+});
+
+test('comments save and restore with their financial year and RF stage', async () => {
+  const service = Object.create(DatabaseServicePG.prototype);
+  const calls = [];
+  service.ready = Promise.resolve();
+  service.pool = { query: async (sql, params) => { calls.push({ sql, params }); return { rows: [] }; } };
+  await service.saveJobComment({
+    id: 'comment-1', jobNumber: '001234', category: 'RF3', text: 'Persistent note',
+    timestamp: '2026-01-01T00:00:00.000Z', fy: 'FY27', rf: 'RF3',
+    evidenceLinks: ['https://example.com/evidence']
+  });
+  assert.equal(calls[0].sql.includes('fiscal_year, rf_stage'), true);
+  assert.deepEqual(calls[0].params.slice(0, 7), [
+    'comment-1', '001234', 'RF3', 'Persistent note', '2026-01-01T00:00:00.000Z', 'FY27', 'RF3'
+  ]);
+
+  const restored = service.mapJobCommentRow({
+    id: 'comment-1', job_number: '001234', category: 'RF3', text: 'Persistent note',
+    timestamp: '2026-01-01T00:00:00.000Z', fiscal_year: 'FY27', rf_stage: 'RF3',
+    evidence_links_json: ['https://example.com/evidence']
+  });
+
+  assert.equal(restored.text, 'Persistent note');
+  assert.equal(restored.fy, 'FY27');
+  assert.equal(restored.rf, 'RF3');
+  assert.deepEqual(restored.evidenceLinks, ['https://example.com/evidence']);
+});

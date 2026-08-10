@@ -86,9 +86,10 @@ class DatabaseService {
       );
       CREATE TABLE IF NOT EXISTS review_statuses (
         job_number TEXT NOT NULL,
+        fiscal_year TEXT NOT NULL,
         rf_stage TEXT NOT NULL,
         reviewed_at TEXT NOT NULL,
-        PRIMARY KEY(job_number, rf_stage)
+        PRIMARY KEY(job_number, fiscal_year, rf_stage)
       );
       CREATE TABLE IF NOT EXISTS revisions (
         scope TEXT NOT NULL, data_key TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
@@ -117,6 +118,24 @@ class DatabaseService {
     this.ensureColumn('job_comments', 'filtered_work_group', 'TEXT');
     this.ensureColumn('job_comments', 'filtered_engineer_id', 'TEXT');
     this.ensureColumn('job_comments', 'filtered_engineer_name', 'TEXT');
+    this.migrateReviewStatusesSchema();
+  }
+
+  migrateReviewStatusesSchema() {
+    const columns = this.db.prepare('PRAGMA table_info(review_statuses)').all();
+    const hasFiscalYear = columns.some(column => column.name === 'fiscal_year');
+    const primaryKey = columns.filter(column => column.pk).sort((a, b) => a.pk - b.pk).map(column => column.name);
+    if (hasFiscalYear && primaryKey.join(',') === 'job_number,fiscal_year,rf_stage') return;
+    this.db.exec(`
+      ALTER TABLE review_statuses RENAME TO review_statuses_legacy;
+      CREATE TABLE review_statuses (
+        job_number TEXT NOT NULL, fiscal_year TEXT NOT NULL, rf_stage TEXT NOT NULL,
+        reviewed_at TEXT NOT NULL, PRIMARY KEY(job_number, fiscal_year, rf_stage)
+      );
+      INSERT INTO review_statuses (job_number, fiscal_year, rf_stage, reviewed_at)
+      SELECT job_number, '', rf_stage, reviewed_at FROM review_statuses_legacy;
+      DROP TABLE review_statuses_legacy;
+    `);
   }
 
   ensureColumn(tableName, columnName, columnType) {
@@ -286,8 +305,8 @@ class DatabaseService {
       `),
 
       upsertReviewStatus: this.db.prepare(`
-        INSERT OR REPLACE INTO review_statuses (job_number, rf_stage, reviewed_at)
-        VALUES (?, ?, ?)
+        INSERT OR REPLACE INTO review_statuses (job_number, fiscal_year, rf_stage, reviewed_at)
+        VALUES (?, ?, ?, ?)
       `),
       deleteAllReviewStatuses: this.db.prepare(`DELETE FROM review_statuses`),
       getAllReviewStatuses: this.db.prepare(`SELECT * FROM review_statuses`),
@@ -751,10 +770,12 @@ class DatabaseService {
       const current = this.getRevision('reviews', 'all');
       if (current !== expectedRevision) throw revisionConflict();
       this.stmts.deleteAllReviewStatuses.run();
-      Object.entries(store || {}).forEach(([jobNumber, stages]) => {
-        Object.entries(stages || {}).forEach(([stage, value]) => {
-          const reviewedAt = value?.reviewedAt || new Date().toISOString();
-          this.stmts.upsertReviewStatus.run(jobNumber, stage, reviewedAt);
+      Object.entries(store || {}).forEach(([jobNumber, years]) => {
+        Object.entries(years || {}).forEach(([fiscalYear, stages]) => {
+          Object.entries(stages || {}).forEach(([stage, value]) => {
+            const reviewedAt = value?.reviewedAt || new Date().toISOString();
+            this.stmts.upsertReviewStatus.run(jobNumber, fiscalYear, stage, reviewedAt);
+          });
         });
       });
       const revision = current + 1;
@@ -769,7 +790,8 @@ class DatabaseService {
     const out = {};
     rows.forEach(row => {
       if (!out[row.job_number]) out[row.job_number] = {};
-      out[row.job_number][row.rf_stage] = { reviewedAt: row.reviewed_at };
+      if (!out[row.job_number][row.fiscal_year]) out[row.job_number][row.fiscal_year] = {};
+      out[row.job_number][row.fiscal_year][row.rf_stage] = { reviewedAt: row.reviewed_at };
     });
     return out;
   }
