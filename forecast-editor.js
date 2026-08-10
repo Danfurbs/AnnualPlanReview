@@ -3,6 +3,23 @@
  * Forecast editor UI and interaction logic
  */
 
+// Forecast Builder working data is deliberately isolated from the dashboard's
+// shared forecast state. Plan v1 is stored as sparse overrides, so exposing its
+// raw snapshot as dashboard state would make untouched jobs disappear from the
+// main grid until it next reloads an effective snapshot.
+let forecastEditorData = null;
+
+function getForecastEditorData() {
+  return forecastEditorData;
+}
+
+function setForecastEditorData(data) {
+  forecastEditorData = data;
+}
+
+window.getForecastEditorData = getForecastEditorData;
+window.setForecastEditorData = setForecastEditorData;
+
 /**
  * Create an empty forecast row
  */
@@ -70,7 +87,7 @@ async function closeForecastEditor() {
   // Reload forecast data from API/storage and refresh dashboard
   const forecastCache = await loadForecastFromStorageAsync(window.currentFinancialYear, window.currentPlanVersion);
   if (forecastCache) {
-    window.fData = forecastCache.data;
+    forecastEditorData = forecastCache.data;
   }
 
   // Trigger dashboard re-render to show updated forecast
@@ -83,7 +100,7 @@ async function closeForecastEditor() {
  * Check if there are actual unsaved changes by comparing editor state to saved data
  */
 function hasActualUnsavedChanges() {
-  if (!window.forecastEditorState.workGroup || !window.fData) {
+  if (!window.forecastEditorState.workGroup || !forecastEditorData) {
     return false;
   }
 
@@ -99,7 +116,7 @@ function hasActualUnsavedChanges() {
 
   // Compare each editor row against saved data
   for (const row of editorRows) {
-    const savedJob = window.fData.get(row.jobNumber);
+    const savedJob = forecastEditorData.get(row.jobNumber);
     const savedWgData = savedJob?.wgs?.[workGroup];
     const savedComment = savedJob?.comments?.[workGroup];
 
@@ -121,8 +138,8 @@ function hasActualUnsavedChanges() {
   }
 
   // Check if any saved jobs for this work group are missing from editor (deletions)
-  if (window.fData) {
-    for (const [jobNumber, job] of window.fData.entries()) {
+  if (forecastEditorData) {
+    for (const [jobNumber, job] of forecastEditorData.entries()) {
       if (job.wgs && job.wgs[workGroup]) {
         // This job exists in saved data for this work group
         const inEditor = editorRows.some(row => row.jobNumber === jobNumber);
@@ -150,7 +167,7 @@ async function initializeForecastEditor() {
     // Load forecast for this context (checks API if enabled)
     const snapshot = await getForecastSnapshotAsync(window.forecastEditorState.year, window.forecastEditorState.planVersion);
 
-    window.fData = snapshot ? snapshot.data : null;
+    forecastEditorData = snapshot ? snapshot.data : null;
 
     // Render selectors and table
     renderForecastEditorSelectors();
@@ -233,7 +250,7 @@ function renderWorkGroupSelector(filter = 'all', searchText = '') {
   if (!container) return;
 
   const statuses = getWorkGroupStatuses(
-    window.fData,
+    forecastEditorData,
     window.forecastEditorState.planVersion,
     window.forecastEditorState.year
   );
@@ -365,8 +382,8 @@ function getV1WorkGroupComparison(year) {
   // so V1 badges immediately reflect copies and edits.
   const v1 = window.forecastEditorState.year === year
     && window.forecastEditorState.planVersion === 'v1'
-    && window.fData
-    ? window.fData
+    && forecastEditorData
+    ? forecastEditorData
     : (getForecastSnapshot(year, 'v1')?.data || new Map());
   const groups = new Set();
   const collect = data => data.forEach(job => Object.keys(job?.wgs || {}).forEach(code => groups.add(normalizeWorkGroupSet(code))));
@@ -546,7 +563,7 @@ async function copySelectedWorkGroupsToV1() {
   }
   window.forecastEditorState.planVersion = 'v1';
   window.currentPlanVersion = 'v1';
-  window.fData = v1;
+  forecastEditorData = v1;
   closeCopyWorkGroupsToV1Modal();
   renderForecastEditorSelectors(); loadForecastEditorRows(); renderForecastEditorTable(); updateForecastEditorSummary();
   const statusEl = document.getElementById('forecastEditorStatus');
@@ -621,7 +638,7 @@ function getWorkGroupSearchText() {
 function loadForecastEditorRows() {
   const workGroup = window.forecastEditorState.workGroup;
   const rows = [];
-  const dataToUse = window.fData;
+  const dataToUse = forecastEditorData;
 
   if (dataToUse && workGroup) {
     // Normalize work group code for consistent lookups
@@ -1134,7 +1151,7 @@ async function initializeV1FromV0Explicit() {
   await saveForecastToStorageAsync(v1Data, v1Data.size, year, 'v1');
 
   // Reload the forecast editor and refresh selectors to update checkmarks
-  window.fData = v1Data;
+  forecastEditorData = v1Data;
   renderForecastEditorSelectors();
   loadForecastEditorRows();
   renderForecastEditorTable();
@@ -1166,8 +1183,8 @@ async function clearForecastEditorTable() {
   window.forecastEditorState.rows = Array.from({ length: 5 }, () => createForecastEditorRow());
 
   // Remove this work group's data from the forecast
-  if (window.fData && window.forecastEditorState.workGroup) {
-    window.fData.forEach((job) => {
+  if (forecastEditorData && window.forecastEditorState.workGroup) {
+    forecastEditorData.forEach((job) => {
       if (job.wgs && job.wgs[window.forecastEditorState.workGroup]) {
         delete job.wgs[window.forecastEditorState.workGroup];
       }
@@ -1182,10 +1199,10 @@ async function clearForecastEditorTable() {
     });
 
     // Clean up empty jobs
-    window.fData = cleanForecastData(window.fData);
+    forecastEditorData = cleanForecastData(forecastEditorData);
 
     // Save the cleared forecast (and API)
-    await saveForecastToStorageAsync(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
+    await saveForecastToStorageAsync(forecastEditorData, forecastEditorData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
   }
 
   // Refresh work group selector to update checkmarks (don't reload rows - we want them empty)
@@ -1223,9 +1240,9 @@ async function handleForecastEditorContextChange(forceReload = false) {
   if (contextChanged || forceReload) {
     const snapshot = await getForecastSnapshotAsync(window.forecastEditorState.year, window.forecastEditorState.planVersion);
     if (snapshot) {
-      window.fData = snapshot.data;
+      forecastEditorData = snapshot.data;
     } else {
-      window.fData = null;
+      forecastEditorData = null;
     }
 
     // Re-render work group selector with updated statuses
@@ -1245,11 +1262,11 @@ async function handleForecastEditorSubmit(event) {
   if (event) event.preventDefault();
 
   try {
-    // Sync DOM state to fData
+    // Sync DOM state to the editor working data
     syncForecastEditorTableState();
 
     // Clean up empty jobs
-    window.fData = cleanForecastData(window.fData);
+    forecastEditorData = cleanForecastData(forecastEditorData);
 
     const year = window.forecastEditorState.year;
     const planVersion = window.forecastEditorState.planVersion;
@@ -1263,7 +1280,7 @@ async function handleForecastEditorSubmit(event) {
     // Count jobs with data for this work group
     let jobCount = 0;
     const jobNumbers = [];
-    window.fData.forEach((job, jobNumber) => {
+    forecastEditorData.forEach((job, jobNumber) => {
       const wgData = job.wgs?.[workGroup];
       const hasVolume = wgData && window.FORECAST_PERIODS.some(p => Number(wgData[p] || 0) !== 0);
       const hasComment = job.comments?.[workGroup]?.trim().length > 0;
@@ -1288,7 +1305,7 @@ async function handleForecastEditorSubmit(event) {
     }
 
     // Save to localStorage and API
-    const saved = await saveForecastToStorageAsync(window.fData, window.fData.size, year, planVersion);
+    const saved = await saveForecastToStorageAsync(forecastEditorData, forecastEditorData.size, year, planVersion);
 
     // Update API sync indicator
     if (window.updateApiSyncIndicator) {
@@ -1331,16 +1348,16 @@ async function handleForecastEditorSubmit(event) {
 }
 
 /**
- * Sync DOM table state to fData
+ * Sync DOM table state to the editor working data
  * Syncs ALL rows that have any input values (not just rows marked with has-forecast-data class)
  */
 function syncForecastEditorTableState() {
   const workGroup = window.forecastEditorState.workGroup;
   if (!workGroup) return;
 
-  // Ensure fData exists
-  if (!window.fData) {
-    window.fData = new Map();
+  // Ensure editor working data exists
+  if (!forecastEditorData) {
+    forecastEditorData = new Map();
   }
 
   // Sync ALL job rows - check each row for actual input values
@@ -1372,9 +1389,9 @@ function syncForecastEditorTableState() {
 
     // Only process rows that have actual data
     if (!hasAnyValue) {
-      // If this job existed in fData for this workgroup but now has no data, remove it
-      if (window.fData.has(jobNumber)) {
-        const job = window.fData.get(jobNumber);
+      // If this job existed in the editor working data for this workgroup but now has no data, remove it
+      if (forecastEditorData.has(jobNumber)) {
+        const job = forecastEditorData.get(jobNumber);
         if (job.wgs && job.wgs[workGroup]) {
           delete job.wgs[workGroup];
         }
@@ -1387,16 +1404,16 @@ function syncForecastEditorTableState() {
       return;
     }
 
-    // Ensure job exists in fData
-    if (!window.fData.has(jobNumber)) {
-      window.fData.set(jobNumber, {
+    // Ensure job exists in the editor working data
+    if (!forecastEditorData.has(jobNumber)) {
+      forecastEditorData.set(jobNumber, {
         periods: {},
         wgs: {},
         comments: {}
       });
     }
 
-    const job = window.fData.get(jobNumber);
+    const job = forecastEditorData.get(jobNumber);
 
     // Ensure workgroup exists
     if (!job.wgs[workGroup]) {
@@ -1461,20 +1478,20 @@ function handleForecastEditorTableInput(event) {
       }
     }
 
-    // Also update fData if we have a valid job number
+    // Also update the editor working data if we have a valid job number
     if (jobNumber) {
-      if (!window.fData) {
-        window.fData = new Map();
+      if (!forecastEditorData) {
+        forecastEditorData = new Map();
       }
-      if (!window.fData.has(jobNumber)) {
-        window.fData.set(jobNumber, {
+      if (!forecastEditorData.has(jobNumber)) {
+        forecastEditorData.set(jobNumber, {
           periods: {},
           wgs: {},
           comments: {}
         });
       }
 
-      const job = window.fData.get(jobNumber);
+      const job = forecastEditorData.get(jobNumber);
 
       // Ensure workgroup exists
       if (!job.wgs[workGroup]) {
@@ -1528,20 +1545,20 @@ function handleForecastEditorTableInput(event) {
       }
     }
 
-    // Also update fData if we have a valid job number
+    // Also update the editor working data if we have a valid job number
     if (jobNumber) {
-      if (!window.fData) {
-        window.fData = new Map();
+      if (!forecastEditorData) {
+        forecastEditorData = new Map();
       }
-      if (!window.fData.has(jobNumber)) {
-        window.fData.set(jobNumber, {
+      if (!forecastEditorData.has(jobNumber)) {
+        forecastEditorData.set(jobNumber, {
           periods: {},
           wgs: {},
           comments: {}
         });
       }
 
-      const job = window.fData.get(jobNumber);
+      const job = forecastEditorData.get(jobNumber);
 
       // Update comment
       if (!job.comments) job.comments = {};
@@ -1566,9 +1583,9 @@ function handleForecastEditorTableInput(event) {
  * Check if a job has any forecast data for the given work group
  */
 function hasAnyForecastData(jobNumber, workGroup) {
-  if (!window.fData.has(jobNumber)) return false;
+  if (!forecastEditorData.has(jobNumber)) return false;
 
-  const job = window.fData.get(jobNumber);
+  const job = forecastEditorData.get(jobNumber);
   const wgData = job.wgs?.[workGroup];
 
   if (!wgData) return false;
@@ -1591,7 +1608,7 @@ function updateRowTotal(jobNumber) {
   const totalCell = document.querySelector(`[data-role="row-total"][data-job="${jobNumber}"]`);
   if (!totalCell) return;
 
-  const job = window.fData.get(jobNumber);
+  const job = forecastEditorData.get(jobNumber);
   const workGroup = window.forecastEditorState.workGroup;
   const wgData = job?.wgs?.[workGroup];
 
@@ -1620,7 +1637,7 @@ function updateCellHighlight(jobNumber, period, inputElement) {
     return;
   }
 
-  const job = window.fData.get(jobNumber);
+  const job = forecastEditorData.get(jobNumber);
   const workGroup = window.forecastEditorState.workGroup;
   const currentValue = Number(job?.wgs?.[workGroup]?.[period] || 0);
   const baselineValue = getBaselineValue(baselineMap, jobNumber, workGroup, period);
@@ -1819,8 +1836,8 @@ function handleForecastEditorDeleteRow(event) {
       const workGroup = window.forecastEditorState.workGroup;
       const normalizedWg = workGroup ? workGroup.trim().toUpperCase() : '';
 
-      if (jobNumber && window.fData && window.fData.has(jobNumber)) {
-        const job = window.fData.get(jobNumber);
+      if (jobNumber && forecastEditorData && forecastEditorData.has(jobNumber)) {
+        const job = forecastEditorData.get(jobNumber);
         if (job.wgs) {
           delete job.wgs[normalizedWg];
           delete job.wgs[workGroup]; // Also try original case
@@ -1842,11 +1859,11 @@ function handleForecastEditorDeleteRow(event) {
         return hasVolume || hasComment;
       });
 
-      window.fData = updateForecastWorkGroup(window.fData, rowsToSave, workGroup);
-      window.fData = cleanForecastData(window.fData);
+      forecastEditorData = updateForecastWorkGroup(forecastEditorData, rowsToSave, workGroup);
+      forecastEditorData = cleanForecastData(forecastEditorData);
 
       // Save asynchronously
-      await saveForecastToStorageAsync(window.fData, window.fData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
+      await saveForecastToStorageAsync(forecastEditorData, forecastEditorData.size, window.forecastEditorState.year, window.forecastEditorState.planVersion);
 
       // Update work group selector to refresh checkmarks (lighter than full re-render)
       renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
@@ -1875,12 +1892,12 @@ function submitForecastEditorForm() {
  * Download forecast export (JSON)
  */
 function downloadForecastEditorExport() {
-  if (!window.fData || !window.fData.size) {
+  if (!forecastEditorData || !forecastEditorData.size) {
     alert('No forecast data to export. Save your changes first.');
     return;
   }
 
-  exportForecastFile(window.forecastEditorState.year, window.forecastEditorState.planVersion, window.fData, window.fData.size);
+  exportForecastFile(window.forecastEditorState.year, window.forecastEditorState.planVersion, forecastEditorData, forecastEditorData.size);
 }
 
 /**
@@ -1889,13 +1906,13 @@ function downloadForecastEditorExport() {
  * without losing work-group-specific volumes and comments.
  */
 function downloadTotalForecastExport() {
-  if (!window.fData || !window.fData.size) {
+  if (!forecastEditorData || !forecastEditorData.size) {
     alert('No forecast data to export. Save your changes first.');
     return;
   }
 
   // Capture the currently visible table before building the export. Input
-  // events normally keep fData current, but syncing also covers autofill and
+  // events normally keep the editor working data current, but syncing also covers autofill and
   // other browser-driven edits that may not yet have emitted a change event.
   if (typeof syncForecastEditorTableState === 'function') {
     syncForecastEditorTableState();
@@ -1908,7 +1925,7 @@ function downloadTotalForecastExport() {
     'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13', 'Comment'];
   const rows = [];
 
-  window.fData.forEach((job, jobNumber) => {
+  forecastEditorData.forEach((job, jobNumber) => {
     // Include comment-only combinations as well as combinations with volumes.
     const workGroups = new Set([
       ...Object.keys(job?.wgs || {}),
@@ -2077,7 +2094,7 @@ async function confirmFullForecastUpload() {
 
     window.forecastEditorState.planVersion = planVersion;
     window.currentPlanVersion = planVersion;
-    window.fData = uploadedData;
+    forecastEditorData = uploadedData;
     pendingFullForecastFile = null;
     document.getElementById('fullForecastUploadModal')?.classList.remove('open');
     renderForecastEditorSelectors();
@@ -2099,7 +2116,7 @@ function downloadExcelUploadFormat() {
   const workGroup = window.forecastEditorState.workGroup;
   const year = window.forecastEditorState.year;
 
-  if (!window.fData || !window.fData.size) {
+  if (!forecastEditorData || !forecastEditorData.size) {
     alert('No forecast data to export. Save your changes first.');
     return;
   }
@@ -2113,7 +2130,7 @@ function downloadExcelUploadFormat() {
 
   const rows = [];
 
-  window.fData.forEach((job, jobNumber) => {
+  forecastEditorData.forEach((job, jobNumber) => {
     const wgData = job?.wgs?.[workGroup];
     if (!wgData) return;
 
@@ -2784,11 +2801,11 @@ async function handleCopyActuals(event) {
     if (!wgData) return;
 
     // Get or create forecast job entry
-    if (!window.fData) window.fData = new Map();
-    let forecastJob = window.fData.get(jobNumber);
+    if (!forecastEditorData) forecastEditorData = new Map();
+    let forecastJob = forecastEditorData.get(jobNumber);
     if (!forecastJob) {
       forecastJob = { periods: {}, wgs: {} };
-      window.fData.set(jobNumber, forecastJob);
+      forecastEditorData.set(jobNumber, forecastJob);
     }
 
     // Get or create work group data in forecast
@@ -2815,7 +2832,7 @@ async function handleCopyActuals(event) {
   });
 
   // Save to storage (and API)
-  await saveForecastToStorageAsync(window.fData, window.fData.size, year, planVersion);
+  await saveForecastToStorageAsync(forecastEditorData, forecastEditorData.size, year, planVersion);
   if (planVersion === 'v1') await addToV1OverridesAsync(year, jobsToUpdate);
 
   // Reload editor and refresh selectors to update checkmarks

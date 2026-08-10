@@ -17,12 +17,13 @@ window.forecastHistory = {
  * @returns {Object} Snapshot with data, metadata, and timestamp
  */
 function createForecastSnapshot() {
-  if (!window.fData) return null;
+  const editorData = window.getForecastEditorData?.();
+  if (!editorData) return null;
 
   return {
-    data: cloneForecastData(window.fData),
-    year: window.currentFinancialYear,
-    planVersion: window.currentPlanVersion,
+    data: cloneForecastData(editorData),
+    year: window.forecastEditorState?.year,
+    planVersion: window.forecastEditorState?.planVersion,
     workGroup: window.forecastEditorState?.workGroup,
     timestamp: Date.now(),
     description: `Edit ${window.forecastEditorState?.workGroup || 'forecast'}`
@@ -31,11 +32,11 @@ function createForecastSnapshot() {
 
 /**
  * Save current state to undo stack before making changes
- * Call this before any operation that modifies fData
+ * Call this before any operation that modifies Forecast Builder data
  */
 function saveUndoState(description = null) {
   if (!window.forecastHistory.enabled) return;
-  if (!window.fData) return;
+  if (!window.getForecastEditorData?.()) return;
 
   const snapshot = createForecastSnapshot();
   if (!snapshot) return;
@@ -161,7 +162,8 @@ async function restoreForecastSnapshot(snapshot) {
   if (!snapshot) return;
 
   // Restore data
-  window.fData = cloneForecastData(snapshot.data);
+  const restoredData = cloneForecastData(snapshot.data);
+  window.setForecastEditorData?.(restoredData);
 
   // Restore context if in forecast editor
   if (window.forecastEditorState) {
@@ -187,7 +189,7 @@ async function restoreForecastSnapshot(snapshot) {
 
   // Save to storage
   if (typeof saveForecastToStorageAsync === 'function') {
-    await saveForecastToStorageAsync(window.fData, window.fData.size, snapshot.year, snapshot.planVersion);
+    await saveForecastToStorageAsync(restoredData, restoredData.size, snapshot.year, snapshot.planVersion);
   }
 
   // Update main app if needed
