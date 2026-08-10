@@ -627,22 +627,26 @@ class DatabaseServicePG {
    */
   async saveAllV1Overrides(jobNumbers, fiscalYear) {
     await this.ready;
-    if (jobNumbers.length === 0) return;
-
     const client = await this.pool.connect();
 
     try {
       await client.query('BEGIN');
 
-      // Use unnest for batch insert with ON CONFLICT
-      const fiscalYears = jobNumbers.map(() => fiscalYear);
+      // Replace the FY-wide set so removed overrides do not linger. An empty
+      // set is the expected payload when an entire V1 plan is deleted.
+      await client.query('DELETE FROM v1_overrides WHERE fiscal_year = $1', [fiscalYear]);
 
-      await client.query(
-        `INSERT INTO v1_overrides (job_number, fiscal_year)
-         SELECT * FROM unnest($1::text[], $2::text[])
-         ON CONFLICT (job_number, fiscal_year) DO NOTHING`,
-        [jobNumbers, fiscalYears]
-      );
+      if (jobNumbers.length > 0) {
+        // Use unnest for batch insert with ON CONFLICT
+        const fiscalYears = jobNumbers.map(() => fiscalYear);
+
+        await client.query(
+          `INSERT INTO v1_overrides (job_number, fiscal_year)
+           SELECT * FROM unnest($1::text[], $2::text[])
+           ON CONFLICT (job_number, fiscal_year) DO NOTHING`,
+          [jobNumbers, fiscalYears]
+        );
+      }
 
       await client.query('COMMIT');
     } catch (error) {

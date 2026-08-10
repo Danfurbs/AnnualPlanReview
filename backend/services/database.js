@@ -245,6 +245,10 @@ class DatabaseService {
         SELECT job_number FROM v1_overrides WHERE fiscal_year = ?
       `),
 
+      deleteV1OverridesByYear: this.db.prepare(`
+        DELETE FROM v1_overrides WHERE fiscal_year = ?
+      `),
+
       deleteV1Override: this.db.prepare(`
         DELETE FROM v1_overrides WHERE job_number = ? AND fiscal_year = ?
       `),
@@ -652,6 +656,8 @@ class DatabaseService {
    */
   saveAllV1Overrides(jobNumbers, fiscalYear) {
     const saveTransaction = this.db.transaction((jobs) => {
+      // Replace the complete set; an empty array must clear stale overrides.
+      this.stmts.deleteV1OverridesByYear.run(fiscalYear);
       for (const jobNumber of jobs) {
         this.stmts.insertV1Override.run(jobNumber, fiscalYear);
       }
