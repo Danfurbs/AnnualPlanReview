@@ -106,6 +106,14 @@ db.exec(`
     uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS review_statuses (
+    job_number TEXT NOT NULL,
+    fiscal_year TEXT NOT NULL,
+    rf_stage TEXT NOT NULL,
+    reviewed_at TEXT NOT NULL,
+    PRIMARY KEY(job_number, fiscal_year, rf_stage)
+  );
+
   -- Indexes for better query performance
   CREATE INDEX IF NOT EXISTS idx_forecasts_job ON forecasts(job_number);
   CREATE INDEX IF NOT EXISTS idx_forecasts_fy_version ON forecasts(fiscal_year, plan_version);

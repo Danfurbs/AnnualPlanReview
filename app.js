@@ -233,6 +233,9 @@
     }
 
     function migrateLegacyReviewStore() {
+      // Review records must be job -> FY -> RF. Older records only contained an
+      // RF key, so there is no reliable financial year to which they can be
+      // assigned. Keep them quarantined rather than showing them in every FY.
       let migrated = 0;
       Object.entries(reviewStore || {}).forEach(([jobNumber, jobReviews]) => {
         if (!jobReviews || typeof jobReviews !== 'object') return;
@@ -247,7 +250,7 @@
         if (!Object.keys(jobReviews).length) delete reviewStore[jobNumber];
       });
       if (migrated) {
-        console.info(`Migrated ${migrated} legacy review entr${migrated === 1 ? 'y' : 'ies'} without fingerprints; they now require review.`);
+        console.info(`Quarantined ${migrated} legacy review entr${migrated === 1 ? 'y' : 'ies'} that had no financial year.`);
         saveReviewStore();
       }
     }
@@ -437,33 +440,15 @@
       document.getElementById('stageModal')?.classList.remove('open');
     }
 
-    function getJobForecastFingerprint(jobNumber, year, planVersion) {
-      const job = planVersion === 'v1'
-        ? getEffectiveForecastJob(year, jobNumber)
-        : getForecastSnapshot(year, planVersion)?.data.get(jobNumber);
-      if (!job) return null;
-      const normalized = {};
-      for (let index = 1; index <= 13; index++) {
-        const period = `P${index}`;
-        normalized[period] = Number(job.periods?.[period] || 0);
-      }
-      return JSON.stringify(normalized);
-    }
-
     function getJobReviewStatus(jobNumber, year = currentFinancialYear, stage = currentReviewStage) {
       const review = reviewStore?.[jobNumber]?.[year]?.[stage];
       if (!review?.reviewedAt) return 'not_reviewed';
-      const currentV0 = getJobForecastFingerprint(jobNumber, year, 'v0');
-      const currentV1 = getJobForecastFingerprint(jobNumber, year, 'v1');
-      if (currentV0 !== review.v0Fingerprint || currentV1 !== review.v1Fingerprint) return 'needs_re_review';
-      return review.v1Fingerprint !== null && review.v1Fingerprint !== review.v0Fingerprint
-        ? 'reviewed_v1_updated'
-        : 'reviewed_v0_held';
+      return 'reviewed';
     }
 
     function isJobReviewed(jobNumber, stage = currentReviewStage, year = currentFinancialYear) {
       const status = getJobReviewStatus(jobNumber, year, stage);
-      return status !== 'not_reviewed' && status !== 'needs_re_review';
+      return status === 'reviewed';
     }
 
     function markJobReviewed(jobNumber, stage = currentReviewStage, year = currentFinancialYear) {
@@ -471,9 +456,7 @@
       if (!reviewStore[jobNumber][year]) reviewStore[jobNumber][year] = {};
       reviewStore[jobNumber][year][stage] = {
         reviewedAt: new Date().toISOString(),
-        reviewedBy: '',
-        v0Fingerprint: getJobForecastFingerprint(jobNumber, year, 'v0'),
-        v1Fingerprint: getJobForecastFingerprint(jobNumber, year, 'v1')
+        reviewedBy: ''
       };
       saveReviewStoreAsync();
     }
@@ -3234,11 +3217,9 @@
           const isGroupRollup = Boolean(j.isGroupRollup);
           const isPriority = !isGroupRollup && ['009112', '009113'].includes(j.jn);
           const reviewStatus = isGroupRollup ? 'not_reviewed' : getJobReviewStatus(j.jn, currentFinancialYear, reviewStage);
-          const isReviewed = !isGroupRollup && !['not_reviewed', 'needs_re_review'].includes(reviewStatus);
+          const isReviewed = !isGroupRollup && reviewStatus === 'reviewed';
           const reviewStatusLabels = {
-            reviewed_v0_held: 'Reviewed · v0 held',
-            reviewed_v1_updated: 'Reviewed · v1 updated',
-            needs_re_review: 'Needs re-review',
+            reviewed: 'Reviewed',
             not_reviewed: 'Needs Review'
           };
           const statusLabel = isGroupRollup ? 'Group Rollup' : reviewStatusLabels[reviewStatus];
@@ -4250,9 +4231,7 @@
       if (reviewButton) {
         const reviewStatus = getJobReviewStatus(job.jn, currentFinancialYear, currentReviewStage);
         const reviewStatusLabels = {
-          reviewed_v0_held: 'Reviewed · v0 held',
-          reviewed_v1_updated: 'Reviewed · v1 updated',
-          needs_re_review: 'Needs re-review',
+          reviewed: 'Reviewed',
           not_reviewed: 'Not reviewed'
         };
         const reviewStatusPill = document.getElementById('breakdownReviewStatus');
@@ -4260,7 +4239,7 @@
           reviewStatusPill.textContent = reviewStatusLabels[reviewStatus];
           reviewStatusPill.className = `job-pill ${isJobReviewed(job.jn) ? 'reviewed' : 'needs-review'}`;
         }
-        reviewButton.textContent = reviewStatus === 'needs_re_review' ? 'Mark Reviewed Again' : 'Mark Reviewed';
+        reviewButton.textContent = 'Mark Reviewed';
         reviewButton.style.display = job.isGroupRollup || isJobReviewed(job.jn) ? 'none' : '';
         reviewButton.onclick = () => {
           markJobReviewed(job.jn, currentReviewStage, currentFinancialYear);

@@ -118,6 +118,17 @@ async function initializeDatabase() {
       `);
       console.log('✓ Created baselines table');
 
+      await pool.query(`
+      CREATE TABLE IF NOT EXISTS review_statuses (
+        job_number VARCHAR(50) NOT NULL,
+        fiscal_year VARCHAR(10) NOT NULL,
+        rf_stage VARCHAR(50) NOT NULL,
+        reviewed_at VARCHAR(50) NOT NULL,
+        PRIMARY KEY(job_number, fiscal_year, rf_stage)
+      )
+      `);
+      console.log('✓ Created review_statuses table');
+
     // Create v1_overrides table
       await pool.query(`
       CREATE TABLE IF NOT EXISTS v1_overrides (
