@@ -336,7 +336,7 @@ function populateClearAllFySelect() {
 /**
  * Clear all forecast data for the selected FY and version
  */
-function clearAllForecastData() {
+async function clearAllForecastData() {
   const fySelect = document.getElementById('clearAllFySelect');
   const versionSelect = document.getElementById('clearAllVersionSelect');
 
@@ -367,7 +367,7 @@ function clearAllForecastData() {
   }
 
   try {
-    const result = window.clearAllForecastDataForYear(year, version);
+    const result = await window.clearAllForecastDataForYear(year, version);
 
     if (result.success) {
       alert(`Successfully cleared all forecast data for ${year} ${versionLabel}.\n\nCleared keys:\n${result.cleared.join('\n')}\n\nPlease refresh the page to see the changes.`);

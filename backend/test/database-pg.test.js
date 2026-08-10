@@ -60,3 +60,12 @@ test('insert failure rolls back and releases PostgreSQL client', async () => {
   assert.equal(fixture.calls.some(call => call.sql === 'ROLLBACK'), true);
   assert.equal(fixture.wasReleased(), true);
 });
+
+test('empty V1 override replacement deletes the existing FY set', async () => {
+  const fixture = serviceWithClient(() => ({ rows: [] }));
+  await fixture.service.saveAllV1Overrides([], 'FY27');
+  assert.equal(fixture.calls.some(call => call.sql.startsWith('DELETE FROM v1_overrides') && call.params[0] === 'FY27'), true);
+  assert.equal(fixture.calls.some(call => call.sql.startsWith('INSERT INTO v1_overrides')), false);
+  assert.equal(fixture.calls.some(call => call.sql === 'COMMIT'), true);
+  assert.equal(fixture.wasReleased(), true);
+});

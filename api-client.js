@@ -465,9 +465,8 @@ async function saveV1OverridesToApi(year, overridesSet) {
   try {
     const jobNumbers = Array.from(overridesSet);
 
-    if (jobNumbers.length === 0) return true;
-
-    // Use batch endpoint instead of individual requests
+    // The batch endpoint replaces the complete set, including with an empty
+    // set when a V1 plan is deleted.
     const response = await apiRequest(`/forecasts/v1-overrides/${year}/batch`, {
       method: 'POST',
       body: { jobNumbers }
@@ -478,6 +477,19 @@ async function saveV1OverridesToApi(year, overridesSet) {
     console.error('Failed to save v1 overrides to API:', err);
     return false;
   }
+}
+
+/** Permanently replace one server-side plan version with an empty snapshot. */
+async function deleteForecastVersionFromApi(year, planVersion) {
+  if (!isApiEnabled()) return false;
+  // Refresh the revision before the destructive replacement. This preserves
+  // optimistic concurrency protection instead of deleting from stale state.
+  const current = await loadForecastFromApi(year, planVersion);
+  if (!current) return false;
+  const deleted = await saveForecastToApi(new Map(), 0, year, planVersion);
+  if (!deleted) return false;
+  if (planVersion === 'v1') return saveV1OverridesToApi(year, new Set());
+  return true;
 }
 
 // ========== Baseline API Functions ==========
@@ -872,6 +884,7 @@ window.saveForecastToApi = saveForecastToApi;
 window.saveForecastJobToApi = saveForecastJobToApi;
 window.loadV1OverridesFromApi = loadV1OverridesFromApi;
 window.saveV1OverridesToApi = saveV1OverridesToApi;
+window.deleteForecastVersionFromApi = deleteForecastVersionFromApi;
 window.loadBaselinesFromApi = loadBaselinesFromApi;
 window.saveBaselinesToApi = saveBaselinesToApi;
 window.saveBaselineToApi = saveBaselineToApi;

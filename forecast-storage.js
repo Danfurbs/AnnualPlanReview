@@ -783,7 +783,7 @@ function cleanForecastData(forecastData) {
  * @param {string} version - Plan version ("v0", "v1", or "both")
  * @returns {Object} - Result with success status and details
  */
-function clearAllForecastDataForYear(year, version) {
+async function clearAllForecastDataForYear(year, version) {
   if (!year || !version) {
     return { success: false, error: 'Year and version are required' };
   }
@@ -793,12 +793,26 @@ function clearAllForecastDataForYear(year, version) {
 
   const versionsToDelete = version === 'both' ? ['v0', 'v1'] : [version];
 
+  // The server is authoritative in API mode. Clearing only localStorage made
+  // the deleted plan reappear as soon as the page fetched it again.
+  if (window.isApiEnabled?.()) {
+    for (const ver of versionsToDelete) {
+      try {
+        const deleted = await window.deleteForecastVersionFromApi?.(year, ver);
+        if (!deleted) throw new Error(`Server did not delete ${year} ${ver}`);
+      } catch (err) {
+        return { success: false, cleared, errors: [{ version: ver, error: err.message }] };
+      }
+    }
+  }
+
   versionsToDelete.forEach(ver => {
     try {
       // Clear forecast data
       const forecastKey = getForecastStorageKey(year, ver);
       localStorage.removeItem(forecastKey);
       cleared.push(forecastKey);
+      window.forecastMemorySnapshots?.delete(`${year}:${ver}`);
 
       // Clear v1 overrides if deleting v1
       if (ver === 'v1') {

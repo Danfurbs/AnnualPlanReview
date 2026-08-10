@@ -3545,10 +3545,10 @@
         if (status) status.textContent = 'No unsaved Plan v1 changes';
         return;
       }
-      const snapshot = await getForecastSnapshotAsync(currentFinancialYear, 'v1');
+      let snapshot = await getForecastSnapshotAsync(currentFinancialYear, 'v1');
       if (!snapshot) {
-        alert('No Plan v1 forecast exists. Create Plan v1 in Forecast Builder first.');
-        return;
+        const v0Snapshot = getForecastSnapshot(currentFinancialYear, 'v0');
+        snapshot = { data: v0Snapshot ? cloneForecastData(v0Snapshot.data) : new Map(), rowCount: v0Snapshot?.rowCount || 0 };
       }
       let forecastJob = snapshot.data.get(job.jn);
       let seededWorkGroupCount = 0;
@@ -4004,8 +4004,9 @@
       
       // Build work group table
       const wgTable = document.getElementById('wgTable');
-      const canEditPlanV1 = !job.isGroupRollup && ['v1', 'both'].includes(breakdownPlanVersion)
-        && Boolean(getForecastSnapshot(currentFinancialYear, 'v1'));
+      // Selecting V1 is enough to enable inline planning. Save safely seeds a
+      // missing V1 snapshot from V0 instead of forcing a Forecast Builder trip.
+      const canEditPlanV1 = !job.isGroupRollup && ['v1', 'both'].includes(breakdownPlanVersion);
       const v0BreakdownJob = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn);
       const v1BreakdownJob = getForecastSnapshot(currentFinancialYear, 'v1')?.data.get(job.jn);
       const findForecastWorkGroup = (forecastJob, workGroup) => Object.keys(forecastJob?.wgs || {})
