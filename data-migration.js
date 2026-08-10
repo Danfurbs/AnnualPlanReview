@@ -78,7 +78,7 @@ async function migrateAllDataToBackend() {
     // 3. Migrate baselines
     console.log('Migrating baselines...');
     try {
-      const raw = localStorage.getItem('aprBaselineDataV1');
+      const raw = localStorage.getItem('aprSjnLifetimeTargetV1') || localStorage.getItem('aprBaselineDataV1');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && Object.keys(parsed).length > 0) {

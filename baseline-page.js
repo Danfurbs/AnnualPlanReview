@@ -40,7 +40,7 @@ function closeBaselinePage() {
  */
 async function initializeBaselinePage() {
   // Load baseline data into temporary state (from API if enabled, otherwise localStorage)
-  const baselineData = await loadBaselineDataAsync();
+  const baselineData = await loadSjnLifetimeTargetDataAsync();
   baselineEdits = new Map(baselineData);
 
   // Render the table
@@ -206,7 +206,7 @@ function updateBaselineStats() {
  */
 async function saveBaselineChanges() {
   try {
-    await saveBaselineDataAsync(baselineEdits);
+    await saveSjnLifetimeTargetDataAsync(baselineEdits);
     const apiStatus = window.isApiEnabled && window.isApiEnabled() ? ' (synced to server)' : ' (saved locally)';
     alert('Baseline data saved successfully!' + apiStatus);
     updateBaselineStats();
@@ -219,9 +219,9 @@ async function saveBaselineChanges() {
 /**
  * Export baseline data as JSON file
  */
-function exportBaselineDataFile() {
+function exportSjnLifetimeTargetDataFile() {
   // Load current baseline data from storage
-  const baselineData = loadBaselineData();
+  const baselineData = loadSjnLifetimeTargetData();
   const obj = Object.fromEntries(baselineData);
   const jsonString = JSON.stringify(obj, null, 2);
 
@@ -263,7 +263,7 @@ async function handleBaselineImport(event) {
       const baselineData = new Map(Object.entries(parsed));
 
       // Save to localStorage and API
-      await saveBaselineDataAsync(baselineData);
+      await saveSjnLifetimeTargetDataAsync(baselineData);
 
       const apiStatus = window.isApiEnabled && window.isApiEnabled() ? ' (synced to server)' : ' (saved locally)';
       alert('Baseline data imported successfully!' + apiStatus);
@@ -290,7 +290,7 @@ async function clearAllBaselines() {
 
   try {
     // Clear from localStorage
-    localStorage.removeItem('aprBaselineDataV1');
+    clearSjnLifetimeTargetData();
 
     // Clear from API if enabled
     if (window.isApiEnabled && window.isApiEnabled() && window.saveBaselinesToApi) {

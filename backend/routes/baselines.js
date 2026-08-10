@@ -36,7 +36,7 @@ module.exports = (db) => {
     try {
       const { jobNumber } = req.params;
       if (!isValidJobNumber(jobNumber)) return res.status(400).json({ success: false, error: 'Invalid job number format' });
-      const value = await db.getBaseline(jobNumber);
+      const value = await db.getSjnLifetimeTarget(jobNumber);
 
       res.json({
         success: true,

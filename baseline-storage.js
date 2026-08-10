@@ -1,18 +1,27 @@
 /**
- * Baseline Storage Module
- * Manages baseline data for Standard Jobs
- * Baseline is a single total value per SJN that applies across all FYs
+ * SJN Lifetime Target Storage Module
+ * Manages the single lifetime target per Standard Job Number across all FYs.
  */
 
-const BASELINE_STORAGE_KEY = 'aprBaselineDataV1';
+const SJN_LIFETIME_TARGET_STORAGE_KEY = 'aprSjnLifetimeTargetV1';
+const LEGACY_SJN_LIFETIME_TARGET_STORAGE_KEY = 'aprBaselineDataV1';
+
+function migrateLegacySjnLifetimeTargetData() {
+  if (!localStorage.getItem(SJN_LIFETIME_TARGET_STORAGE_KEY)) {
+    const legacy = localStorage.getItem(LEGACY_SJN_LIFETIME_TARGET_STORAGE_KEY);
+    if (legacy) localStorage.setItem(SJN_LIFETIME_TARGET_STORAGE_KEY, legacy);
+  }
+  localStorage.removeItem(LEGACY_SJN_LIFETIME_TARGET_STORAGE_KEY);
+}
 
 /**
  * Load baseline data from localStorage
  * @returns {Map<string, number>} Map of job number to baseline value
  */
-function loadBaselineData() {
+function loadSjnLifetimeTargetData() {
   try {
-    const raw = localStorage.getItem(BASELINE_STORAGE_KEY);
+    migrateLegacySjnLifetimeTargetData();
+    const raw = localStorage.getItem(SJN_LIFETIME_TARGET_STORAGE_KEY);
     if (!raw) return new Map();
 
     const parsed = JSON.parse(raw);
@@ -27,7 +36,7 @@ function loadBaselineData() {
  * Load baseline data from storage or API (async version)
  * @returns {Promise<Map<string, number>>} Map of job number to baseline value
  */
-async function loadBaselineDataAsync() {
+async function loadSjnLifetimeTargetDataAsync() {
   // Try API first if enabled
   if (window.isApiEnabled && window.isApiEnabled() && window.loadBaselinesFromApi) {
     try {
@@ -35,7 +44,7 @@ async function loadBaselineDataAsync() {
       if (apiData) {
         const baselineMap = new Map(Object.entries(apiData));
         // Cache in localStorage for offline access
-        saveBaselineData(baselineMap);
+        saveSjnLifetimeTargetData(baselineMap);
         return baselineMap;
       }
     } catch (err) {
@@ -44,17 +53,17 @@ async function loadBaselineDataAsync() {
   }
 
   // Fall back to localStorage
-  return loadBaselineData();
+  return loadSjnLifetimeTargetData();
 }
 
 /**
  * Save baseline data to localStorage
  * @param {Map<string, number>} baselineData - Map of job number to baseline value
  */
-function saveBaselineData(baselineData) {
+function saveSjnLifetimeTargetData(baselineData) {
   try {
     const obj = Object.fromEntries(baselineData);
-    localStorage.setItem(BASELINE_STORAGE_KEY, JSON.stringify(obj));
+    localStorage.setItem(SJN_LIFETIME_TARGET_STORAGE_KEY, JSON.stringify(obj));
   } catch (err) {
     console.error('Error saving baseline data:', err);
     alert('Failed to save baseline data. Please try again.');
@@ -66,9 +75,9 @@ function saveBaselineData(baselineData) {
  * @param {Map<string, number>} baselineData - Map of job number to baseline value
  * @returns {Promise<void>}
  */
-async function saveBaselineDataAsync(baselineData) {
+async function saveSjnLifetimeTargetDataAsync(baselineData) {
   // Save to localStorage first (always)
-  saveBaselineData(baselineData);
+  saveSjnLifetimeTargetData(baselineData);
 
   // Also save to API if enabled
   if (window.isApiEnabled && window.isApiEnabled() && window.saveBaselinesToApi) {
@@ -92,8 +101,8 @@ async function saveBaselineDataAsync(baselineData) {
  * @param {string} jobNumber - The job number
  * @returns {number} The baseline value (0 if not set)
  */
-function getBaseline(jobNumber) {
-  const baselineData = loadBaselineData();
+function getSjnLifetimeTarget(jobNumber) {
+  const baselineData = loadSjnLifetimeTargetData();
   return baselineData.get(jobNumber) || 0;
 }
 
@@ -102,8 +111,8 @@ function getBaseline(jobNumber) {
  * @param {string} jobNumber - The job number
  * @param {number} value - The baseline value
  */
-function setBaseline(jobNumber, value) {
-  const baselineData = loadBaselineData();
+function setSjnLifetimeTarget(jobNumber, value) {
+  const baselineData = loadSjnLifetimeTargetData();
 
   if (value === 0 || value === null || value === undefined || value === '') {
     baselineData.delete(jobNumber);
@@ -111,7 +120,7 @@ function setBaseline(jobNumber, value) {
     baselineData.set(jobNumber, Number(value));
   }
 
-  saveBaselineData(baselineData);
+  saveSjnLifetimeTargetData(baselineData);
 }
 
 /**
@@ -120,8 +129,8 @@ function setBaseline(jobNumber, value) {
  * @param {number} value - The baseline value
  * @returns {Promise<void>}
  */
-async function setBaselineAsync(jobNumber, value) {
-  const baselineData = loadBaselineData();
+async function setSjnLifetimeTargetAsync(jobNumber, value) {
+  const baselineData = loadSjnLifetimeTargetData();
 
   if (value === 0 || value === null || value === undefined || value === '') {
     baselineData.delete(jobNumber);
@@ -159,7 +168,7 @@ async function setBaselineAsync(jobNumber, value) {
     }
   }
 
-  saveBaselineData(baselineData);
+  saveSjnLifetimeTargetData(baselineData);
 }
 
 /**
@@ -168,8 +177,8 @@ async function setBaselineAsync(jobNumber, value) {
  * @param {number} periodCount - Number of periods (default 13)
  * @returns {number[]} Array of cumulative values per period
  */
-function getBaselineCumulative(jobNumber, periodCount = 13) {
-  const baseline = getBaseline(jobNumber);
+function getSjnLifetimeTargetCumulative(jobNumber, periodCount = 13) {
+  const baseline = getSjnLifetimeTarget(jobNumber);
   if (baseline === 0) return Array(periodCount).fill(0);
 
   const perPeriod = baseline / periodCount;
@@ -188,13 +197,13 @@ function getBaselineCumulative(jobNumber, periodCount = 13) {
  * @param {number} periodCount - Number of periods (default 13)
  * @returns {number[]} Array of cumulative values per period for the entire group
  */
-function getGroupBaselineCumulative(jobNumbers, periodCount = 13) {
+function getGroupSjnLifetimeTargetCumulative(jobNumbers, periodCount = 13) {
   if (!jobNumbers || !jobNumbers.length) {
     return Array(periodCount).fill(0);
   }
 
   // Sum up all baselines from the group's jobs
-  const baselineData = loadBaselineData();
+  const baselineData = loadSjnLifetimeTargetData();
   const totalBaseline = jobNumbers.reduce((sum, jobNumber) => {
     return sum + (baselineData.get(jobNumber) || 0);
   }, 0);
@@ -215,8 +224,8 @@ function getGroupBaselineCumulative(jobNumbers, periodCount = 13) {
  * Export baseline data as JSON
  * @returns {string} JSON string of baseline data
  */
-function exportBaselineData() {
-  const baselineData = loadBaselineData();
+function exportSjnLifetimeTargetData() {
+  const baselineData = loadSjnLifetimeTargetData();
   const obj = Object.fromEntries(baselineData);
   return JSON.stringify(obj, null, 2);
 }
@@ -226,11 +235,11 @@ function exportBaselineData() {
  * @param {string} jsonString - JSON string to import
  * @returns {boolean} True if successful, false otherwise
  */
-function importBaselineData(jsonString) {
+function importSjnLifetimeTargetData(jsonString) {
   try {
     const parsed = JSON.parse(jsonString);
     const baselineData = new Map(Object.entries(parsed));
-    saveBaselineData(baselineData);
+    saveSjnLifetimeTargetData(baselineData);
     return true;
   } catch (err) {
     console.error('Error importing baseline data:', err);
@@ -241,7 +250,20 @@ function importBaselineData(jsonString) {
 /**
  * Clear all baseline data (sync version - localStorage only)
  */
-function clearBaselineData() {
-  localStorage.removeItem(BASELINE_STORAGE_KEY);
+function clearSjnLifetimeTargetData() {
+  localStorage.removeItem(SJN_LIFETIME_TARGET_STORAGE_KEY);
   return true;
 }
+
+window.loadSjnLifetimeTargetData = loadSjnLifetimeTargetData;
+window.loadSjnLifetimeTargetDataAsync = loadSjnLifetimeTargetDataAsync;
+window.saveSjnLifetimeTargetData = saveSjnLifetimeTargetData;
+window.saveSjnLifetimeTargetDataAsync = saveSjnLifetimeTargetDataAsync;
+window.getSjnLifetimeTarget = getSjnLifetimeTarget;
+window.setSjnLifetimeTarget = setSjnLifetimeTarget;
+window.setSjnLifetimeTargetAsync = setSjnLifetimeTargetAsync;
+window.getSjnLifetimeTargetCumulative = getSjnLifetimeTargetCumulative;
+window.getGroupSjnLifetimeTargetCumulative = getGroupSjnLifetimeTargetCumulative;
+window.exportSjnLifetimeTargetData = exportSjnLifetimeTargetData;
+window.importSjnLifetimeTargetData = importSjnLifetimeTargetData;
+window.clearSjnLifetimeTargetData = clearSjnLifetimeTargetData;

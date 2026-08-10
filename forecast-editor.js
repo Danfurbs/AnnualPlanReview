@@ -1272,6 +1272,14 @@ async function handleForecastEditorSubmit(event) {
       }
     });
 
+    const incomingJobNumbers = [...new Set(window.forecastEditorState.rows.map(row => row.jobNumber).filter(Boolean))];
+    if (planVersion === 'v0') {
+      const conflicts = checkV0ConflictsWithV1(year, incomingJobNumbers);
+      if (conflicts.length && !confirm(
+        `${conflicts.length} job${conflicts.length === 1 ? '' : 's'} have explicit Plan v1 overrides that will not reflect this Plan v0 change:\n\n${conflicts.join(', ')}\n\nSave Plan v0 anyway?`
+      )) return;
+    }
+
     // Show saving indicator
     const statusEl = document.getElementById('forecastEditorStatus');
     if (statusEl) {
@@ -1287,6 +1295,7 @@ async function handleForecastEditorSubmit(event) {
     }
 
     if (saved) {
+      if (planVersion === 'v1') await addToV1OverridesAsync(year, incomingJobNumbers);
       // Refresh only the work group selector (not full selectors) for better performance
       renderWorkGroupSelector(getCurrentWorkGroupFilter(), getWorkGroupSearchText());
       updateCurrentWorkGroupDisplay();
@@ -2806,6 +2815,7 @@ async function handleCopyActuals(event) {
 
   // Save to storage (and API)
   await saveForecastToStorageAsync(window.fData, window.fData.size, year, planVersion);
+  if (planVersion === 'v1') await addToV1OverridesAsync(year, jobsToUpdate);
 
   // Reload editor and refresh selectors to update checkmarks
   renderForecastEditorSelectors();
