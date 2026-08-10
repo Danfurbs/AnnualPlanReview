@@ -300,12 +300,16 @@
     .wg-detail-label { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
     .wg-detail-pill { font-size: 10px; line-height: 1; padding: 3px 5px; border-radius: 999px; background: #e2e8f0; color: #334155; letter-spacing: 0.02em; }
     .wg-detail-text { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #475569; }
-    .wg-detail td[data-detail-key="f"] { padding: 7px 6px; vertical-align: top; }
-    .wg-plan-v1-field { display: inline-flex; width: 64px; flex-direction: column; align-items: stretch; gap: 3px; }
-    .wg-plan-v1-input { width: 100%; min-width: 0; height: 34px; padding: 5px 4px; border-color: #94a3b8; background: #fff; color: #0f172a; text-align: center; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06); }
-    .wg-plan-v1-input:hover { border-color: #64748b; }
-    .wg-plan-v1-input:focus { outline: none; border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18); }
-    .wg-plan-v1-field .forecast-amend-original { min-height: 12px; text-align: center; line-height: 1.2; white-space: nowrap; }
+    .wg-detail td[data-detail-key="f"] { font-variant-numeric: tabular-nums; }
+    .wg-plan-edit-button { border: 0; border-radius: 4px; padding: 2px 7px; background: #dbeafe; color: #1d4ed8; cursor: pointer; font-size: 14px; line-height: 1.4; }
+    .wg-plan-edit-button:hover { background: #bfdbfe; }
+    .wg-plan-edited { padding: 2px 7px; border-radius: 999px; background: #dcfce7; color: #166534; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .wg-plan-edit-modal { max-width: 1000px; }
+    .wg-plan-edit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 14px; margin-bottom: 22px; }
+    .wg-plan-edit-period { display: flex; flex-direction: column; gap: 5px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 7px; background: #f8fafc; }
+    .wg-plan-edit-period > span { color: #334155; font-size: 12px; font-weight: 700; }
+    .wg-plan-edit-period input[type="number"] { box-sizing: border-box; width: 100%; height: 40px; padding: 7px 9px; border: 1px solid #94a3b8; border-radius: 5px; font-size: 15px; font-variant-numeric: tabular-nums; }
+    .wg-plan-edit-period small { color: #64748b; font-size: 11px; }
     .engineer-header { background: transparent; color: #1e3a5f; cursor: pointer; }
     .engineer-header td { padding: 10px 12px; font-weight: 700; font-size: 13px; }
     .engineer-header:hover { background: #f1f5f9; }

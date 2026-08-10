@@ -1028,6 +1028,7 @@ function addForecastEditorRow() {
  * Initialize v1 from v0 (explicit copy for current work group only)
  */
 async function initializeV1FromV0Explicit() {
+  // Optional convenience only: sparse v1 overrides can be edited without first copying v0.
   // CRITICAL: Warn user about unsaved changes
   const hasUnsavedChanges = window.forecastEditorState.rows.some(row => {
     return row.jobNumber || row.comment || Object.values(row.volumes).some(v => v !== 0);
@@ -1988,7 +1989,7 @@ function prepareFullForecastUpload(event) {
   const fileName = document.getElementById('fullForecastUploadFileName');
   if (fileName) fileName.textContent = `${file.name} will be loaded into ${window.forecastEditorState.year}.`;
   const plan = document.getElementById('fullForecastUploadPlan');
-  if (plan) plan.value = window.forecastEditorState.planVersion || 'v0';
+  if (plan) plan.value = 'v0';
   document.getElementById('fullForecastUploadModal')?.classList.add('open');
 }
 
@@ -2009,12 +2010,12 @@ async function confirmFullForecastUpload() {
   if (!pendingFullForecastFile) return;
   const file = pendingFullForecastFile;
   const year = window.forecastEditorState.year;
-  const planVersion = document.getElementById('fullForecastUploadPlan')?.value || 'v0';
+  const planVersion = 'v0';
   const planLabel = planVersion.toUpperCase();
   const includeComments = document.getElementById('fullForecastIncludeComments')?.checked !== false;
   const confirmed = confirm(
-    `Replace ${year} ${planLabel} with “${file.name}”?\n\n` +
-    `This will overwrite all existing ${planLabel} workgroup forecasts and any unsaved changes for ${year}.` +
+    `Replace the ${year} initial annual plan (${planLabel}) with “${file.name}”?\n\n` +
+    `This will overwrite all existing ${planLabel} workgroup forecasts and any unsaved changes for ${year}. Plan v1 changes must be made through the job breakdown or bulk work-group editor.` +
     (includeComments ? '' : '\n\nComments are excluded: all existing workgroup comments for this plan will be cleared.') +
     `\n\nThis cannot be undone.`
   );
