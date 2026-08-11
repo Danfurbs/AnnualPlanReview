@@ -3542,6 +3542,44 @@
       return hasData ? totals : null;
     }
 
+    function getWorkDonePeriodsForScope(job, workGroups) {
+      const periods = {};
+      const sourceJobs = job.isGroupRollup
+        ? (getAllGroups().find(group => group.id === job.groupId)?.jobNumbers || [])
+            .map(jobNumber => window.wData?.get(jobNumber))
+            .filter(Boolean)
+        : [window.wData?.get(job.jn)].filter(Boolean);
+
+      for (let i = 1; i <= 13; i++) {
+        const period = `P${i}`;
+        if (!workGroups) {
+          const reportedJobs = sourceJobs.filter(sourceJob =>
+            Object.prototype.hasOwnProperty.call(sourceJob?.periods || {}, period)
+          );
+          if (reportedJobs.length) periods[period] = reportedJobs.reduce(
+            (sum, sourceJob) => sum + (Number(sourceJob.periods[period]) || 0),
+            0
+          );
+          continue;
+        }
+
+        let hasReportedWork = false;
+        const total = sourceJobs.reduce((jobSum, sourceJob) => {
+          const sourceWorkGroups = Object.entries(sourceJob?.wgs || {});
+          return jobSum + workGroups.reduce((sum, workGroup) => {
+            const normalized = normalizeWorkGroupSet(workGroup);
+            const matchingEntry = sourceWorkGroups.find(([name]) => normalizeWorkGroupSet(name) === normalized);
+            if (!matchingEntry || !Object.prototype.hasOwnProperty.call(matchingEntry[1] || {}, period)) return sum;
+            hasReportedWork = true;
+            return sum + (Number(matchingEntry[1][period]) || 0);
+          }, 0);
+        }, 0);
+        if (hasReportedWork) periods[period] = total;
+      }
+
+      return periods;
+    }
+
     function resolveForecastWorkGroupPeriods(forecastJob, workGroup) {
       const stored = Object.keys(forecastJob?.wgs || {}).find(
         candidate => normalizeWorkGroupSet(candidate) === normalizeWorkGroupSet(workGroup)
@@ -3785,19 +3823,32 @@
       const modalContent = breakdownModal?.querySelector('.modal-content');
       document.getElementById('bdTitle').textContent = `${job.jn} - Breakdown`;
       document.getElementById('bdMeta').textContent = `${job.desc} • ${job.disc} • ${job.unit}${wgLabel}`;
+      const selectedEngineerWorkGroups = getSelectedEngineerWorkGroups();
+      const dashboardScopeWorkGroups = wgFilter !== 'all'
+        ? [wgFilter]
+        : selectedEngineerWorkGroups?.length ? selectedEngineerWorkGroups : null;
       const displayData = (() => {
-        if (wgFilter === 'all') {
+        if (!dashboardScopeWorkGroups) {
           return { periods: job.periods, tot: job.tot };
         }
-        const wgData = job.wgs?.[wgFilter];
         const periods = {};
-        const totals = { f: 0, a: 0, v: 0 };
+        const totals = { f: 0, a: 0, wd: 0, v: 0 };
         for (let i = 1; i <= 13; i++) {
           const p = `P${i}`;
-          const data = wgData?.periods?.[p] || { f: 0, a: 0, v: 0 };
+          const data = dashboardScopeWorkGroups.reduce((sum, workGroup) => {
+            const normalized = normalizeWorkGroupSet(workGroup);
+            const scoped = job.wgs?.[normalized]?.periods?.[p];
+            if (!scoped) return sum;
+            sum.f += scoped.f || 0;
+            sum.a += scoped.a || 0;
+            sum.wd += scoped.wd || 0;
+            sum.v += scoped.v || 0;
+            return sum;
+          }, { f: 0, a: 0, wd: 0, v: 0 });
           periods[p] = data;
           totals.f += data.f || 0;
           totals.a += data.a || 0;
+          totals.wd += data.wd || 0;
           totals.v += data.v || 0;
         }
         return { periods, tot: totals };
@@ -3893,21 +3944,20 @@
       // the comparison baseline rather than silently switching projections.
       const projectionPlanVersion = breakdownPlanVersion === 'v1' ? 'v1' : 'v0';
       const projectionPeriods = projectionPlanVersion === 'v1' ? v1Periods : v0Periods;
+      const reportedWorkDonePeriods = getWorkDonePeriodsForScope(job, chartScopeWorkGroups);
       
       for(let i=1; i<=13; i++) {
         const p = `P${i}`;
         periods.push(`Period ${i}`);
-        const workDone = chartScopeWorkGroups
-          ? chartScopeWorkGroups.reduce((total, workGroup) => {
-              const normalized = normalizeWorkGroupSet(workGroup);
-              return total + (Number(job.wgs?.[normalized]?.periods?.[p]?.wd) || 0);
-            }, 0)
-          : Number(job.periods[p].wd) || 0;
-        cumA += i <= forecastCutoffPeriod
-          ? workDone
-          : Number(projectionPeriods?.[p]) || 0;
-        // Actuals come from the uploaded Work Done file through the cutoff;
-        // the selected comparison forecast completes the remaining periods.
+        cumA += getMainPageActual(
+          Number(projectionPeriods?.[p]) || 0,
+          reportedWorkDonePeriods,
+          p,
+          forecastCutoffPeriod
+        );
+        // Match the dashboard calculation exactly: reported Work Done remains
+        // actual even beyond a manual cutoff, while only unreported periods
+        // are completed from the selected comparison forecast.
         cumActual.push(cumA);
         if (v0Periods) {
           cumV0 += Number(v0Periods[p]) || 0;
