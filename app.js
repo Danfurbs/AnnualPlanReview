@@ -3979,10 +3979,11 @@
       const v0Periods = getForecastPeriodsForScope(job, chartScopeWorkGroups, 'v0');
       const v1Periods = getForecastPeriodsForScope(job, chartScopeWorkGroups, 'v1');
       const forecastCutoffPeriod = getEffectiveForecastCutoffPeriod();
-      // The selected comparison determines which forecast completes the
-      // actuals/projected line. When both plans are displayed, retain v0 as
-      // the comparison baseline rather than silently switching projections.
-      const projectionPlanVersion = breakdownPlanVersion === 'v1' ? 'v1' : 'v0';
+      // Complete the projected line with the updated plan whenever v1 is part
+      // of the selected comparison and is available. Fall back to v0 for
+      // legacy years without a v1 snapshot (or when v0 is explicitly chosen).
+      const hasV1Forecast = Boolean(getForecastSnapshot(currentFinancialYear, 'v1'));
+      const projectionPlanVersion = breakdownPlanVersion !== 'v0' && hasV1Forecast ? 'v1' : 'v0';
       const projectionPeriods = projectionPlanVersion === 'v1' ? v1Periods : v0Periods;
       const reportedWorkDonePeriods = getWorkDonePeriodsForScope(job, chartScopeWorkGroups);
       
