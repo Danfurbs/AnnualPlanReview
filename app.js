@@ -3695,13 +3695,13 @@
       forecastJob.wgs[workGroupKey] = periods;
       forecastJob.periods = recalculatePeriodsFromWgs(forecastJob.wgs);
 
-      let saved;
-      if (window.isApiEnabled?.() && window.saveForecastJobToApi) {
-        saved = await window.saveForecastJobToApi(job.jn, forecastJob, currentFinancialYear, 'v1');
-        if (saved) rememberForecastSnapshot(snapshot.data, snapshot.data.size, currentFinancialYear, 'v1');
-      } else {
-        saved = await saveForecastToStorageAsync(snapshot.data, snapshot.data.size, currentFinancialYear, 'v1');
-      }
+      const saved = await saveForecastJobToStorageAsync(
+        job.jn,
+        forecastJob,
+        snapshot,
+        currentFinancialYear,
+        'v1'
+      );
       if (saveButton) saveButton.disabled = false;
       if (!saved) {
         window.Toast?.error('Plan v1 was not saved. Please try again.');

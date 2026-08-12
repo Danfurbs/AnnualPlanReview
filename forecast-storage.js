@@ -452,6 +452,34 @@ async function saveForecastToStorageAsync(forecastData, rowCount, year, planVers
   return saved;
 }
 
+/**
+ * Persist one edited job while retaining the complete snapshot for offline use.
+ *
+ * Breakdown edits use the smaller per-job API endpoint so they do not replace a
+ * financial-year snapshot that another user may have changed. If that endpoint
+ * is unavailable in an explicitly offline/local deployment, retain the edit in
+ * localStorage instead of silently losing it when the modal is closed.
+ */
+async function saveForecastJobToStorageAsync(jobNumber, forecastJob, snapshot, year, planVersion) {
+  if (!jobNumber || !forecastJob || !snapshot?.data || !year || !planVersion) return false;
+
+  if (window.isApiEnabled?.() && window.saveForecastJobToApi) {
+    const savedToApi = await window.saveForecastJobToApi(jobNumber, forecastJob, year, planVersion);
+    if (savedToApi) {
+      rememberForecastSnapshot(snapshot.data, snapshot.data.size, year, planVersion);
+      return true;
+    }
+
+    // Render is configured to require durable server persistence. Never report
+    // a browser-only fallback as a successful save in that environment.
+    if (window.API_CONFIG?.forceServerPersistence) return false;
+  }
+
+  const savedLocally = saveForecastToStorage(snapshot.data, snapshot.data.size, year, planVersion, false);
+  if (savedLocally) rememberForecastSnapshot(snapshot.data, snapshot.data.size, year, planVersion);
+  return savedLocally;
+}
+
 function rememberForecastSnapshot(forecastData, rowCount, year, planVersion) {
   window.forecastMemorySnapshots ||= new Map();
   window.forecastMemorySnapshots.set(`${year}:${planVersion}`, {
@@ -1016,6 +1044,7 @@ window.loadForecastFromStorage = loadForecastFromStorage;
 window.loadForecastFromStorageAsync = loadForecastFromStorageAsync;
 window.saveForecastToStorage = saveForecastToStorage;
 window.saveForecastToStorageAsync = saveForecastToStorageAsync;
+window.saveForecastJobToStorageAsync = saveForecastJobToStorageAsync;
 window.loadForecastFromLibrary = loadForecastFromLibrary;
 window.loadForecastFromGitHub = loadForecastFromGitHub;
 window.loadForecastFromLibraryAsync = loadForecastFromLibraryAsync;

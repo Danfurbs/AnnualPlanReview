@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const test = require('node:test');
 const vm = require('node:vm');
 
-function loadForecastStorage(workGroupSets = new Map()) {
+function loadForecastStorage(workGroupSets = new Map(), windowOverrides = {}) {
   const storage = new Map();
   const window = {
     workGroupSets,
@@ -11,7 +11,8 @@ function loadForecastStorage(workGroupSets = new Map()) {
       getItem: key => storage.get(key) ?? null,
       setItem: (key, value) => storage.set(key, value),
       removeItem: key => storage.delete(key)
-    }
+    },
+    ...windowOverrides
   };
   const context = vm.createContext({
     window,
@@ -49,4 +50,37 @@ test('v1 code and v0 description aliases replace rather than add together', () =
   assert.equal(Object.keys(result).length, 1);
   assert.deepEqual({ ...result['Track Team (TRACK)'] }, { P1: 3, P2: 0 });
   assert.equal(forecast.recalculatePeriodsFromWgs(result).P1, 3);
+});
+
+test('standard-job breakdown edits persist through the per-job API', async () => {
+  const calls = [];
+  const forecast = loadForecastStorage(new Map(), {
+    isApiEnabled: () => true,
+    saveForecastJobToApi: async (...args) => {
+      calls.push(args);
+      return true;
+    }
+  });
+  const job = { periods: { P1: 7 }, wgs: { Track: { P1: 7 } }, comments: {} };
+  const snapshot = { data: new Map([['000123', job]]) };
+
+  const saved = await forecast.saveForecastJobToStorageAsync('000123', job, snapshot, 'FY26', 'v1');
+
+  assert.equal(saved, true);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], ['000123', job, 'FY26', 'v1']);
+  assert.equal(forecast.forecastMemorySnapshots.get('FY26:v1').data.get('000123').wgs.Track.P1, 7);
+});
+
+test('standard-job breakdown edits fall back to local persistence outside Render', async () => {
+  const forecast = loadForecastStorage(new Map(), {
+    isApiEnabled: () => true,
+    saveForecastJobToApi: async () => false,
+    API_CONFIG: { forceServerPersistence: false }
+  });
+  const job = { periods: { P1: 9 }, wgs: { Track: { P1: 9 } }, comments: {} };
+  const snapshot = { data: new Map([['000456', job]]) };
+
+  assert.equal(await forecast.saveForecastJobToStorageAsync('000456', job, snapshot, 'FY26', 'v1'), true);
+  assert.equal(forecast.loadForecastFromStorage('FY26', 'v1').data.get('000456').wgs.Track.P1, 9);
 });
