@@ -3580,6 +3580,46 @@
       return periods;
     }
 
+    function getBreakdownTableJob(job, planVersion) {
+      const tablePlanVersion = planVersion === 'v1' ? 'v1' : 'v0';
+      const sourceJobNumbers = job.isGroupRollup
+        ? getAllGroups().find(group => group.id === job.groupId)?.jobNumbers || []
+        : [job.jn];
+      const selectedForecastJobs = sourceJobNumbers.map(jobNumber => tablePlanVersion === 'v1'
+        ? getEffectiveForecastJob(currentFinancialYear, jobNumber)
+        : getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(jobNumber)
+      ).filter(Boolean);
+      const workGroupsByIdentity = new Map();
+
+      // Retain Work Done-only rows from the dashboard job, then add any rows
+      // that exist only in the plan selected inside the breakdown modal.
+      Object.keys(job.wgs || {}).forEach(workGroup => {
+        workGroupsByIdentity.set(normalizeWorkGroupSet(workGroup), workGroup);
+      });
+      selectedForecastJobs.forEach(forecastJob => {
+        Object.keys(forecastJob.wgs || {}).forEach(workGroup => {
+          workGroupsByIdentity.set(normalizeWorkGroupSet(workGroup), workGroup);
+        });
+      });
+
+      const cutoffPeriod = getEffectiveForecastCutoffPeriod();
+      const wgs = {};
+      workGroupsByIdentity.forEach(workGroup => {
+        const forecastPeriods = getForecastPeriodsForScope(job, [workGroup], tablePlanVersion) || {};
+        const workDonePeriods = getWorkDonePeriodsForScope(job, [workGroup]);
+        const periods = {};
+        for (let index = 1; index <= 13; index++) {
+          const period = `P${index}`;
+          const forecast = Number(forecastPeriods[period]) || 0;
+          const workDone = Number(workDonePeriods[period]) || 0;
+          const actual = getMainPageActual(forecast, workDonePeriods, period, cutoffPeriod);
+          periods[period] = { f: forecast, a: actual, wd: workDone, v: actual - forecast };
+        }
+        wgs[workGroup] = { periods };
+      });
+      return { wgs };
+    }
+
     function resolveForecastWorkGroupPeriods(forecastJob, workGroup) {
       const stored = Object.keys(forecastJob?.wgs || {}).find(
         candidate => normalizeWorkGroupSet(candidate) === normalizeWorkGroupSet(workGroup)
@@ -4102,8 +4142,12 @@
 
       const isFiltered = wgFilter !== 'all';
       const engineerWorkGroups = getSelectedEngineerWorkGroups();
-      const wgEntries = Object.entries(job.wgs || {}).filter(([wg]) => {
-        if (isFiltered && wg !== wgFilter) return false;
+      // "Both" uses v0 for the single-value table; the chart remains the
+      // explicit two-plan comparison and v1 overrides retain their edit badge.
+      const tablePlanVersion = breakdownPlanVersion === 'v1' ? 'v1' : 'v0';
+      const tableJob = getBreakdownTableJob(job, tablePlanVersion);
+      const wgEntries = Object.entries(tableJob.wgs || {}).filter(([wg]) => {
+        if (isFiltered && normalizeWorkGroupSet(wg) !== normalizeWorkGroupSet(wgFilter)) return false;
         if (!engineerWorkGroups || engineerWorkGroups.length === 0) return true;
         const normalizedWg = normalizeWorkGroupSet(wg);
         return engineerWorkGroups.some(ewg => normalizeWorkGroupSet(ewg) === normalizedWg);
