@@ -592,16 +592,61 @@ function recalculatePeriodsFromWgs(wgs) {
   return periods;
 }
 
-/** Resolve the complete Plan v1 view by layering its sparse WG overrides on v0. */
+/** Return a stable identity for work-group codes and their display-name aliases. */
+function getForecastWorkGroupIdentity(workGroup) {
+  const text = String(workGroup || '').trim();
+  if (!text) return '';
+
+  const normalize = value => String(value).toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\(/g, '(')
+    .trim();
+  const code = text.split(/\s+/)[0].toUpperCase();
+  const workGroupSets = window.workGroupSets;
+  if (workGroupSets?.has(code)) return normalize(workGroupSets.get(code));
+  if (workGroupSets?.has(text.toUpperCase())) return normalize(workGroupSets.get(text.toUpperCase()));
+
+  const normalizedText = normalize(text);
+  if (workGroupSets) {
+    for (const description of workGroupSets.values()) {
+      if (normalize(description) === normalizedText) return normalize(description);
+    }
+  }
+  return normalizedText;
+}
+
+/**
+ * Layer sparse v1 values over v0 without counting aliases as separate groups.
+ * Property presence is intentional: an absent v1 period inherits v0, while an
+ * explicitly stored zero remains a v1 override.
+ */
+function mergeForecastWorkGroups(v0Wgs, v1Wgs) {
+  const merged = {};
+  const keysByIdentity = new Map();
+
+  Object.entries(v0Wgs || {}).forEach(([workGroup, periods]) => {
+    merged[workGroup] = { ...(periods || {}) };
+    keysByIdentity.set(getForecastWorkGroupIdentity(workGroup), workGroup);
+  });
+
+  Object.entries(v1Wgs || {}).forEach(([workGroup, periods]) => {
+    const identity = getForecastWorkGroupIdentity(workGroup);
+    const existingKey = keysByIdentity.get(identity);
+    const outputKey = existingKey || workGroup;
+    merged[outputKey] = { ...(merged[outputKey] || {}), ...(periods || {}) };
+    keysByIdentity.set(identity, outputKey);
+  });
+
+  return merged;
+}
+
+/** Resolve the complete Plan v1 view by layering its sparse WG/period overrides on v0. */
 function getEffectiveForecastJob(year, jobNumber) {
   const v0Job = getForecastSnapshot(year, 'v0')?.data.get(jobNumber);
   const v1Job = getForecastSnapshot(year, 'v1')?.data.get(jobNumber);
   if (!v0Job && !v1Job) return null;
 
-  const wgs = { ...(v0Job?.wgs || {}) };
-  Object.entries(v1Job?.wgs || {}).forEach(([workGroup, data]) => {
-    wgs[workGroup] = data;
-  });
+  const wgs = mergeForecastWorkGroups(v0Job?.wgs, v1Job?.wgs);
   const comments = { ...(v0Job?.comments || {}), ...(v1Job?.comments || {}) };
   return { periods: recalculatePeriodsFromWgs(wgs), wgs, comments };
 }
@@ -977,6 +1022,8 @@ window.loadForecastFromLibraryAsync = loadForecastFromLibraryAsync;
 window.getForecastSnapshot = getForecastSnapshot;
 window.getForecastSnapshotAsync = getForecastSnapshotAsync;
 window.recalculatePeriodsFromWgs = recalculatePeriodsFromWgs;
+window.getForecastWorkGroupIdentity = getForecastWorkGroupIdentity;
+window.mergeForecastWorkGroups = mergeForecastWorkGroups;
 window.getEffectiveForecastJob = getEffectiveForecastJob;
 window.getEffectiveForecastSnapshot = getEffectiveForecastSnapshot;
 window.exportForecastFile = exportForecastFile;
