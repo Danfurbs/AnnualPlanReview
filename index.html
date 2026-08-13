@@ -38,7 +38,6 @@
               <div class="health-bar-segment health-bar-green" id="healthBarGreen" data-filter="good"></div>
               <div class="health-bar-segment health-bar-amber" id="healthBarAmber" data-filter="warning"></div>
               <div class="health-bar-segment health-bar-red" id="healthBarRed" data-filter="bad"></div>
-              <div class="health-bar-segment health-bar-grey" id="healthBarGrey" data-filter="noforecast"></div>
             </div>
             <div class="health-job-count" id="healthJobCount">0 jobs</div>
           </div>
@@ -46,7 +45,6 @@
             <span class="health-legend-item health-legend-clickable-item" data-filter="good" role="button" tabindex="0"><span class="health-dot health-good"></span>On Track (<span id="legendGoodCount">0</span>)</span>
             <span class="health-legend-item health-legend-clickable-item" data-filter="warning" role="button" tabindex="0"><span class="health-dot health-acceptable"></span>Minor Variance (<span id="legendWarningCount">0</span>)</span>
             <span class="health-legend-item health-legend-clickable-item" data-filter="bad" role="button" tabindex="0"><span class="health-dot health-needs-attention"></span>Critical (<span id="legendCriticalCount">0</span>)</span>
-            <span class="health-legend-item health-legend-clickable-item" data-filter="noforecast" role="button" tabindex="0"><span class="health-dot health-grey"></span>No Forecast (<span id="legendNoForecastCount">0</span>)</span>
           </div>
         </div>
         <div class="health-stats health-stats-clickable">
@@ -64,11 +62,6 @@
             <div class="health-stat-value" id="healthCriticalCount">0</div>
             <div class="health-stat-label">Critical</div>
             <div class="health-stat-percent" id="healthCriticalPercent">0%</div>
-          </div>
-          <div class="health-stat health-stat-grey" data-filter="noforecast" role="button" tabindex="0">
-            <div class="health-stat-value" id="healthNoForecastCount">0</div>
-            <div class="health-stat-label">No Forecast</div>
-            <div class="health-stat-percent" id="healthNoForecastPercent">0%</div>
           </div>
         </div>
       </div>
@@ -134,13 +127,13 @@
       <div class="control-group">
         <label for="dashboardPlanVersion">Plan version</label>
         <select id="dashboardPlanVersion" onchange="handleDashboardPlanVersionChange()">
-          <option value="v0">Plan v0</option>
-          <option value="v1">Plan v1 (Updated)</option>
+          <option value="v0">V0 — Original Approved Plan</option>
+          <option value="v1">V1 / Reforecast</option>
         </select>
-        <span class="helper-text">Use 'Initialize v1 from v0' in Forecast Builder to populate v1</span>
+        <span class="helper-text">V1 amendments override V0; unchanged values continue to inherit V0.</span>
       </div>
       <div class="control-group">
-        <label>Forecast starts after</label>
+        <label>Reporting Period</label>
         <div id="forecastCutoffTimeline" class="cutoff-timeline" role="radiogroup" aria-label="Forecast cutoff timeline">
           <button type="button" class="cutoff-chip active" data-value="auto">Auto</button>
           <button type="button" class="cutoff-chip" data-value="P1">P1</button>
@@ -157,7 +150,7 @@
           <button type="button" class="cutoff-chip" data-value="P12">P12</button>
           <button type="button" class="cutoff-chip" data-value="P13">P13</button>
         </div>
-        <span class="helper-text">Only periods through this cutoff use Work Done; all later periods use forecast values</span>
+        <span class="helper-text">Periods through this completed-period cutoff use corrected Work Done; later periods use the latest effective forecast.</span>
       </div>
       <div class="control-group">
         <label for="wgFilter">Work group set</label>
@@ -193,9 +186,8 @@
           <option value="good">Show On Track (Green)</option>
           <option value="warning">Show Minor Variance (Amber)</option>
           <option value="bad">Show Critical (Red)</option>
-          <option value="over">Show Over Delivered</option>
-          <option value="under">Show Under Delivered</option>
-          <option value="noforecast">Show No Forecast (Grey)</option>
+          <option value="over">Show Over Delivery</option>
+          <option value="under">Show Under Delivery</option>
           <option value="variance">Show Any Variances</option>
         </select>
       </div>
@@ -657,15 +649,15 @@
           <h2 id="bdTitle">Job Breakdown</h2>
           <p class="helper-text" id="bdMeta"></p>
         </div>
-        <button class="close" onclick="closeBreakdown()">&times;</button>
+        <button class="close" onclick="closeBreakdown()" aria-label="Close Standard Job Breakdown">&times;</button>
       </div>
       <p class="helper-text" id="breakdownModeNote"></p>
 
       <div class="breakdown-controls" style="display: flex; gap: 16px; align-items: center; margin-bottom: 16px; padding: 12px; background: #f5f5f5; border-radius: 4px;">
         <label style="font-weight: 500;">Compare against:</label>
         <select id="breakdownPlanVersion" onchange="handleBreakdownPlanVersionChange(this)" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; background: white;">
-          <option value="v0">Plan v0</option>
-          <option value="v1">Plan v1 (Updated)</option>
+          <option value="v0">V0 — Original Approved Plan</option>
+          <option value="v1">V1 / Reforecast</option>
           <option value="both">Both (v0 & v1)</option>
         </select>
       </div>
