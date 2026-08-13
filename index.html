@@ -711,8 +711,8 @@
           <div style="overflow-x: auto;">
             <table class="wg-table" id="wgTable"></table>
           </div>
-          <div class="forecast-amend-actions breakdown-review-actions">
-            <span id="breakdownForecastStatus" class="forecast-amend-status" aria-live="polite"></span>
+          <div class="breakdown-review-actions">
+            <span id="breakdownForecastStatus" class="breakdown-forecast-status" aria-live="polite"></span>
             <span id="breakdownReviewStatus" class="job-pill" aria-live="polite"></span>
             <button type="button" class="success" id="markBreakdownReviewed">Mark Reviewed</button>
           </div>
@@ -796,6 +796,7 @@
       </div>
       <div id="workGroupPlanEditGrid" class="wg-plan-edit-grid"></div>
       <div class="modal-actions">
+        <button type="button" class="danger-button" id="resetWorkGroupPlanEdit" onclick="resetBreakdownPlanV1()" hidden>Reset to Plan v0</button>
         <button type="button" class="group-action-button" onclick="closeWorkGroupPlanEditor()">Cancel</button>
         <button type="button" class="primary-button" id="saveWorkGroupPlanEdit" onclick="saveBreakdownPlanV1()">Save Plan v1 override</button>
       </div>

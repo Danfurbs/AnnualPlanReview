@@ -5,6 +5,7 @@
   "description": "Annual Plan Review with Render-ready PostgreSQL persistence",
   "main": "server.js",
   "scripts": {
+    "test": "node --test tests/*.test.js",
     "start": "npm --prefix backend start",
     "dev": "npm --prefix backend run dev",
     "init-db-pg": "npm --prefix backend run init-db-pg",
