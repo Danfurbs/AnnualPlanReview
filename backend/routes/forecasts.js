@@ -32,6 +32,9 @@ function validatePeriods(periods, context) {
     if (!isFiniteNumber(periodValue)) {
       return `${context} period '${periodKey}' must be a finite number`;
     }
+    if (periodValue < 0) {
+      return `${context} period '${periodKey}' must be non-negative`;
+    }
   }
 
   return null;
@@ -64,7 +67,7 @@ function validateForecastEntry(jobNumber, forecastData) {
   return null;
 }
 
-module.exports = (db) => {
+function createForecastRoutes(db) {
   /**
    * GET /api/forecasts/:fiscalYear/:planVersion
    * Get all forecasts for a fiscal year and plan version
@@ -360,4 +363,8 @@ module.exports = (db) => {
   });
 
   return router;
-};
+}
+
+createForecastRoutes.validateForecastEntry = validateForecastEntry;
+createForecastRoutes.validatePeriods = validatePeriods;
+module.exports = createForecastRoutes;

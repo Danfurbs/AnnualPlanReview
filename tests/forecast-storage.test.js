@@ -52,6 +52,23 @@ test('v1 code and v0 description aliases replace rather than add together', () =
   assert.equal(forecast.recalculatePeriodsFromWgs(result).P1, 3);
 });
 
+test('existing explicit zeros, forecast comments, and amendment metadata survive a storage round trip', () => {
+  const forecast = loadForecastStorage();
+  const data = new Map([['000123', {
+    periods: { P6: 0 },
+    wgs: { Track: { P6: 0 } },
+    comments: { Track: 'Keep this RF6 context' },
+    amendments: { 'Track:P6': { original: 8, updatedAt: '2026-08-13T00:00:00.000Z' } }
+  }]]);
+
+  assert.equal(forecast.saveForecastToStorage(data, 1, 'FY27', 'v1', false), true);
+  const restored = forecast.loadForecastFromStorage('FY27', 'v1').data.get('000123');
+  assert.equal(Object.hasOwn(restored.wgs.Track, 'P6'), true);
+  assert.equal(restored.wgs.Track.P6, 0);
+  assert.equal(restored.comments.Track, 'Keep this RF6 context');
+  assert.equal(restored.amendments['Track:P6'].original, 8);
+});
+
 test('standard-job breakdown edits persist through the per-job API', async () => {
   const calls = [];
   const forecast = loadForecastStorage(new Map(), {

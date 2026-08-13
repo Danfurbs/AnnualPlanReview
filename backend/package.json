@@ -8,7 +8,9 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "init-db": "node scripts/init-db.js",
-    "init-db-pg": "node scripts/init-db-pg.js"
+    "init-db-pg": "node scripts/init-db-pg.js",
+    "reconcile-pg": "node scripts/reconcile-production-pg.js",
+    "verify-backup-pg": "bash scripts/verify-backup-restore.sh"
   },
   "keywords": ["annual-plan", "forecast", "api"],
   "author": "",
