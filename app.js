@@ -2691,10 +2691,12 @@
     }
 
     function getMainPageActual(forecastValue, workDonePeriods, period, cutoffPeriod) {
-      const hasReportedWork = Object.prototype.hasOwnProperty.call(workDonePeriods || {}, period);
-      return getPeriodNumber(period) <= cutoffPeriod || hasReportedWork
-        ? Number(workDonePeriods?.[period] || 0)
-        : Number(forecastValue || 0);
+      return getActualOrForecastForCutoff(
+        forecastValue,
+        workDonePeriods,
+        getPeriodNumber(period),
+        cutoffPeriod
+      );
     }
 
     function initForecastCutoffTimeline() {
@@ -2924,8 +2926,8 @@
           const p = `P${i}`;
           const fv = f?.periods[p]||0;
           const avRaw = a?.periods[p]||0;
-          // A reported period must remain actual even when it falls after a manually
-          // selected cutoff. The cutoff only determines how unreported periods are filled.
+          // The selected cutoff is authoritative: later periods use forecast even
+          // when the work-done upload already contains values for those periods.
           const av = getMainPageActual(fv, a?.periods, p, maxWorkDonePeriod);
           job.periods[p] = {f:fv, a:av, wd:avRaw, v:av-fv};
           job.tot.f += fv;
@@ -4054,9 +4056,8 @@
           p,
           forecastCutoffPeriod
         );
-        // Match the dashboard calculation exactly: reported Work Done remains
-        // actual even beyond a manual cutoff, while only unreported periods
-        // are completed from the selected comparison forecast.
+        // Match the dashboard calculation exactly: only periods through the
+        // selected cutoff use Work Done; all later periods use forecast.
         cumActual.push(cumA);
         if (v0Periods) {
           cumV0 += Number(v0Periods[p]) || 0;
