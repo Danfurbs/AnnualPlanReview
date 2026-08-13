@@ -459,3 +459,8 @@ Highest priorities are:
 10. Add the targeted modal/UI refinements above.
 
 The existing Forecast Builder, exception dashboard, drill-down, comments, review stages, Work Order corrections and export capability remain the right foundations. The main objective now is to make the business semantics precise without adding governance mechanisms that are not required by the actual process.
+
+Existing data is production data and must be preserved.
+Changes made as a result of this specification must retain all currently stored forecast data, including V0, V1 amendments, comments, RF review status and corrected Work Order records. Existing data must remain readable and editable following implementation.
+Database/schema changes must be backwards-safe and migratory rather than destructive. No existing records should be deleted, reset or silently reinterpreted as part of implementation.
+Where a proposed implementation would require changing the meaning of existing persisted data, stop and flag this before proceeding.
