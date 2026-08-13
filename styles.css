@@ -211,6 +211,7 @@
     .job-pill.priority { background: #fee2e2; color: #b91c1c; }
     .job-pill.reviewed { background: #dcfce7; color: #15803d; }
     .job-pill.needs-review { background: #fef3c7; color: #92400e; }
+    .job-pill.reforecast { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
     .job-card-title { font-weight: 800; font-size: 16px; color: #0f172a; }
     .job-card-subtitle { color: #64748b; font-size: 13px; font-weight: 600; }
     .job-card-body { display: flex; gap: 20px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
