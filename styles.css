@@ -238,12 +238,14 @@
     .forecast-nonzero { color: #3b82f6; font-weight: 600; }
     .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000; }
     .modal.open { display: flex; }
+    body:has(.modal.open) { overflow: hidden; }
     .modal-content { background: white; border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; border: 2px solid transparent; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18); }
     .modal-content.modal-content--wide { max-width: 1100px; width: 95%; max-height: 90vh; }
     .modal-content.rag-good { border-color: #22c55e; border-width: 4px; }
     .modal-content.rag-warning { border-color: #f59e0b; border-width: 4px; }
     .modal-content.rag-bad { border-color: #ef4444; border-width: 4px; }
     .modal-header { display: flex; justify-content: space-between; margin-bottom: 20px; }
+    #breakdown .modal-header { position: sticky; top: -24px; z-index: 20; margin: -24px -24px 20px; padding: 24px 24px 12px; background: white; border-radius: 8px 8px 0 0; }
     .close { background: none; color: #718096; font-size: 24px; padding: 0; width: 32px; height: 32px; cursor: pointer; }
     .file-input-group { margin-bottom: 16px; }
     .file-input-group label { display: block; font-weight: 600; margin-bottom: 8px; }

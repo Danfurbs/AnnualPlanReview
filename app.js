@@ -1350,20 +1350,7 @@
     }
 
     function getVarianceStatus(pd) {
-      const variance = Number(pd?.v || 0);
-      const forecast = Number(pd?.f || 0);
-      const actual = Number(pd?.a || 0);
-      const hasNoForecast = forecast === 0;
-      if (hasNoForecast) {
-        return {
-          status: actual === 0 ? 'good' : 'noforecast',
-          hasVariance: variance !== 0,
-          hasNoForecast: true
-        };
-      }
-      const ratio = Math.abs(variance / forecast);
-      const status = ratio > 0.5 ? 'bad' : ratio > 0.1 ? 'warning' : 'good';
-      return { status, hasVariance: variance !== 0, hasNoForecast: false };
+      return getForecastVarianceStatus(pd?.f, pd?.a);
     }
 
     function escapeHtml(value) {
@@ -1467,47 +1454,28 @@
       let goodCount = 0;
       let warningCount = 0;
       let criticalCount = 0;
-      let noForecastCount = 0;
       baseFiltered.forEach(job => {
         const displayData = getJobDisplayData(job);
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
-        const forecast = Math.abs(pd.f || 0);
-        const variance = Math.abs(pd.v || 0);
-
-        // Check if job has no forecast
-        if (forecast === 0 && (pd.a || 0) === 0) {
-          noForecastCount++;
-          return;
-        }
-
-        const variancePercent = forecast > 0 ? (variance / forecast) * 100 : (variance !== 0 ? 100 : 0);
-
-        if (variancePercent < 10) {
-          goodCount++;
-        } else if (variancePercent < 50) {
-          warningCount++;
-        } else {
-          criticalCount++;
-        }
+        const status = getVarianceStatus(pd).status;
+        if (status === 'good') goodCount++;
+        else if (status === 'warning') warningCount++;
+        else criticalCount++;
       });
 
       const totalJobs = baseFiltered.length;
-      const jobsWithForecast = goodCount + warningCount + criticalCount;
       const goodPercent = totalJobs > 0 ? Math.round((goodCount / totalJobs) * 100) : 0;
       const warningPercent = totalJobs > 0 ? Math.round((warningCount / totalJobs) * 100) : 0;
       const criticalPercent = totalJobs > 0 ? Math.round((criticalCount / totalJobs) * 100) : 0;
-      const noForecastPercent = totalJobs > 0 ? Math.round((noForecastCount / totalJobs) * 100) : 0;
 
       // Update segmented health bar
       const healthBarGreen = document.getElementById('healthBarGreen');
       const healthBarAmber = document.getElementById('healthBarAmber');
       const healthBarRed = document.getElementById('healthBarRed');
-      const healthBarGrey = document.getElementById('healthBarGrey');
 
       if (healthBarGreen) healthBarGreen.style.width = `${goodPercent}%`;
       if (healthBarAmber) healthBarAmber.style.width = `${warningPercent}%`;
       if (healthBarRed) healthBarRed.style.width = `${criticalPercent}%`;
-      if (healthBarGrey) healthBarGrey.style.width = `${noForecastPercent}%`;
 
       // Update job count display
       const healthJobCount = document.getElementById('healthJobCount');
@@ -1522,18 +1490,15 @@
       updateEl('healthGoodCount', goodCount);
       updateEl('healthWarningCount', warningCount);
       updateEl('healthCriticalCount', criticalCount);
-      updateEl('healthNoForecastCount', noForecastCount);
 
       updateEl('healthGoodPercent', `${goodPercent}%`);
       updateEl('healthWarningPercent', `${warningPercent}%`);
       updateEl('healthCriticalPercent', `${criticalPercent}%`);
-      updateEl('healthNoForecastPercent', `${noForecastPercent}%`);
 
       // Update legend counts
       updateEl('legendGoodCount', goodCount);
       updateEl('legendWarningCount', warningCount);
       updateEl('legendCriticalCount', criticalCount);
-      updateEl('legendNoForecastCount', noForecastCount);
 
       // Update active state for filter
       document.querySelectorAll('.health-stat[data-filter]').forEach(stat => {
@@ -3071,8 +3036,6 @@
         if (varianceFilter === 'noforecast') return hasNoForecast;
         if (varianceFilter === 'over') return pd.v > 0;
         if (varianceFilter === 'under') return pd.v < 0;
-        // For good/warning/bad filters, exclude jobs with no forecast
-        if (hasNoForecast) return false;
         return status === varianceFilter;
       };
 
