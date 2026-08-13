@@ -3124,6 +3124,7 @@
       const topVariancePeriod = period === 'all' && maxWorkDonePeriod > 0 ? `P${maxWorkDonePeriod}` : period;
       updateTopBarStats({ jobs: baseJobs, baseFiltered, period: topVariancePeriod, getJobDisplayData, reviewStage, varianceFilter, reviewStatusFilter });
       updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter });
+      const reforecastJobs = getForecastSnapshot(currentFinancialYear, 'v1')?.data || new Map();
 
       // Custom discipline order: ALL, P-Way, W&G, Off Track, S&T, E&P CS, E&P D, then groups/others
       const disciplineOrder = ['ALL', 'P-Way', 'W&G', 'Off Track', 'S&T', 'E&P CS', 'E&P D'];
@@ -3215,6 +3216,7 @@
           const { status: stat } = getVarianceStatus(pd);
           const vc = pd.v>0 ? 'positive' : pd.v<0 ? 'negative' : 'neutral';
           const isGroupRollup = Boolean(j.isGroupRollup);
+          const hasReforecast = !isGroupRollup && reforecastJobs.has(j.jn);
           const isPriority = !isGroupRollup && ['009112', '009113'].includes(j.jn);
           const reviewStatus = isGroupRollup ? 'not_reviewed' : getJobReviewStatus(j.jn, currentFinancialYear, reviewStage);
           const isReviewed = !isGroupRollup && reviewStatus === 'reviewed';
@@ -3303,6 +3305,7 @@
                 ${isPriority ? '<span class="job-pill priority">Priority</span>' : ''}
                 ${isGroupRollup ? '<span class="group-pill">Group</span>' : ''}
                 ${!isGroupRollup ? `<span class="job-pill ${statusClass}">${statusLabel}</span>` : ''}
+                ${hasReforecast ? '<span class="job-pill reforecast" title="This standard job has Plan v1 forecast values">Reforecast</span>' : ''}
               </div>
             </div>
 
@@ -3911,6 +3914,7 @@
         currentBreakdownJobNumber = job.jn;
       }
       const period = normalizePeriodKey(document.getElementById('period')?.value || 'all');
+      const resolvedJob = getBreakdownTableJob(job, breakdownPlanVersion === 'v0' ? 'v0' : 'v1');
       const wgLabel = wgFilter === 'all' ? '' : ` • ${wgFilter}`;
       const breakdownModal = document.getElementById('breakdown');
       const modalContent = breakdownModal?.querySelector('.modal-content');
@@ -3921,16 +3925,17 @@
         ? [wgFilter]
         : selectedEngineerWorkGroups?.length ? selectedEngineerWorkGroups : null;
       const displayData = (() => {
-        if (!dashboardScopeWorkGroups) {
-          return { periods: job.periods, tot: job.tot };
-        }
+        const resolvedWorkGroups = new Map(Object.keys(resolvedJob.wgs || {}).map(
+          workGroup => [normalizeWorkGroupSet(workGroup), workGroup]
+        ));
+        const statusWorkGroups = dashboardScopeWorkGroups || [...resolvedWorkGroups.keys()];
         const periods = {};
         const totals = { f: 0, a: 0, wd: 0, v: 0 };
         for (let i = 1; i <= 13; i++) {
           const p = `P${i}`;
-          const data = dashboardScopeWorkGroups.reduce((sum, workGroup) => {
-            const normalized = normalizeWorkGroupSet(workGroup);
-            const scoped = job.wgs?.[normalized]?.periods?.[p];
+          const data = statusWorkGroups.reduce((sum, workGroup) => {
+            const resolvedWorkGroup = resolvedWorkGroups.get(normalizeWorkGroupSet(workGroup));
+            const scoped = resolvedJob.wgs?.[resolvedWorkGroup]?.periods?.[p];
             if (!scoped) return sum;
             sum.f += scoped.f || 0;
             sum.a += scoped.a || 0;
@@ -3980,7 +3985,7 @@
 
       const chartScopeSelect = document.getElementById('breakdownChartScope');
       const chartScopeTargetSelect = document.getElementById('breakdownChartScopeTarget');
-      const jobWorkGroups = Object.keys(job.wgs || {});
+      const jobWorkGroups = Object.keys(resolvedJob.wgs || {});
       const jobWorkGroupSet = new Set(jobWorkGroups.map(normalizeWorkGroupSet));
       const availableEngineers = (window.getEngineers ? window.getEngineers() : []).filter(engineer =>
         (window.getEngineerWorkGroups?.(engineer.id) || []).some(workGroup => jobWorkGroupSet.has(normalizeWorkGroupSet(workGroup)))
