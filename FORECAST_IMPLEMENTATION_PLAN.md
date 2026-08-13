@@ -8,6 +8,37 @@ The implementation must prioritise operational stability during the active RF6 r
 
 No implementation should begin until the safety tests, production-data audit, backup, and restore verification described below are complete.
 
+## Implementation status
+
+**Status date:** 13 August 2026<br>
+**Status legend:** ✅ Implemented · 🟡 Partially implemented/prepared · ⏸️ Deferred until after RF6 · ❌ Not implemented
+
+This status records what is present in the repository. A script being available does not mean it has been run against production. In particular, production reconciliation and backup/restore verification still require operator-supplied PostgreSQL connection details and retained evidence of successful execution.
+
+| Area | Status | Current position | Remaining work |
+| --- | --- | --- | --- |
+| Existing V0/V1 inheritance | ✅ Implemented before this plan | Read-time V1-over-V0 inheritance and explicit-zero semantics remain in place. | Preserve this behaviour while changing future writers. |
+| Preservation characterization tests | 🟡 Partial | Tests cover missing V1 inheritance, explicit zero, Work Group aliases, storage round-trip of an explicit zero/comment/amendment metadata, per-job persistence, revision-conflict rollback, comments, and review-status dimensions. | Add full browser/API/PostgreSQL preservation coverage, especially Work Order corrections and all V1 editing paths. |
+| Production reconciliation | 🟡 Prepared, not executed | A repeatable-read, read-only reconciliation script reports forecast/zero counts, negative forecasts, comments, statuses, V1 override metadata, Work Done snapshots, and Work Order amendments. | Run against production with `DATABASE_URL`, retain the JSON report, and compare it after deployment. |
+| PostgreSQL backup/restore | 🟡 Prepared, not verified | A guarded script creates a dump, restores only to a separately supplied disposable database, and compares reconciliation reports. | Run with production and disposable restore URLs, retain the dump and successful verification evidence. |
+| Server-side non-negative validation | 🟡 Partial | Per-job and full forecast API payload validation rejects negative detailed and aggregate period values while accepting zero. | Browser paste/import characterization remains; no database constraint has been added. |
+| RAG correctness | ✅ Implemented for current dashboard consumers | Central logic applies 10% Amber, 50% Red, direction symmetry, zero/zero Green, and zero forecast/non-zero Actual Red. | Extend tests when the post-RF6 dashboard calculation model is refactored. |
+| Terminology/UI clarification | 🟡 Partial | Primary dashboard and breakdown controls use V0/V1/Reforecast, Reporting Period, Under Delivery, and Over Delivery terminology. | Audit remaining legacy labels and add fuller Work Done/Actual explanations after RF6. |
+| Modal background scroll lock | ✅ Implemented | The page body is locked while a modal is open. | Browser regression coverage remains desirable. |
+| Persistent Breakdown Close/X | ✅ Implemented | The Standard Job Breakdown header is sticky and its Close/X has an accessible label. | Browser regression coverage remains desirable. |
+| Reporting Period browser persistence | ❌ Not implemented | The existing Auto option and current cutoff behaviour remain unchanged to avoid a broader RF6 behaviour change. | After RF6, remove inference, require manual selection, and persist by FY in the browser only. |
+| P0 / No completed period | ⏸️ Deferred | Business intent is resolved. | Implement after RF6 alongside Reporting Period changes. |
+| Sparse V1 production writers | ⏸️ Deferred | Existing writers were deliberately left unchanged during active RF6 use. | Characterize every writer, then introduce period-level sparse writes without rewriting existing V1 data. |
+| Dashboard comparison refactor | ⏸️ Deferred | No broad Work Done/Actual/dashboard refactor has been made. | Implement the two clarified comparisons after RF6. |
+| Annual V0-to-Reforecast movement | ⏸️ Deferred | Not implemented. | Implement after RF6. |
+| Export redesign | ⏸️ Deferred | Existing exports remain unchanged. | Implement resolved Reforecast and scoped exports after RF6. |
+| Review pack and authentication | ⏸️ Deferred | Not implemented. | Consider as later isolated work. |
+| Migration framework/schema constraint | ⏸️ Deferred | No schema migration or data rewrite has been made. | Reassess after RF6 and only after the production negative-value audit. |
+
+### RF6 release status summary
+
+The isolated code changes approved for RF6 are present: RAG boundary/zero rules, server request validation, terminology refinements, modal scroll lock, and the persistent Breakdown Close/X. Preservation tests and operational tooling have been added, but the production reconciliation and backup/restore steps are **not complete until they are actually run and evidenced in the target environment**. No sparse-V1 writer, reporting-period behaviour, database schema, stored forecast, comment, review-status, Work Done, or Work Order amendment data was migrated or rewritten by these changes.
+
 ## Target operating model
 
 The clarified target is a lightweight operational review tool, not a formal forecast-governance system:
@@ -78,7 +109,7 @@ The current **Auto** option is not correct and is addressed under required chang
 
 ## Required changes, in priority order
 
-### Priority 0 — preservation controls before runtime changes
+### Priority 0 — preservation controls before runtime changes 🟡 Partially implemented
 
 1. Add characterization and regression tests for every affected calculation and persistence path.
 2. Take and verify a restorable PostgreSQL backup.
@@ -94,7 +125,7 @@ The current **Auto** option is not correct and is addressed under required chang
 5. Use a short-lived calculation/UI rollout flag if deployment practice permits, allowing presentation changes to be rolled back without touching stored data.
 6. Deploy server-side guards before changing the editor's write representation.
 
-### Priority 1 — make new V1 writes genuinely sparse by period
+### Priority 1 — make new V1 writes genuinely sparse by period ⏸️ Deferred until after RF6
 
 The effective read logic is sparse, but current editor paths can materialise all P1–P13 values, often coercing blank or missing values to zero. This can prevent later V0 corrections from flowing into periods that the user never intended to amend.
 
@@ -118,7 +149,7 @@ Clarify editing intent in the UI:
 
 Do not retrospectively compact existing V1 data. Every currently stored V1 property, including zero and values copied from V0, must be treated as explicit because its original intent cannot be inferred safely.
 
-### Priority 2 — reject negative forecasts at every boundary
+### Priority 2 — reject negative forecasts at every boundary 🟡 Server validation implemented; other boundaries pending
 
 - Reject negative values in V0 and V1 editor inputs, paste/bulk upload, JSON import, per-job API saves, and full forecast API saves.
 - Return a descriptive validation error identifying Standard Job, Work Group, and period.
@@ -126,7 +157,7 @@ Do not retrospectively compact existing V1 data. Every currently stored V1 prope
 - Never silently clamp a negative value to zero.
 - Validate the complete payload before any full-snapshot delete/reinsert operation begins.
 
-### Priority 3 — require a manually selected reporting period
+### Priority 3 — require a manually selected reporting period ⏸️ Deferred until after RF6
 
 - Remove the **Auto** cutoff control and maximum-Work-Done-period inference.
 - Require an explicit reporting-period selection before displaying performance calculations.
@@ -136,7 +167,7 @@ Do not retrospectively compact existing V1 data. Every currently stored V1 prope
 - Rename **Forecast starts after** to **Reporting Period** and explain that it is the latest period considered complete.
 - Continue showing future-period Work Orders in detail while excluding their units from Work Done-to-date and the completed portion of Actual.
 
-### Priority 4 — centralise and correct variance/RAG behaviour
+### Priority 4 — centralise and correct variance/RAG behaviour ✅ Implemented for current dashboard consumers
 
 Create one pure calculation used by cards, summaries, top-ten views, drill-down, filters, and exports:
 
@@ -153,7 +184,7 @@ Create one pure calculation used by cards, summaries, top-ten views, drill-down,
 
 The current strict boundary comparisons must be corrected so exactly 10% is Amber and exactly 50% is Red. The grey **No Forecast** outcome for positive Work Done against zero forecast must become Red.
 
-### Priority 5 — show the two required dashboard comparisons clearly
+### Priority 5 — show the two required dashboard comparisons clearly ⏸️ Deferred until after RF6
 
 Prominently display:
 
@@ -168,7 +199,7 @@ Prominently display:
 
 Retain the business term **Actual** rather than applying the governance review's EAC rename. Refactor ambiguous internal view-model names such as `f`, `a`, `wd`, and `v` toward explicit calculation names without changing stored data.
 
-### Priority 6 — show annual V0-to-Reforecast movement
+### Priority 6 — show annual V0-to-Reforecast movement ⏸️ Deferred until after RF6
 
 At the active portfolio, Delivery Unit, engineer, Work Group Set, and Standard Job scope, show:
 
@@ -179,7 +210,7 @@ At the active portfolio, Delivery Unit, engineer, Work Group Set, and Standard J
 
 When V0 is zero, show the unit change and an `N/A` percentage rather than dividing by zero. No mandatory driver taxonomy is required.
 
-### Priority 7 — correct and extend exports without breaking old formats
+### Priority 7 — correct and extend exports without breaking old formats ⏸️ Deferred until after RF6
 
 Retain distinct exports for:
 
@@ -200,7 +231,7 @@ The Reforecast business export must resolve every cell as:
 
 Include FY, export type, selected reporting period, relevant RF stage, and generation timestamp. Keep the existing JSON forecast format readable and importable for backwards compatibility.
 
-### Priority 8 — terminology and editing clarity
+### Priority 8 — terminology and editing clarity 🟡 Partially implemented
 
 - `Plan v0` → **V0 — Original Approved Plan**.
 - `Plan v1 (Updated)` → **V1 / Reforecast**.
@@ -211,14 +242,14 @@ Include FY, export type, selected reporting period, relevant RF stage, and gener
 - Explain that Reviewed means review completion, not approval, freezing, or immutability.
 - Remove wording that suggests V1 must first be initialised as a complete copy of V0.
 
-### Priority 9 — targeted modal refinements
+### Priority 9 — targeted modal refinements ✅ Implemented
 
 - Lock background-page scrolling while any modal is open.
 - Restore scrolling only after the last modal closes.
 - Keep the Standard Job Breakdown close/X control visible while the modal content scrolls.
 - Avoid a broad UI or accessibility redesign during RF6.
 
-### Priority 10 — review pack after calculation stability
+### Priority 10 — review pack after calculation stability ⏸️ Deferred
 
 After the calculation and export changes are verified, add a PDF review pack containing FY, RF stage, reporting period, headline RAG/variance, Work Done versus latest forecast, full-year Actual, relevant comments, review status/context, the existing performance graph, and deliberate blank notes space.
 
@@ -253,7 +284,7 @@ The current `forecasts` table can already represent the required semantics:
 
 No replacement forecast table, RF-stage column, submission ID, or V1 data rewrite is needed.
 
-### Backwards-safe non-negative constraint
+### Backwards-safe non-negative constraint ⏸️ Not applied during RF6
 
 First run a read-only legacy audit:
 
@@ -282,7 +313,7 @@ If negative rows exist:
 - reject new negative writes at application/API boundaries;
 - defer constraint validation until each legacy value receives an explicitly authorised correction.
 
-### Reporting-period persistence
+### Reporting-period persistence ⏸️ Deferred until after RF6
 
 Reporting Period is a user/browser view selection for RF6, not shared PostgreSQL business data. Persist it only in the session/browser with an FY-scoped key. Do not introduce a reporting-context database migration, add reporting period to forecast/comment/review/Work Done identities, or infer a value from Work Done or RF stage.
 
@@ -352,9 +383,11 @@ Before applying any post-RF6 schema change:
 - Keep current serialized forecast and older stage-nested import formats readable.
 - Store any new reporting-period preference under a new versioned key.
 
-## Test plan
+## Test plan and current coverage
 
-### Sparse V1 tests
+The status markers below distinguish tests already present from future coverage. They do not indicate that production reconciliation or restore verification has been performed.
+
+### Sparse V1 tests 🟡 Partial
 
 - Missing V1 job, Work Group, and period inherit V0.
 - Explicit V1 zero overrides positive V0.
@@ -365,14 +398,14 @@ Before applying any post-RF6 schema change:
 - A V0 correction changes inherited effective periods but not explicit V1 periods.
 - Work Group aliases do not double-count.
 
-### Validation tests
+### Validation tests 🟡 Partial
 
 - Negative browser entry, paste/import, per-job API save, and full API save are rejected.
 - Full-payload rejection occurs before stored rows are deleted.
 - Zero and positive decimals remain accepted.
 - Failed validation leaves the previous PostgreSQL state unchanged.
 
-### Reporting-period tests
+### Reporting-period tests ⏸️ Deferred with the behaviour change
 
 - Performance is unavailable until a reporting period is selected.
 - Future Work Done never advances the period.
@@ -381,7 +414,7 @@ Before applying any post-RF6 schema change:
 - Work Done after P5 is excluded until the selected period advances.
 - Explicit zero Work Done through the cutoff remains zero.
 
-### RAG tests
+### RAG tests ✅ Implemented for current rules
 
 Test over- and under-delivery for:
 
@@ -393,7 +426,7 @@ Test over- and under-delivery for:
 - equal magnitude in either direction → equal RAG; and
 - higher-level RAG calculated from aggregate volumes rather than child colours.
 
-### Dashboard and aggregation tests
+### Dashboard and aggregation tests ⏸️ Deferred with the dashboard refactor
 
 - Period-to-date corrected Work Done versus effective forecast.
 - Actual equals corrected Work Done through cutoff plus effective forecast afterwards.
@@ -403,7 +436,7 @@ Test over- and under-delivery for:
 - Zero-V0 percentage presentation is safe.
 - Engineer, Work Group Set, Delivery Unit, and portfolio totals reconcile to detail.
 
-### Comments, review status, and correction tests
+### Comments, review status, and correction tests 🟡 Partial
 
 - Forecast edits and V1 resets retain forecast comments.
 - Historical comments remain isolated by FY/RF stage and are not copied.
@@ -412,7 +445,7 @@ Test over- and under-delivery for:
 - Revert restores the original units.
 - Corrected Work Order export retains reconciliation details.
 
-### Export tests
+### Export tests ⏸️ Deferred with export redesign
 
 - V0 export contains V0 only.
 - Reforecast export uses corrected Work Done through cutoff and effective future V1/V0.
@@ -421,7 +454,7 @@ Test over- and under-delivery for:
 - Existing JSON imports/exports remain compatible.
 - Comment and amended Work Order exports remain accessible.
 
-### Migration and recovery tests
+### Migration and recovery tests 🟡 Tooling prepared; production execution pending
 
 - Apply each migration twice to an existing production-shaped schema.
 - Compare row counts/checksums before and after.
@@ -430,7 +463,7 @@ Test over- and under-delivery for:
 - Verify stale full-save revisions roll back before deletion.
 - Restore the production backup into a temporary database and run reconciliation queries.
 
-### RF6 end-to-end preservation scenario
+### RF6 end-to-end preservation scenario ❌ Not yet automated
 
 Automate a browser flow that selects RF6 and P5, loads V0 plus sparse V1, creates an explicit-zero future amendment, corrects V1, corrects an inherited V0 period, amends a P4 Work Order, adds a comment, marks Reviewed, reloads, and verifies that all values, comments, review status, and Work Order correction remain accessible. Finally verify V0, Reforecast, comment, and corrected Work Order exports.
 
