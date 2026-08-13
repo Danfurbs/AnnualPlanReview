@@ -3716,7 +3716,10 @@
         });
       }
       forecastJob.periods = recalculatePeriodsFromWgs(forecastJob.wgs);
-      const saved = await saveForecastJobToStorageAsync(job.jn, forecastJob, snapshot, currentFinancialYear, 'v1');
+      const hasRemainingOverrides = Object.keys(forecastJob.wgs || {}).length > 0;
+      const saved = hasRemainingOverrides
+        ? await saveForecastJobToStorageAsync(job.jn, forecastJob, snapshot, currentFinancialYear, 'v1')
+        : await deleteForecastJobFromStorageAsync(job.jn, snapshot, currentFinancialYear, 'v1');
       if (resetButton) resetButton.disabled = false;
       if (!saved) {
         window.Toast?.error('Plan v1 reset was not saved. Please try again.');
@@ -3724,7 +3727,7 @@
       }
 
       // Keep job-level tracking while any other work group remains overridden.
-      if (Object.keys(forecastJob.wgs || {}).length === 0) {
+      if (!hasRemainingOverrides) {
         await removeFromV1OverridesAsync(currentFinancialYear, [job.jn]);
       }
       if (currentPlanVersion === 'v1') fData = getEffectiveForecastSnapshot(currentFinancialYear).data;

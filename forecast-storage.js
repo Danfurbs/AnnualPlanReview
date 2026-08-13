@@ -480,6 +480,38 @@ async function saveForecastJobToStorageAsync(jobNumber, forecastJob, snapshot, y
   return savedLocally;
 }
 
+/**
+ * Delete one job from a sparse forecast snapshot and persist the deletion.
+ *
+ * The per-job API treats an empty forecast as a deletion because its database
+ * save replaces all rows for that job. Offline storage persists the already
+ * pruned snapshot directly.
+ */
+async function deleteForecastJobFromStorageAsync(jobNumber, snapshot, year, planVersion) {
+  if (!jobNumber || !snapshot?.data || !year || !planVersion) return false;
+
+  const forecastJob = snapshot.data.get(jobNumber);
+  snapshot.data.delete(jobNumber);
+  if (window.isApiEnabled?.() && window.saveForecastJobToApi) {
+    const emptyForecastJob = { periods: {}, wgs: {}, comments: {}, amendments: {} };
+    const savedToApi = await window.saveForecastJobToApi(jobNumber, emptyForecastJob, year, planVersion);
+    if (savedToApi) {
+      rememberForecastSnapshot(snapshot.data, snapshot.data.size, year, planVersion);
+      return true;
+    }
+
+    if (window.API_CONFIG?.forceServerPersistence) {
+      if (forecastJob) snapshot.data.set(jobNumber, forecastJob);
+      return false;
+    }
+  }
+
+  const savedLocally = saveForecastToStorage(snapshot.data, snapshot.data.size, year, planVersion, false);
+  if (savedLocally) rememberForecastSnapshot(snapshot.data, snapshot.data.size, year, planVersion);
+  else if (forecastJob) snapshot.data.set(jobNumber, forecastJob);
+  return savedLocally;
+}
+
 function rememberForecastSnapshot(forecastData, rowCount, year, planVersion) {
   window.forecastMemorySnapshots ||= new Map();
   window.forecastMemorySnapshots.set(`${year}:${planVersion}`, {
@@ -1045,6 +1077,7 @@ window.loadForecastFromStorageAsync = loadForecastFromStorageAsync;
 window.saveForecastToStorage = saveForecastToStorage;
 window.saveForecastToStorageAsync = saveForecastToStorageAsync;
 window.saveForecastJobToStorageAsync = saveForecastJobToStorageAsync;
+window.deleteForecastJobFromStorageAsync = deleteForecastJobFromStorageAsync;
 window.loadForecastFromLibrary = loadForecastFromLibrary;
 window.loadForecastFromGitHub = loadForecastFromGitHub;
 window.loadForecastFromLibraryAsync = loadForecastFromLibraryAsync;

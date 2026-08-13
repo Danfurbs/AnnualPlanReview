@@ -101,3 +101,39 @@ test('standard-job breakdown edits fall back to local persistence outside Render
   assert.equal(await forecast.saveForecastJobToStorageAsync('000456', job, snapshot, 'FY26', 'v1'), true);
   assert.equal(forecast.loadForecastFromStorage('FY26', 'v1').data.get('000456').wgs.Track.P1, 9);
 });
+
+test('deleting the last v1 work group removes and persists the sparse job entry', async () => {
+  const calls = [];
+  const forecast = loadForecastStorage(new Map(), {
+    isApiEnabled: () => true,
+    saveForecastJobToApi: async (...args) => {
+      calls.push(args);
+      return true;
+    }
+  });
+  const snapshot = { data: new Map([['000123', { wgs: {}, periods: {}, comments: {} }]]) };
+
+  const deleted = await forecast.deleteForecastJobFromStorageAsync('000123', snapshot, 'FY26', 'v1');
+
+  assert.equal(deleted, true);
+  assert.equal(snapshot.data.has('000123'), false);
+  assert.equal(forecast.getForecastSnapshot('FY26', 'v1').data.has('000123'), false);
+  assert.equal(calls[0][0], '000123');
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[0][1])), {
+    periods: {}, wgs: {}, comments: {}, amendments: {}
+  });
+  assert.deepEqual(calls[0].slice(2), ['FY26', 'v1']);
+});
+
+test('deleting a sparse forecast job persists locally when the API is disabled', async () => {
+  const forecast = loadForecastStorage();
+  const snapshot = { data: new Map([
+    ['000123', { wgs: {}, periods: {}, comments: {} }],
+    ['000456', { wgs: { Track: { P1: 4 } }, periods: { P1: 4 }, comments: {} }]
+  ]) };
+
+  assert.equal(await forecast.deleteForecastJobFromStorageAsync('000123', snapshot, 'FY26', 'v1'), true);
+  const restored = forecast.getForecastSnapshot('FY26', 'v1').data;
+  assert.equal(restored.has('000123'), false);
+  assert.equal(restored.get('000456').wgs.Track.P1, 4);
+});
