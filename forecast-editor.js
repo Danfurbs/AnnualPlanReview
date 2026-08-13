@@ -384,6 +384,7 @@ function getV1WorkGroupComparison(year) {
     && window.forecastEditorState.planVersion === 'v1'
     && forecastEditorData
     ? forecastEditorData
+    // Intentionally raw: comparison badges describe explicitly copied/edited v1 work groups, not inherited effective values.
     : (getForecastSnapshot(year, 'v1')?.data || new Map());
   const groups = new Set();
   const collect = data => data.forEach(job => Object.keys(job?.wgs || {}).forEach(code => groups.add(normalizeWorkGroupSet(code))));
@@ -419,6 +420,7 @@ let selectedCopyWorkGroups = new Set();
 
 function getWorkGroupCopySummary(year) {
   const v0 = getForecastSnapshot(year, 'v0')?.data || new Map();
+  // Intentionally raw: this copy tool must identify what is already stored in v1 before overwriting selected overrides.
   const v1 = getForecastSnapshot(year, 'v1')?.data || new Map();
   const groups = new Set();
   [v0, v1].forEach(data => data.forEach(job => Object.keys(job?.wgs || {}).forEach(key => groups.add(normalizeWorkGroupSet(key)))));
@@ -521,6 +523,7 @@ async function copySelectedWorkGroupsToV1() {
   if (!groups.size) return;
   const year = window.forecastEditorState.year;
   const v0 = getForecastSnapshot(year, 'v0')?.data;
+  // Intentionally raw: copying modifies the sparse v1 payload directly and must not persist inherited v0 work groups.
   const current = getForecastSnapshot(year, 'v1')?.data;
   if (!v0) return;
   const amendedCount = copyWorkGroupRows.filter(row => groups.has(row.group) && row.status === 'amended').length;
@@ -1110,6 +1113,7 @@ async function initializeV1FromV0Explicit() {
   if (!confirmed) return;
 
   // Get or create v1 data
+  // Intentionally raw: initialization writes selected v0 work groups into the sparse v1 editing payload.
   const v1Snapshot = getForecastSnapshot(year, 'v1');
   const v1Data = v1Snapshot ? cloneForecastData(v1Snapshot.data) : new Map();
   let copiedCount = 0;
@@ -2307,6 +2311,7 @@ function handleMergeForecastImport(fileContent) {
         }
 
         // Get current storage for this year/plan
+        // Intentionally raw: import conflict detection compares uploaded data with the stored payload it may replace, including sparse v1.
         const currentSnapshot = getForecastSnapshot(year, planVersion);
         const currentData = currentSnapshot ? serializeForecastData(currentSnapshot.data) : {};
 
@@ -2540,6 +2545,7 @@ async function applyMergeImport(uploadedForecasts, resolutions) {
       if (!dataToImport || Object.keys(dataToImport).length === 0) continue;
 
       // Get current storage
+      // Intentionally raw: conflict resolution mutates and saves the selected plan's source payload, not its effective display projection.
       const currentSnapshot = getForecastSnapshot(year, planVersion);
       const currentData = currentSnapshot ? cloneForecastData(currentSnapshot.data) : new Map();
 

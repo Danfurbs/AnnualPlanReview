@@ -3635,9 +3635,14 @@
       if (!modal || !grid) return;
       const effectivePeriods = resolveForecastWorkGroupPeriods(getEffectiveForecastJob(currentFinancialYear, job.jn), workGroup) || {};
       const v0Periods = resolveForecastWorkGroupPeriods(getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn), workGroup) || {};
+      // Intentionally raw: the reset action is available only when this work group itself has a sparse v1 override.
+      const rawV1Job = getForecastSnapshot(currentFinancialYear, 'v1')?.data.get(job.jn);
+      const hasOverride = Boolean(resolveForecastWorkGroupPeriods(rawV1Job, workGroup));
       breakdownPlanEditContext = { job, workGroup };
       document.getElementById('workGroupPlanEditTitle').textContent = window.workGroupSets?.get(workGroup) || workGroup;
       document.getElementById('workGroupPlanEditMeta').textContent = `${job.jn} · Plan v1 override`;
+      const resetButton = document.getElementById('resetWorkGroupPlanEdit');
+      if (resetButton) resetButton.hidden = !hasOverride;
       grid.innerHTML = Array.from({ length: 13 }, (_, index) => {
         const period = `P${index + 1}`;
         const value = Number(effectivePeriods[period] || 0);
@@ -3716,9 +3721,56 @@
       if (status) status.textContent = window.isApiEnabled?.() ? 'Plan v1 saved to server' : 'Plan v1 saved locally';
     }
 
+    async function resetBreakdownPlanV1() {
+      if (!breakdownPlanEditContext) return;
+      const { job, workGroup } = breakdownPlanEditContext;
+      const resetButton = document.getElementById('resetWorkGroupPlanEdit');
+      if (resetButton) resetButton.disabled = true;
+
+      // Intentionally raw: reset removes only the stored override, never an inherited v0 work group.
+      const snapshot = await getForecastSnapshotAsync(currentFinancialYear, 'v1');
+      const forecastJob = snapshot?.data.get(job.jn);
+      const storedWorkGroup = Object.keys(forecastJob?.wgs || {}).find(
+        candidate => normalizeWorkGroupSet(candidate) === normalizeWorkGroupSet(workGroup)
+      );
+      if (!snapshot || !forecastJob || !storedWorkGroup) {
+        if (resetButton) resetButton.disabled = false;
+        return;
+      }
+
+      delete forecastJob.wgs[storedWorkGroup];
+      if (forecastJob.comments) delete forecastJob.comments[storedWorkGroup];
+      if (forecastJob.amendments) {
+        Object.keys(forecastJob.amendments).forEach(key => {
+          if (normalizeWorkGroupSet(key.split(':')[0]) === normalizeWorkGroupSet(storedWorkGroup)) {
+            delete forecastJob.amendments[key];
+          }
+        });
+      }
+      forecastJob.periods = recalculatePeriodsFromWgs(forecastJob.wgs);
+      const saved = await saveForecastJobToStorageAsync(job.jn, forecastJob, snapshot, currentFinancialYear, 'v1');
+      if (resetButton) resetButton.disabled = false;
+      if (!saved) {
+        window.Toast?.error('Plan v1 reset was not saved. Please try again.');
+        return;
+      }
+
+      // Keep job-level tracking while any other work group remains overridden.
+      if (Object.keys(forecastJob.wgs || {}).length === 0) {
+        await removeFromV1OverridesAsync(currentFinancialYear, [job.jn]);
+      }
+      if (currentPlanVersion === 'v1') fData = getEffectiveForecastSnapshot(currentFinancialYear).data;
+      closeWorkGroupPlanEditor();
+      render();
+      showBreakdown(window.currentJobsMap.get(job.jn) || job);
+      const status = document.getElementById('breakdownForecastStatus');
+      if (status) status.textContent = 'Work group reset to Plan v0';
+    }
+
     window.openWorkGroupPlanEditor = openWorkGroupPlanEditor;
     window.closeWorkGroupPlanEditor = closeWorkGroupPlanEditor;
     window.saveBreakdownPlanV1 = saveBreakdownPlanV1;
+    window.resetBreakdownPlanV1 = resetBreakdownPlanV1;
 
     function openForecastComparison() {
       if (!currentFinancialYear || !currentReviewStage) {
@@ -3742,6 +3794,7 @@
       const search = (document.getElementById('compareSearch')?.value || '').toLowerCase();
       if (!table) return;
       const v0Snapshot = getForecastSnapshot(currentFinancialYear, 'v0');
+      // Intentionally raw: only source metadata comes from stored v1; comparison values use the effective snapshot below.
       const v1SnapshotRaw = getForecastSnapshot(currentFinancialYear, 'v1');
       const v1Snapshot = getEffectiveForecastSnapshot(currentFinancialYear);
       if (!v0Snapshot) {
@@ -4129,6 +4182,7 @@
       // Work-group edits are available only while viewing v1; the popup saves a sparse override.
       const canEditPlanV1 = !job.isGroupRollup && ['v1', 'both'].includes(breakdownPlanVersion);
       const v0BreakdownJob = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn);
+      // Intentionally raw: presence here drives the per-work-group "Edited" indicator, not displayed forecast values.
       const v1BreakdownJob = getForecastSnapshot(currentFinancialYear, 'v1')?.data.get(job.jn);
       const findForecastWorkGroup = (forecastJob, workGroup) => Object.keys(forecastJob?.wgs || {})
         .find(candidate => normalizeWorkGroupSet(candidate) === normalizeWorkGroupSet(workGroup));
@@ -4375,6 +4429,7 @@
       if (forecastCommentsSection && forecastCommentsContainer) {
         // Get forecast data for this job
         const v0Forecast = getForecastSnapshot(window.currentFinancialYear, 'v0');
+        // Intentionally raw: comments are labelled by the plan where they were authored; inherited v0 comments must not be relabelled v1.
         const v1Forecast = getForecastSnapshot(window.currentFinancialYear, 'v1');
 
         const comments = [];
