@@ -2255,6 +2255,11 @@
           const fy = String(r['Financial Year'] || '').trim() || currentFinancialYear;
           const rf = String(r['Review Stage'] || '').trim() || currentReviewStage;
           if (!jn || jn === '000000' || !text) return;
+          const importedDeliveryUnit = String(r['Delivery Unit ID'] || r['Delivery Unit'] || currentDeliveryUnit).trim();
+          const deliveryUnit = window.resolveDeliveryUnit?.(importedDeliveryUnit);
+          if (!deliveryUnit) {
+            throw new Error(`Unknown Delivery Unit: ${importedDeliveryUnit || '(blank)'}`);
+          }
           if (!commentStore[jn]) commentStore[jn] = [];
           commentStore[jn].unshift({
             id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -2269,10 +2274,8 @@
             owner: String(r['Owner'] || '').trim(),
             dueDate: String(r['Due Date'] || '').trim(),
             evidenceLinks: String(r['Evidence Links'] || '').split(/\n|,/).map(link => link.trim()).filter(Boolean),
-            deliveryUnit: window.encodeCommentDeliveryUnit?.(
-              String(r['Delivery Unit'] || currentDeliveryUnit || 'all').trim()
-            ) || String(r['Delivery Unit'] || '').trim(),
-            filteredWorkGroup: String(r['Work Group Set'] || '').trim()
+            deliveryUnit: window.encodeCommentDeliveryUnit?.(deliveryUnit.id) || deliveryUnit.id,
+            filteredWorkGroup: window.resolveWorkGroupCode?.(r['Work Group Set']) || String(r['Work Group Set'] || '').trim()
           });
           added += 1;
         });
@@ -2284,7 +2287,7 @@
         alert(`Imported ${added} comments.${apiStatus}`);
       } catch (err) {
         console.error(err);
-        alert('Error loading comments');
+        alert(`Error loading comments: ${err.message}`);
       } finally {
         e.target.value = '';
       }
@@ -2324,7 +2327,8 @@
           if (commentFY !== currentFinancialYear) return;
           const category = entry.category || 'General';
           if (selectedType !== 'all' && category !== selectedType) return;
-          const workGroupSet = String(entry.filteredWorkGroup || '').trim();
+          const workGroupSet = window.resolveWorkGroupCode?.(entry.filteredWorkGroup)
+            || String(entry.filteredWorkGroup || '').trim();
           const commentOrganisation = window.getCommentOrganisation?.(entry);
 
           rows.push({
@@ -2338,6 +2342,7 @@
             'Owner': entry.owner || '',
             'Due Date': entry.dueDate || '',
             'Evidence Links': Array.isArray(entry.evidenceLinks) ? entry.evidenceLinks.join('\n') : '',
+            'Delivery Unit ID': commentOrganisation?.deliveryUnit?.id || '',
             'Delivery Unit': commentOrganisation?.deliveryUnit?.name || '',
             'Work Group Set': workGroupSet,
             'Work Group Set Description': workGroupSet
@@ -2352,7 +2357,7 @@
         return;
       }
       const ws = XLSX.utils.json_to_sheet(rows, {
-        header: ['Standard Job Number', 'Comment Type', 'Comment', 'Financial Year', 'Review Stage', 'Root Cause', 'Corrective Action', 'Owner', 'Due Date', 'Evidence Links', 'Delivery Unit', 'Work Group Set', 'Work Group Set Description']
+        header: ['Standard Job Number', 'Comment Type', 'Comment', 'Financial Year', 'Review Stage', 'Root Cause', 'Corrective Action', 'Owner', 'Due Date', 'Evidence Links', 'Delivery Unit ID', 'Delivery Unit', 'Work Group Set', 'Work Group Set Description']
       });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Comments');
@@ -2372,11 +2377,13 @@
           if (!order.isAmended) return;
           const originalUnits = Number(order.originalUnits);
           const amendedUnits = Number(order.units);
+          const organisation = window.getOrganisationForWorkGroup?.(order.workGroup);
           rows.push({
             'Standard Job Number': jobNumber,
             'Standard Job Description': meta.desc || '',
             'Discipline': meta.disc || '',
-            'Delivery Unit': meta.mnt || '',
+            'Delivery Unit': organisation?.deliveryUnit?.name || '',
+            'MNT': meta.mnt || '',
             'Work Order': order.number || '',
             'Work Order Description': order.description || '',
             'Work Order Type': order.workOrderType || '',
@@ -2399,6 +2406,7 @@
         'Standard Job Description',
         'Discipline',
         'Delivery Unit',
+        'MNT',
         'Work Order',
         'Work Order Description',
         'Work Order Type',
@@ -4657,9 +4665,10 @@
         commentWorkGroupTag.innerHTML = [
           '<option value="">Tag work group (optional)</option>',
           ...workGroupOptions.map(key => {
-            const description = window.workGroupSets?.get(key) || key;
-            const label = description === key ? key : `${key} • ${description}`;
-            return `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`;
+            const code = window.resolveWorkGroupCode?.(key) || key;
+            const description = window.workGroupSets?.get(code) || key;
+            const label = description === code ? code : `${code} • ${description}`;
+            return `<option value="${escapeHtml(code)}">${escapeHtml(label)}</option>`;
           })
         ].join('');
       }

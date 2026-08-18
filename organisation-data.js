@@ -13,7 +13,7 @@ DBCANTRE	Carnforth ENG(TRACK)
 DBCARTRA	Carlisle SM(TRACK)
 DBCARTRE	Carlisle ENG(TRACK)
 DBPRERTA	Preston SM(RT&L)
-DBCANOFT	Carnforth SM (OFFTRACK)
+DBCANOFT	Carnforth SM Drainage
 DBCANWGA	Carnforth SM(W&G)
 DBCAROTA	Carlisle SM(OFFTRACK)
 DBCARLXA	Carlisle LCM
@@ -393,6 +393,28 @@ function getEngineerWorkGroups(engineerId) {
   return engineer ? engineer.workGroupSets : [];
 }
 
+function normalizeOrganisationLabel(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\s*\(/g, '(');
+}
+
+function getWorkGroupCatalogue() {
+  return new Map(WORK_GROUP_SETS_RAW.split('\n').slice(1).map(line => line.split('\t')));
+}
+
+/** Resolve a WGS code from a code, description, or "code description" value. */
+function resolveWorkGroupCode(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const catalogue = getWorkGroupCatalogue();
+  const candidateCode = text.split(/\s+/)[0].toUpperCase();
+  if (catalogue.has(candidateCode)) return candidateCode;
+  const normalized = normalizeOrganisationLabel(text);
+  for (const [code, description] of catalogue) {
+    if (normalizeOrganisationLabel(description) === normalized) return code;
+  }
+  return '';
+}
+
 /**
  * Check if a work group belongs to an engineer
  * @param {string} workGroupCode - Work group set code
@@ -401,7 +423,7 @@ function getEngineerWorkGroups(engineerId) {
  */
 function isWorkGroupForEngineer(workGroupCode, engineerId) {
   const workGroups = getEngineerWorkGroups(engineerId);
-  return workGroups.includes(workGroupCode);
+  return workGroups.includes(resolveWorkGroupCode(workGroupCode));
 }
 
 /**
@@ -410,8 +432,8 @@ function isWorkGroupForEngineer(workGroupCode, engineerId) {
  * @returns {Object|null} Engineer object or null if not found
  */
 function getEngineerForWorkGroup(workGroupCode) {
-  if (!workGroupCode) return null;
-  const code = workGroupCode.trim().toUpperCase();
+  const code = resolveWorkGroupCode(workGroupCode);
+  if (!code) return null;
   return getEngineers().find(eng =>
     eng.workGroupSets.some(wg => wg.toUpperCase() === code)
   ) || null;
@@ -423,6 +445,7 @@ window.getEngineerById = getEngineerById;
 window.getEngineerWorkGroups = getEngineerWorkGroups;
 window.isWorkGroupForEngineer = isWorkGroupForEngineer;
 window.getEngineerForWorkGroup = getEngineerForWorkGroup;
+window.resolveWorkGroupCode = resolveWorkGroupCode;
 
 const DELIVERY_UNITS_DATA = [
   { id: 'lancs-cumbria', name: 'Lancs and Cumbria', active: true },
@@ -442,6 +465,14 @@ function getDeliveryUnits() {
 
 function getDeliveryUnitById(id) {
   return getDeliveryUnits().find(unit => unit.id === id) || null;
+}
+
+function resolveDeliveryUnit(value) {
+  const normalized = normalizeOrganisationLabel(value);
+  if (!normalized) return null;
+  return getDeliveryUnits().find(unit =>
+    normalizeOrganisationLabel(unit.id) === normalized || normalizeOrganisationLabel(unit.name) === normalized
+  ) || null;
 }
 
 function getEngineersForDeliveryUnit(deliveryUnitId) {
@@ -490,8 +521,11 @@ function commentMatchesOrganisationScope(comment, scope = {}) {
   const organisation = getCommentOrganisation(comment);
   const deliveryUnitId = scope.deliveryUnitId || 'all';
   const engineerId = scope.engineerId || 'all';
-  const workGroupCode = String(scope.workGroupCode || 'all').trim().toUpperCase();
-  const commentWorkGroup = String(comment?.filteredWorkGroup || '').trim().toUpperCase();
+  const rawScopeWorkGroup = String(scope.workGroupCode || 'all').trim();
+  const workGroupCode = rawScopeWorkGroup.toUpperCase() === 'ALL'
+    ? 'ALL'
+    : resolveWorkGroupCode(rawScopeWorkGroup);
+  const commentWorkGroup = resolveWorkGroupCode(comment?.filteredWorkGroup);
   if (deliveryUnitId !== 'all' && organisation.deliveryUnit?.id !== deliveryUnitId) return false;
   if (engineerId !== 'all' && organisation.engineer?.id !== engineerId) return false;
   return workGroupCode === 'ALL' || commentWorkGroup === workGroupCode;
@@ -541,9 +575,11 @@ Object.assign(globalThis, {
   COMMENT_HIERARCHY_MARKER,
   getDeliveryUnits,
   getDeliveryUnitById,
+  resolveDeliveryUnit,
   getEngineersForDeliveryUnit,
   getDeliveryUnitWorkGroups,
   getOrganisationForWorkGroup,
+  resolveWorkGroupCode,
   getCommentOrganisation,
   encodeCommentDeliveryUnit,
   commentMatchesOrganisationScope,
@@ -556,9 +592,11 @@ if (typeof module !== 'undefined') module.exports = {
   COMMENT_HIERARCHY_MARKER,
   getDeliveryUnits,
   getDeliveryUnitById,
+  resolveDeliveryUnit,
   getEngineersForDeliveryUnit,
   getDeliveryUnitWorkGroups,
   getOrganisationForWorkGroup,
+  resolveWorkGroupCode,
   getCommentOrganisation,
   encodeCommentDeliveryUnit,
   commentMatchesOrganisationScope,
