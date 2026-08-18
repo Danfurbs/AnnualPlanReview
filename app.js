@@ -49,12 +49,12 @@
     const BREAKDOWN_PLAN_VERSION_KEY = 'aprBreakdownPlanVersionV1';
     let breakdownPlanVersion = 'v0'; // Default to v0
     const DELIVERY_UNIT_KEY = 'aprDeliveryUnitV1';
-    const storedDeliveryUnit = localStorage.getItem(DELIVERY_UNIT_KEY) || 'all';
+    const storedDeliveryUnit = localStorage.getItem(DELIVERY_UNIT_KEY) || '';
     // Legacy selections were Standard Job MNT codes. They are deliberately not
     // mapped to organisational DUs because MNT remains an independent dimension.
-    let currentDeliveryUnit = storedDeliveryUnit === 'all' || window.getDeliveryUnitById?.(storedDeliveryUnit)
+    let currentDeliveryUnit = window.getDeliveryUnitById?.(storedDeliveryUnit)
       ? storedDeliveryUnit
-      : 'all';
+      : '';
 
     function loadBreakdownPlanVersion() {
       const saved = localStorage.getItem(BREAKDOWN_PLAN_VERSION_KEY);
@@ -293,20 +293,21 @@
     }
 
     function getDeliveryUnitOptions() {
-      return ['all', ...(window.getDeliveryUnits ? window.getDeliveryUnits().map(unit => unit.id) : [])];
+      return window.getDeliveryUnits ? window.getDeliveryUnits().map(unit => unit.id) : [];
     }
 
     function getDeliveryUnitLabel(id) {
-      if (id === 'all') return 'All Delivery Units';
+      if (!id) return 'Choose a Delivery Unit';
       return window.getDeliveryUnitById?.(id)?.name || id;
     }
 
     async function setReviewContext(stage, year, { persist = true, deliveryUnit = currentDeliveryUnit } = {}) {
       if (!REVIEW_STAGES.includes(stage)) return;
+      if (!window.getDeliveryUnitById?.(deliveryUnit)) return;
       currentReviewStage = stage;
       currentFinancialYear = year || currentFinancialYear;
       currentPlanVersion = getPreferredPlanVersion(currentFinancialYear);
-      currentDeliveryUnit = deliveryUnit || 'all';
+      currentDeliveryUnit = deliveryUnit;
       requiresContextSelection = false;
       if (persist) {
         localStorage.setItem(REVIEW_STAGE_KEY, stage);
@@ -373,10 +374,11 @@
     async function setForecastContext(stage, year, planVersion, { persist = true, deliveryUnit = currentDeliveryUnit } = {}) {
       if (!REVIEW_STAGES.includes(stage)) return;
       if (planVersion && !PLAN_VERSIONS.some(plan => plan.id === planVersion)) return;
+      if (!window.getDeliveryUnitById?.(deliveryUnit)) return;
       currentReviewStage = stage;
       currentFinancialYear = year || currentFinancialYear;
       currentPlanVersion = planVersion || currentPlanVersion;
-      currentDeliveryUnit = deliveryUnit || 'all';
+      currentDeliveryUnit = deliveryUnit;
       requiresContextSelection = false;
       if (persist) {
         localStorage.setItem(REVIEW_STAGE_KEY, stage);
@@ -423,8 +425,11 @@
       const duSelect = document.getElementById('deliveryUnitSelect');
       if (duSelect) {
         const duOptions = getDeliveryUnitOptions();
-        duSelect.innerHTML = duOptions.map(unit => `<option value="${escapeHtml(unit)}">${escapeHtml(getDeliveryUnitLabel(unit))}</option>`).join('');
-        duSelect.value = duOptions.includes(currentDeliveryUnit) ? currentDeliveryUnit : 'all';
+        duSelect.innerHTML = [
+          '<option value="">Choose a Delivery Unit…</option>',
+          ...duOptions.map(unit => `<option value="${escapeHtml(unit)}">${escapeHtml(getDeliveryUnitLabel(unit))}</option>`)
+        ].join('');
+        duSelect.value = duOptions.includes(currentDeliveryUnit) ? currentDeliveryUnit : '';
       }
       const grid = document.getElementById('stageSelectionGrid');
       if (grid && !grid.childElementCount) {
@@ -434,9 +439,13 @@
         grid.querySelectorAll('[data-stage]').forEach(button => {
           button.addEventListener('click', () => {
             const selectedYear = document.getElementById('financialYearSelect')?.value || '';
-            const selectedDeliveryUnit = document.getElementById('deliveryUnitSelect')?.value || 'all';
+            const selectedDeliveryUnit = document.getElementById('deliveryUnitSelect')?.value || '';
             if (!selectedYear) {
               alert('Please choose a financial year.');
+              return;
+            }
+            if (!selectedDeliveryUnit) {
+              alert('Please choose a Delivery Unit.');
               return;
             }
             setReviewContext(button.dataset.stage, selectedYear, { deliveryUnit: selectedDeliveryUnit });

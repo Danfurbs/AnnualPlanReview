@@ -43,7 +43,20 @@ test('comments follow current WGS hierarchy and untagged comments use the approv
   assert.equal(window.getCommentOrganisation({
     filteredWorkGroup: 'DEWDMTRB', deliveryUnit: bauDeliveryUnit
   }).deliveryUnit.id, 'manchester');
-  assert.equal(window.getCommentOrganisation({ filteredWorkGroup: '' }).deliveryUnit.id, 'lancs-cumbria');
+  assert.equal(window.getCommentOrganisation({
+    filteredWorkGroup: '', deliveryUnit: bauDeliveryUnit
+  }).deliveryUnit.id, 'manchester');
+});
+
+test('new comments without a WGS use the Delivery Unit selected at entry', () => {
+  const { window } = loadHierarchy();
+  const comment = {
+    filteredWorkGroup: '',
+    deliveryUnit: window.encodeCommentDeliveryUnit('liverpool')
+  };
+  const organisation = window.getCommentOrganisation(comment);
+  assert.equal(organisation.deliveryUnit.id, 'liverpool');
+  assert.equal(organisation.engineer, null);
 });
 
 test('all pre-hierarchy comments receive the one-off Lancs and Cumbria classification', () => {

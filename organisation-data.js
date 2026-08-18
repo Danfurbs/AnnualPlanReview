@@ -470,7 +470,11 @@ function getCommentOrganisation(comment) {
   }
   const workGroup = String(comment?.filteredWorkGroup || '').trim();
   if (workGroup) return getOrganisationForWorkGroup(workGroup);
-  return { engineer: null, deliveryUnit: getDeliveryUnitById(DEFAULT_COMMENT_DELIVERY_UNIT_ID) };
+  const selectedDeliveryUnitId = String(comment.deliveryUnit).slice(COMMENT_HIERARCHY_MARKER.length);
+  return {
+    engineer: null,
+    deliveryUnit: getDeliveryUnitById(selectedDeliveryUnitId) || getDeliveryUnitById(DEFAULT_COMMENT_DELIVERY_UNIT_ID)
+  };
 }
 
 function encodeCommentDeliveryUnit(deliveryUnitId) {
