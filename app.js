@@ -1185,7 +1185,9 @@
         owner: String(details.owner || '').trim(),
         dueDate: String(details.dueDate || '').trim(),
         evidenceLinks: Array.isArray(details.evidenceLinks) ? details.evidenceLinks : [],
-        deliveryUnit: currentDeliveryUnit === 'all' ? '' : currentDeliveryUnit,
+        // The marker distinguishes BAU hierarchy-aware comments from the
+        // one-off legacy cohort classified to Lancs and Cumbria.
+        deliveryUnit: window.encodeCommentDeliveryUnit?.(currentDeliveryUnit) || currentDeliveryUnit,
         filteredWorkGroup: String(details.filteredWorkGroup || '').trim(),
         filteredEngineerId: String(details.filteredEngineerId || '').trim(),
         filteredEngineerName: String(details.filteredEngineerName || '').trim()
@@ -2258,7 +2260,9 @@
             owner: String(r['Owner'] || '').trim(),
             dueDate: String(r['Due Date'] || '').trim(),
             evidenceLinks: String(r['Evidence Links'] || '').split(/\n|,/).map(link => link.trim()).filter(Boolean),
-            deliveryUnit: String(r['Delivery Unit'] || '').trim(),
+            deliveryUnit: window.encodeCommentDeliveryUnit?.(
+              String(r['Delivery Unit'] || currentDeliveryUnit || 'all').trim()
+            ) || String(r['Delivery Unit'] || '').trim(),
             filteredWorkGroup: String(r['Work Group Set'] || '').trim()
           });
           added += 1;
@@ -2312,6 +2316,7 @@
           const category = entry.category || 'General';
           if (selectedType !== 'all' && category !== selectedType) return;
           const workGroupSet = String(entry.filteredWorkGroup || '').trim();
+          const commentOrganisation = window.getCommentOrganisation?.(entry);
 
           rows.push({
             'Standard Job Number': jobNumber,
@@ -2324,7 +2329,7 @@
             'Owner': entry.owner || '',
             'Due Date': entry.dueDate || '',
             'Evidence Links': Array.isArray(entry.evidenceLinks) ? entry.evidenceLinks.join('\n') : '',
-            'Delivery Unit': entry.deliveryUnit || '',
+            'Delivery Unit': commentOrganisation?.deliveryUnit?.name || '',
             'Work Group Set': workGroupSet,
             'Work Group Set Description': workGroupSet
               ? (window.workGroupSets?.get(workGroupSet) || '')

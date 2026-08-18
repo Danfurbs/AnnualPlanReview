@@ -434,6 +434,7 @@ const DELIVERY_UNITS_DATA = [
 ];
 
 const DEFAULT_COMMENT_DELIVERY_UNIT_ID = 'lancs-cumbria';
+const COMMENT_HIERARCHY_MARKER = 'hierarchy-v1:';
 
 function getDeliveryUnits() {
   return (globalThis.DELIVERY_UNITS_DATA || DELIVERY_UNITS_DATA).filter(unit => unit.active !== false);
@@ -460,9 +461,20 @@ function getOrganisationForWorkGroup(workGroupCode) {
 }
 
 function getCommentOrganisation(comment) {
+  // One-off adoption rule: every comment saved before hierarchy-v1 is treated
+  // as Lancs and Cumbria without rewriting its text, tags, IDs, or metadata.
+  // BAU comments carry the marker and resolve dynamically through their WGS.
+  const isBusinessAsUsual = String(comment?.deliveryUnit || '').startsWith(COMMENT_HIERARCHY_MARKER);
+  if (!isBusinessAsUsual) {
+    return { engineer: null, deliveryUnit: getDeliveryUnitById(DEFAULT_COMMENT_DELIVERY_UNIT_ID) };
+  }
   const workGroup = String(comment?.filteredWorkGroup || '').trim();
   if (workGroup) return getOrganisationForWorkGroup(workGroup);
   return { engineer: null, deliveryUnit: getDeliveryUnitById(DEFAULT_COMMENT_DELIVERY_UNIT_ID) };
+}
+
+function encodeCommentDeliveryUnit(deliveryUnitId) {
+  return `${COMMENT_HIERARCHY_MARKER}${deliveryUnitId || 'all'}`;
 }
 
 /**
@@ -522,12 +534,14 @@ function validateOrganisationHierarchy(workGroupSets) {
 Object.assign(globalThis, {
   DELIVERY_UNITS_DATA,
   DEFAULT_COMMENT_DELIVERY_UNIT_ID,
+  COMMENT_HIERARCHY_MARKER,
   getDeliveryUnits,
   getDeliveryUnitById,
   getEngineersForDeliveryUnit,
   getDeliveryUnitWorkGroups,
   getOrganisationForWorkGroup,
   getCommentOrganisation,
+  encodeCommentDeliveryUnit,
   commentMatchesOrganisationScope,
   validateOrganisationHierarchy
 });
@@ -535,12 +549,14 @@ Object.assign(globalThis, {
 if (typeof module !== 'undefined') module.exports = {
   DELIVERY_UNITS_DATA,
   DEFAULT_COMMENT_DELIVERY_UNIT_ID,
+  COMMENT_HIERARCHY_MARKER,
   getDeliveryUnits,
   getDeliveryUnitById,
   getEngineersForDeliveryUnit,
   getDeliveryUnitWorkGroups,
   getOrganisationForWorkGroup,
   getCommentOrganisation,
+  encodeCommentDeliveryUnit,
   commentMatchesOrganisationScope,
   validateOrganisationHierarchy
 };
