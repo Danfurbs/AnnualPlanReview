@@ -225,46 +225,62 @@
     </div>
   </div>
 
-  <div id="modal" class="modal">
-    <div class="modal-content">
+  <div id="modal" class="modal" aria-labelledby="uploadModalTitle" aria-modal="true" role="dialog">
+    <div class="modal-content upload-modal-content">
       <div class="modal-header">
-        <h2>Upload Files</h2>
-        <button class="close" onclick="closeModal()">&times;</button>
+        <div>
+          <span class="modal-eyebrow">Data management</span>
+          <h2 id="uploadModalTitle">Upload &amp; export files</h2>
+          <p class="helper-text" id="uploadModeNote"></p>
+        </div>
+        <button class="close" type="button" onclick="closeModal()" aria-label="Close upload dialog">&times;</button>
       </div>
-      <p class="helper-text" id="uploadModeNote"></p>
       <div class="file-input-group upload-section-card">
-        <label>Work Done (must have "Detail" sheet)</label>
+        <div class="upload-section-heading">
+          <div><span class="upload-step">1</span><strong>Work Done report</strong></div>
+          <span class="upload-requirement">Excel · “Detail” sheet required</span>
+        </div>
         <div class="row-input">
           <label for="workDoneFySelect">Financial Year:</label>
           <select id="workDoneFySelect"></select>
         </div>
-        <label class="row-input" style="margin-top: 6px;">
-          <input type="checkbox" id="clearWorkDoneForFyBeforeUpload" checked style="width: auto; margin-right: 8px;">
-          Clear existing Work Done for selected FY before upload
-        </label>
-        <div class="row-input upload-row">
-          <input type="file" id="wFile" accept=".xlsx,.xls">
-          <button type="button" class="primary-button upload-workdone-button" onclick="uploadSelectedWorkDoneFile()">Upload Work Done File</button>
+        <div class="upload-replace-note"><strong>Safe replacement:</strong> a successful upload replaces the selected FY snapshot. It will not be added to the existing report.</div>
+        <div class="upload-file-picker">
+          <input type="file" id="wFile" accept=".xlsx,.xls" onchange="handleWorkDoneFileSelection()">
+          <span class="helper-text">Choose the report, check the settings, then start the upload.</span>
         </div>
-        <div class="row-input">
+        <div class="row-input upload-settings-row">
           <label>Header row:</label>
           <input type="number" id="wRow" value="2" min="1">
+          <span class="helper-text">Usually row 2; try 1 or 3 if headings are not recognised.</span>
         </div>
-        <p class="helper-text">Try 1, 2, or 3 if not loading</p>
-        <button type="button" class="secondary" onclick="clearWorkDoneForSelectedFy()" style="margin-top: 6px;">Clear Work Done (Selected FY)</button>
-        <button type="button" class="danger-button" onclick="clearAllWorkDoneSnapshots()" style="margin-top: 6px;">Clear All Work Done (Server + Local)</button>
+        <div id="workDoneUploadStatus" class="upload-status" role="status" aria-live="polite" hidden>
+          <span class="upload-status-spinner" aria-hidden="true"></span>
+          <div><strong id="workDoneUploadStatusTitle">Preparing upload…</strong><span id="workDoneUploadStatusDetail">Please keep this window open.</span></div>
+        </div>
+        <button id="uploadWorkDoneButton" type="button" class="primary-button upload-workdone-button" onclick="uploadSelectedWorkDoneFile()" disabled>Upload Work Done report</button>
+        <details class="upload-danger-zone">
+          <summary>Remove existing Work Done data</summary>
+          <p class="helper-text">These actions cannot be undone. Uploading with “clear existing” selected normally means you do not need them.</p>
+          <div class="upload-danger-actions">
+            <button type="button" class="secondary" onclick="clearWorkDoneForSelectedFy()">Clear selected FY</button>
+            <button type="button" class="danger-button" onclick="clearAllWorkDoneSnapshots()">Clear all FYs (server + local)</button>
+          </div>
+        </details>
       </div>
-      <div class="file-input-group">
-        <label>Comments Upload</label>
+      <div class="file-input-group upload-section-card upload-secondary-card">
+        <div class="upload-section-heading"><div><span class="upload-step">2</span><strong>Comments</strong></div><span class="upload-requirement">Optional</span></div>
         <input type="file" id="cFile" accept=".xlsx,.xls" onchange="loadComments(event)">
         <div class="row-input">
           <label>Header row:</label>
           <input type="number" id="cRow" value="1" min="1">
         </div>
         <p class="helper-text">Required columns: Standard Job Number, Comment Type, Comment</p>
-        <button type="button" onclick="exportComments()">Export Comments</button>
-        <button type="button" onclick="exportWorkGroupJobSummary()" style="margin-top: 10px;">Export Work Group Job Summary</button>
-        <button type="button" onclick="exportForecastSummary()" style="margin-top: 10px;">Export Forecast Summary (All Jobs)</button>
+        <div class="upload-export-actions">
+          <button type="button" onclick="exportComments()">Export Comments</button>
+          <button type="button" onclick="exportWorkGroupJobSummary()">Export Work Group Job Summary</button>
+          <button type="button" onclick="exportForecastSummary()">Export Forecast Summary</button>
+        </div>
       </div>
     </div>
   </div>

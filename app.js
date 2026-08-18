@@ -42,6 +42,8 @@
     const GROUP_STORAGE_KEY = 'aprGroupStoreV1';
     const WORK_DONE_STORAGE_KEY = 'aprWorkDoneByYearV1';
     let workDoneUploadedAt = null;
+    let workDoneUploadInProgress = false;
+    let lastWorkDoneUploadKey = null;
 
     // Breakdown plan version preference
     const BREAKDOWN_PLAN_VERSION_KEY = 'aprBreakdownPlanVersionV1';
@@ -618,11 +620,12 @@
       return map;
     }
 
-    async function runInChunks(items, handler, chunkSize = 300) {
+    async function runInChunks(items, handler, chunkSize = 300, onProgress = null) {
       for (let i = 0; i < items.length; i += chunkSize) {
         const chunk = items.slice(i, i + chunkSize);
         chunk.forEach(handler);
-        // Yield so large uploads don't freeze the UI
+        if (onProgress) onProgress(Math.min(i + chunk.length, items.length), items.length);
+        // Yield so large uploads don't freeze the UI and status updates can paint.
         await new Promise(resolve => setTimeout(resolve, 0));
       }
     }
@@ -1993,32 +1996,66 @@
       }
     }
 
+    function setWorkDoneUploadState(state, title, detail = '') {
+      const status = document.getElementById('workDoneUploadStatus');
+      const statusTitle = document.getElementById('workDoneUploadStatusTitle');
+      const statusDetail = document.getElementById('workDoneUploadStatusDetail');
+      const button = document.getElementById('uploadWorkDoneButton');
+      if (status) {
+        status.hidden = state === 'idle';
+        status.dataset.state = state;
+      }
+      if (statusTitle) statusTitle.textContent = title;
+      if (statusDetail) statusDetail.textContent = detail;
+      if (button) {
+        button.disabled = workDoneUploadInProgress || !document.getElementById('wFile')?.files?.[0];
+        button.textContent = workDoneUploadInProgress ? 'Uploading…' : 'Upload Work Done report';
+      }
+    }
+
+    function handleWorkDoneFileSelection() {
+      const file = document.getElementById('wFile')?.files?.[0];
+      if (!file) {
+        setWorkDoneUploadState('idle', '');
+        return;
+      }
+      setWorkDoneUploadState('ready', 'Ready to upload', `${file.name} · ${(file.size / 1024 / 1024).toFixed(1)} MB`);
+    }
+    window.handleWorkDoneFileSelection = handleWorkDoneFileSelection;
+
     async function loadWorkDone(file) {
-      if (!file) return;
+      if (!file || workDoneUploadInProgress) return;
+      workDoneUploadInProgress = true;
+      setWorkDoneUploadState('working', 'Reading workbook…', 'Large reports can take a minute. Please keep this window open.');
       try {
         const selectedYear = getSelectedWorkDoneYear();
         if (!selectedYear) {
-          alert('Please select the financial year for this Work Done upload.');
-          return;
+          throw new Error('Please select the financial year for this Work Done upload.');
         }
-        const clearBeforeUpload = Boolean(document.getElementById('clearWorkDoneForFyBeforeUpload')?.checked);
-        if (clearBeforeUpload) {
-          removeWorkDoneFromLocal(selectedYear);
-          if (window.isApiEnabled && window.isApiEnabled() && window.deleteWorkDoneForYearFromApi) {
-            await window.deleteWorkDoneForYearFromApi(selectedYear);
-          }
+        const headerRow = parseInt(document.getElementById('wRow').value, 10);
+        if (!Number.isInteger(headerRow) || headerRow < 1) throw new Error('Header row must be 1 or greater.');
+        const uploadKey = `${selectedYear}:${file.name}:${file.size}:${file.lastModified}:${headerRow}`;
+        if (uploadKey === lastWorkDoneUploadKey) {
+          throw new Error('This report was already uploaded in this session. Choose it again only after refreshing if you intend to replace the snapshot.');
         }
 
         const ab = await file.arrayBuffer();
+        setWorkDoneUploadState('working', 'Checking report…', 'Validating the Detail sheet before changing any saved data.');
         const wb = XLSX.read(ab);
         if (!wb.Sheets['Detail']) {
-          alert('Need "Detail" sheet');
-          return;
+          throw new Error('The workbook must contain a sheet named “Detail”. No saved data was changed.');
         }
-        const row = parseInt(document.getElementById('wRow').value) - 1;
+        const row = headerRow - 1;
         const rows = XLSX.utils.sheet_to_json(wb.Sheets['Detail'], {range:row});
-        
-        window.wData = new Map();
+        if (!rows.length) throw new Error('The Detail sheet has no data rows at the selected header row.');
+        const requiredColumns = ['Work Order Closed Period', 'Units Complete'];
+        const missingColumns = requiredColumns.filter(column => !(column in rows[0]));
+        const hasJobColumn = 'Standard Job Number & Desc' in rows[0] || 'Standard Job No' in rows[0];
+        if (!hasJobColumn) missingColumns.unshift('Standard Job Number & Desc');
+        if (missingColumns.length) throw new Error(`Missing required column${missingColumns.length === 1 ? '' : 's'}: ${missingColumns.join(', ')}`);
+
+        setWorkDoneUploadState('working', 'Processing rows…', `0 of ${rows.length.toLocaleString()} rows processed`);
+        const nextWorkDoneData = new Map();
         let matched = 0;
         let sampleUnmatched = [];
         
@@ -2055,8 +2092,8 @@
           
           if (!per.match(/^P\d+$/i)) return;
           matched++;
-          if (!window.wData.has(jn)) window.wData.set(jn, {periods:{}, wgs:{}});
-          const job = window.wData.get(jn);
+          if (!nextWorkDoneData.has(jn)) nextWorkDoneData.set(jn, {periods:{}, wgs:{}});
+          const job = nextWorkDoneData.get(jn);
           if (!job.workOrders) job.workOrders = [];
           const rawUnits = parseFloat(units || 0);
           const workOrderNumber = extractWorkOrderNumber(r);
@@ -2101,12 +2138,17 @@
             ).trim()
           };
           job.workOrders.push(workOrder);
+        }, 300, (processed, total) => {
+          setWorkDoneUploadState('working', 'Processing rows…', `${processed.toLocaleString()} of ${total.toLocaleString()} rows processed`);
         });
 
+        if (!matched) throw new Error('No valid Work Done rows matched the loaded standard jobs and period format. No saved data was changed.');
+        setWorkDoneUploadState('working', 'Saving snapshot…', `${matched.toLocaleString()} valid rows processed. Saving ${selectedYear} safely.`);
+        window.wData = nextWorkDoneData;
         workDoneUploadedAt = new Date().toISOString();
-        saveWorkDoneToLocal(selectedYear, window.wData, workDoneUploadedAt);
+        saveWorkDoneToLocal(selectedYear, nextWorkDoneData, workDoneUploadedAt);
         if (window.isApiEnabled && window.isApiEnabled() && window.saveWorkDoneToApi && selectedYear) {
-          const uploadedAt = await window.saveWorkDoneToApi(selectedYear, serializeWorkDoneMap(window.wData));
+          const uploadedAt = await window.saveWorkDoneToApi(selectedYear, serializeWorkDoneMap(nextWorkDoneData));
           if (uploadedAt) {
             workDoneUploadedAt = uploadedAt;
             saveWorkDoneToLocal(selectedYear, window.wData, workDoneUploadedAt);
@@ -2118,12 +2160,19 @@
           alert(`Work Done uploaded for ${selectedYear}. Current dashboard remains on ${currentFinancialYear}.`);
         }
         
+        lastWorkDoneUploadKey = uploadKey;
         updateWorkGroupFilterOptions();
         render();
-        closeModal();
+        setWorkDoneUploadState('success', 'Upload complete', `${matched.toLocaleString()} valid rows saved for ${selectedYear}.`);
+        const input = document.getElementById('wFile');
+        if (input) input.value = '';
       } catch(err) {
         console.error(err);
-        alert('Error loading work done');
+        setWorkDoneUploadState('error', 'Upload not completed', err?.message || 'The report could not be loaded. No validated replacement was saved.');
+      } finally {
+        workDoneUploadInProgress = false;
+        const button = document.getElementById('uploadWorkDoneButton');
+        if (button) button.disabled = !document.getElementById('wFile')?.files?.[0];
       }
     }
 
@@ -4708,7 +4757,10 @@
       updateContextControls();
       document.getElementById('modal').classList.add('open');
     }
-    function closeModal() { document.getElementById('modal').classList.remove('open'); }
+    function closeModal() {
+      if (workDoneUploadInProgress) return;
+      document.getElementById('modal').classList.remove('open');
+    }
 
     function applyRagFilter(filter) {
       const select = document.getElementById('varianceFilter');
