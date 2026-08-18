@@ -1572,3 +1572,47 @@
 }
 .forecast-upload-checkbox { display:flex; align-items:center; gap:8px; margin-top:14px; font-weight:600; }
 .forecast-upload-checkbox input { width:16px; height:16px; accent-color:var(--primary-color, #2563eb); }
+
+/* Upload and export modal */
+.upload-modal-content { max-width: 720px; padding: 0; overflow: hidden; }
+.upload-modal-content .modal-header { margin: 0; padding: 24px 28px 18px; border-bottom: 1px solid #e2e8f0; background: linear-gradient(135deg, #f8fafc, #eff6ff); }
+.upload-modal-content .modal-header h2 { margin: 3px 0 5px; color: #0f172a; }
+.modal-eyebrow { color: #2563eb; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.upload-modal-content > .file-input-group { margin: 18px 28px; }
+.upload-section-card { padding: 18px; border-radius: 14px; background: #fff; box-shadow: 0 2px 8px rgba(15, 23, 42, .04); }
+.upload-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.upload-section-heading > div { display: flex; align-items: center; gap: 9px; color: #0f172a; font-size: 16px; }
+.upload-step { display: inline-grid; width: 27px; height: 27px; place-items: center; border-radius: 50%; background: #dbeafe; color: #1d4ed8; font-size: 12px; font-weight: 800; }
+.upload-requirement { padding: 4px 8px; border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; }
+.upload-replace-note { margin: 12px 0; padding: 10px 12px; border-left: 3px solid #3b82f6; border-radius: 6px; background: #eff6ff; color: #1e3a8a; font-size: 12px; line-height: 1.45; }
+.upload-file-picker { display: grid; gap: 5px; margin-bottom: 12px; padding: 13px; border: 1px dashed #93c5fd; border-radius: 10px; background: #f8fbff; }
+.upload-file-picker input { width: 100%; box-sizing: border-box; background: white; }
+.upload-settings-row { flex-wrap: wrap; }
+.upload-settings-row input { width: 70px; }
+.upload-settings-row .helper-text { flex: 1 1 250px; }
+.upload-workdone-button { width: 100%; margin-top: 12px; min-height: 44px; }
+.upload-workdone-button:disabled { background: #94a3b8; cursor: not-allowed; }
+.upload-status { display: flex; align-items: center; gap: 11px; margin-top: 12px; padding: 11px 13px; border-radius: 9px; background: #eff6ff; color: #1e3a8a; }
+.upload-status[hidden] { display: none; }
+.upload-status > div { display: grid; gap: 2px; }
+.upload-status span:last-child { font-size: 12px; }
+.upload-status-spinner { width: 17px; height: 17px; flex: 0 0 auto; border: 2px solid #bfdbfe; border-top-color: #2563eb; border-radius: 50%; }
+.upload-status[data-state="working"] .upload-status-spinner { animation: upload-spin .8s linear infinite; }
+.upload-status[data-state="ready"] .upload-status-spinner, .upload-status[data-state="success"] .upload-status-spinner, .upload-status[data-state="error"] .upload-status-spinner { border: 0; }
+.upload-status[data-state="ready"] .upload-status-spinner::after { content: '→'; font-weight: 900; }
+.upload-status[data-state="success"] { background: #f0fdf4; color: #166534; }
+.upload-status[data-state="success"] .upload-status-spinner::after { content: '✓'; font-weight: 900; }
+.upload-status[data-state="error"] { background: #fef2f2; color: #991b1b; }
+.upload-status[data-state="error"] .upload-status-spinner::after { content: '!'; font-weight: 900; }
+@keyframes upload-spin { to { transform: rotate(360deg); } }
+.upload-danger-zone { margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+.upload-danger-zone summary { color: #64748b; cursor: pointer; font-size: 12px; font-weight: 700; }
+.upload-danger-actions, .upload-export-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.upload-secondary-card { background: #f8fafc; }
+.upload-export-actions button { flex: 1 1 180px; }
+@media (max-width: 640px) {
+  .upload-modal-content > .file-input-group { margin: 14px; }
+  .upload-modal-content .modal-header { padding: 20px; }
+  .upload-section-heading { align-items: flex-start; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) { .upload-status-spinner { animation: none !important; } }
