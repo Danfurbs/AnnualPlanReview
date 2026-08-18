@@ -313,6 +313,8 @@
     .wg-plan-edit-period > span { color: #334155; font-size: 12px; font-weight: 700; }
     .wg-plan-edit-period input[type="number"] { box-sizing: border-box; width: 100%; height: 40px; padding: 7px 9px; border: 1px solid #94a3b8; border-radius: 5px; font-size: 15px; font-variant-numeric: tabular-nums; }
     .wg-plan-edit-period small { color: #64748b; font-size: 11px; }
+    .wg-plan-edit-period .wg-plan-edit-work-done { color: #166534; font-weight: 700; }
+    .wg-plan-edit-period .wg-plan-edit-work-done.is-future { color: #94a3b8; font-weight: 600; }
     .engineer-header { background: transparent; color: #1e3a5f; cursor: pointer; }
     .engineer-header td { padding: 10px 12px; font-weight: 700; font-size: 13px; }
     .engineer-header:hover { background: #f1f5f9; }

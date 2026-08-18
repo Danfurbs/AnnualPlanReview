@@ -2947,7 +2947,14 @@
       const period = normalizePeriodKey(document.getElementById('period')?.value || 'all');
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
       const normalizedWgFilter = wgFilter === 'all' ? 'all' : normalizeWorkGroupSet(wgFilter);
+      const engineerWorkGroups = getSelectedEngineerWorkGroups();
       const reviewStage = currentReviewStage;
+      const getActiveScopeWorkGroups = () => {
+        if (normalizedWgFilter !== 'all') return [normalizedWgFilter];
+        if (!engineerWorkGroups || engineerWorkGroups.length === 0) return null;
+        return Array.from(new Set(engineerWorkGroups.map(normalizeWorkGroupSet).filter(Boolean)));
+      };
+      const activeScopeWorkGroups = getActiveScopeWorkGroups();
       const getJobDisplayData = (job) => {
         if (normalizedWgFilter === 'all') {
           if (!engineerWorkGroups || engineerWorkGroups.length === 0) {
@@ -2955,18 +2962,17 @@
           }
 
           const periods = {};
-            const totals = { f: 0, a: 0, wd: 0, v: 0 };
-            for (let i = 1; i <= 13; i++) {
-              const p = `P${i}`;
-              const data = engineerWorkGroups.reduce((acc, engineerWg) => {
-                const normalizedWg = normalizeWorkGroupSet(engineerWg);
-                const wgPeriod = job.wgs?.[normalizedWg]?.periods?.[p];
-                if (!wgPeriod) return acc;
-                acc.f += wgPeriod.f || 0;
-                acc.a += wgPeriod.a || 0;
-                acc.wd += wgPeriod.wd || 0;
-                acc.v += wgPeriod.v || 0;
-                return acc;
+          const totals = { f: 0, a: 0, wd: 0, v: 0 };
+          for (let i = 1; i <= 13; i++) {
+            const p = `P${i}`;
+            const data = activeScopeWorkGroups.reduce((acc, normalizedWg) => {
+              const wgPeriod = job.wgs?.[normalizedWg]?.periods?.[p];
+              if (!wgPeriod) return acc;
+              acc.f += wgPeriod.f || 0;
+              acc.a += wgPeriod.a || 0;
+              acc.wd += wgPeriod.wd || 0;
+              acc.v += wgPeriod.v || 0;
+              return acc;
             }, { f: 0, a: 0, wd: 0, v: 0 });
             periods[p] = data;
             totals.f += data.f;
@@ -2998,7 +3004,6 @@
         return activeGroup.jobNumbers.includes(job.jn);
       };
 
-      const engineerWorkGroups = getSelectedEngineerWorkGroups();
       const filterByDeliveryUnit = (job) => currentDeliveryUnit === 'all' || job.mnt === currentDeliveryUnit;
       const filterByEngineer = (job) => {
         // If no engineer selected, show all jobs
@@ -3090,6 +3095,13 @@
       updateTopBarStats({ jobs: baseJobs, baseFiltered, period: topVariancePeriod, getJobDisplayData, reviewStage, varianceFilter, reviewStatusFilter });
       updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter });
       const reforecastJobs = getForecastSnapshot(currentFinancialYear, 'v1')?.data || new Map();
+      const hasReforecastInActiveScope = (jobNumber) => {
+        const reforecastJob = reforecastJobs.get(jobNumber);
+        if (!reforecastJob) return false;
+        if (!activeScopeWorkGroups) return true;
+        return activeScopeWorkGroups.some(workGroup => Object.keys(reforecastJob.wgs || {})
+          .some(key => normalizeWorkGroupSet(key) === workGroup));
+      };
 
       // Custom discipline order: ALL, P-Way, W&G, Off Track, S&T, E&P CS, E&P D, then groups/others
       const disciplineOrder = ['ALL', 'P-Way', 'W&G', 'Off Track', 'S&T', 'E&P CS', 'E&P D'];
@@ -3181,7 +3193,7 @@
           const { status: stat } = getVarianceStatus(pd);
           const vc = pd.v>0 ? 'positive' : pd.v<0 ? 'negative' : 'neutral';
           const isGroupRollup = Boolean(j.isGroupRollup);
-          const hasReforecast = !isGroupRollup && reforecastJobs.has(j.jn);
+          const hasReforecast = !isGroupRollup && hasReforecastInActiveScope(j.jn);
           const isPriority = !isGroupRollup && ['009112', '009113'].includes(j.jn);
           const reviewStatus = isGroupRollup ? 'not_reviewed' : getJobReviewStatus(j.jn, currentFinancialYear, reviewStage);
           const isReviewed = !isGroupRollup && reviewStatus === 'reviewed';
@@ -3195,6 +3207,10 @@
           const varianceValue = `${pd.v > 0 ? '+' : ''}${pd.v.toFixed(1)}`;
           const plannedValue = Math.max(0, Number(pd.f) || 0);
           const actualValue = Math.max(0, Number(pd.a) || 0);
+          const currentWorkDoneValue = period === 'all'
+            ? Array.from({ length: maxWorkDonePeriod }, (_, index) => displayData.periods[`P${index + 1}`]?.wd || 0)
+              .reduce((total, value) => total + Number(value || 0), 0)
+            : (getPeriodNumber(period) <= maxWorkDonePeriod ? Number(pd.wd || 0) : 0);
           const baseForBar = Math.max(plannedValue, actualValue, 1);
           const planPct = (plannedValue / baseForBar) * 100;
           const actualWithinPlanPct = (Math.min(actualValue, plannedValue) / baseForBar) * 100;
@@ -3235,10 +3251,19 @@
           const healthStatus = !isGroupRollup ? getJobHealthStatus(pd) : null;
 
           // Get work group count (work groups with volume forecast)
-          const workGroupCount = !isGroupRollup ? (j.wgs && Object.keys(j.wgs).length) || 0 : 0;
+          const scopedWorkGroupKeys = !isGroupRollup
+            ? Object.keys(j.wgs || {}).filter(key => !activeScopeWorkGroups || activeScopeWorkGroups.includes(normalizeWorkGroupSet(key)))
+            : [];
+          const workGroupCount = scopedWorkGroupKeys.length;
 
           // Get actual work orders count from Work Done data
-          const actualWorkOrderCount = !isGroupRollup ? (window.wData?.get(j.jn)?.workOrders?.length || 0) : 0;
+          const scopedWorkOrders = !isGroupRollup
+            ? (window.wData?.get(j.jn)?.workOrders || []).filter(order => {
+                if (!activeScopeWorkGroups) return true;
+                return activeScopeWorkGroups.includes(normalizeWorkGroupSet(order.workGroup || order.workGroupSet || ''));
+              })
+            : [];
+          const actualWorkOrderCount = scopedWorkOrders.length;
 
           // Calculate period progress for progress bar
           let periodsPlanned = 0;
@@ -3270,7 +3295,7 @@
                 ${isPriority ? '<span class="job-pill priority">Priority</span>' : ''}
                 ${isGroupRollup ? '<span class="group-pill">Group</span>' : ''}
                 ${!isGroupRollup ? `<span class="job-pill ${statusClass}">${statusLabel}</span>` : ''}
-                ${hasReforecast ? '<span class="job-pill reforecast" title="This standard job has Plan v1 forecast values">Reforecast</span>' : ''}
+                ${hasReforecast ? '<span class="job-pill reforecast" title="This standard job has V1 / Reforecast values in the selected engineer and work group scope">Reforecast</span>' : ''}
               </div>
             </div>
 
@@ -3300,7 +3325,7 @@
                   <div class="job-variance-overview">
                     <div class="job-variance-row">
                       <div class="job-variance-item">
-                        <div class="job-variance-label">Planned</div>
+                        <div class="job-variance-label">${currentPlanVersion === 'v1' ? 'Reforecast' : 'Planned'}</div>
                         <div class="job-variance-value">${pd.f.toFixed(1)}</div>
                       </div>
                       <div class="job-variance-item">
@@ -3308,8 +3333,8 @@
                         <div class="job-variance-value">${pd.a.toFixed(1)}</div>
                       </div>
                       <div class="job-variance-item">
-                        <div class="job-variance-label">Work Done</div>
-                        <div class="job-variance-value">${(pd.wd || 0).toFixed(1)}</div>
+                        <div class="job-variance-label">Current Work Done</div>
+                        <div class="job-variance-value">${currentWorkDoneValue.toFixed(1)}</div>
                       </div>
                       <div class="job-variance-item">
                         <div class="job-variance-label">Variance</div>
@@ -3603,19 +3628,32 @@
       if (!modal || !grid) return;
       const effectivePeriods = resolveForecastWorkGroupPeriods(getEffectiveForecastJob(currentFinancialYear, job.jn), workGroup) || {};
       const v0Periods = resolveForecastWorkGroupPeriods(getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn), workGroup) || {};
+      const workDonePeriods = getWorkDonePeriodsForScope(job, [workGroup]);
+      const cutoffPeriod = getEffectiveForecastCutoffPeriod();
+      const currentWorkDoneTotal = Array.from({ length: cutoffPeriod }, (_, index) =>
+        Number(workDonePeriods[`P${index + 1}`]) || 0
+      ).reduce((total, value) => total + value, 0);
       // Intentionally raw: the reset action is available only when this work group itself has a sparse v1 override.
       const rawV1Job = getForecastSnapshot(currentFinancialYear, 'v1')?.data.get(job.jn);
       const hasOverride = Boolean(resolveForecastWorkGroupPeriods(rawV1Job, workGroup));
       breakdownPlanEditContext = { job, workGroup };
       document.getElementById('workGroupPlanEditTitle').textContent = window.workGroupSets?.get(workGroup) || workGroup;
-      document.getElementById('workGroupPlanEditMeta').textContent = `${job.jn} · Plan v1 override`;
+      const workDoneCutoffLabel = cutoffPeriod > 0 ? `to P${cutoffPeriod}` : '(no completed periods)';
+      document.getElementById('workGroupPlanEditMeta').textContent = `${job.jn} · Plan v1 override · Current Work Done ${workDoneCutoffLabel}: ${currentWorkDoneTotal.toFixed(1)}`;
       const resetButton = document.getElementById('resetWorkGroupPlanEdit');
       if (resetButton) resetButton.hidden = !hasOverride;
       grid.innerHTML = Array.from({ length: 13 }, (_, index) => {
         const period = `P${index + 1}`;
         const value = Number(effectivePeriods[period] || 0);
         const v0Value = Number(v0Periods[period] || 0);
-        return `<label class="wg-plan-edit-period"><span>${period}</span><input data-period="${period}" type="number" min="0" step="0.01" value="${value}" aria-label="Plan v1 ${escapeHtml(workGroup)} ${period}"><small>Plan v0: ${v0Value.toFixed(1)}</small></label>`;
+        const isCurrentWorkDonePeriod = index + 1 <= cutoffPeriod;
+        const workDoneValue = Number(workDonePeriods[period]) || 0;
+        return `<label class="wg-plan-edit-period">
+          <span>${period}</span>
+          <input data-period="${period}" type="number" min="0" step="0.01" value="${value}" aria-label="Plan v1 ${escapeHtml(workGroup)} ${period}">
+          <small>Plan v0: ${v0Value.toFixed(1)}</small>
+          <small class="wg-plan-edit-work-done ${isCurrentWorkDonePeriod ? '' : 'is-future'}">Current Work Done: ${isCurrentWorkDonePeriod ? workDoneValue.toFixed(1) : '—'}</small>
+        </label>`;
       }).join('');
       modal.classList.add('open');
       grid.querySelector('input')?.focus();
