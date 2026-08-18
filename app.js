@@ -49,7 +49,12 @@
     const BREAKDOWN_PLAN_VERSION_KEY = 'aprBreakdownPlanVersionV1';
     let breakdownPlanVersion = 'v0'; // Default to v0
     const DELIVERY_UNIT_KEY = 'aprDeliveryUnitV1';
-    let currentDeliveryUnit = localStorage.getItem(DELIVERY_UNIT_KEY) || 'all';
+    const storedDeliveryUnit = localStorage.getItem(DELIVERY_UNIT_KEY) || 'all';
+    // Legacy selections were Standard Job MNT codes. They are deliberately not
+    // mapped to organisational DUs because MNT remains an independent dimension.
+    let currentDeliveryUnit = storedDeliveryUnit === 'all' || window.getDeliveryUnitById?.(storedDeliveryUnit)
+      ? storedDeliveryUnit
+      : 'all';
 
     function loadBreakdownPlanVersion() {
       const saved = localStorage.getItem(BREAKDOWN_PLAN_VERSION_KEY);
@@ -288,11 +293,12 @@
     }
 
     function getDeliveryUnitOptions() {
-      const values = new Set(['all']);
-      window.stdJobs.forEach(job => {
-        if (job?.mnt) values.add(job.mnt);
-      });
-      return Array.from(values);
+      return ['all', ...(window.getDeliveryUnits ? window.getDeliveryUnits().map(unit => unit.id) : [])];
+    }
+
+    function getDeliveryUnitLabel(id) {
+      if (id === 'all') return 'All Delivery Units';
+      return window.getDeliveryUnitById?.(id)?.name || id;
     }
 
     async function setReviewContext(stage, year, { persist = true, deliveryUnit = currentDeliveryUnit } = {}) {
@@ -314,6 +320,7 @@
       }
       updateReviewContextDisplay();
       updateContextControls();
+      updateEngineerFilterOptions();
       refreshWorkDoneYearSelector();
       await loadWorkDoneStoreAsync(currentFinancialYear);
       fData = null;
@@ -340,7 +347,7 @@
       if (reviewStageHelper) {
         const stageLabel = currentReviewStage || 'RF';
         const yearLabel = currentFinancialYear || 'FY';
-        const duLabel = currentDeliveryUnit === 'all' ? 'All Delivery Units' : currentDeliveryUnit;
+        const duLabel = getDeliveryUnitLabel(currentDeliveryUnit);
         reviewStageHelper.textContent = `Current selection: ${yearLabel} ${stageLabel} • ${duLabel}.`;
       }
       const planDisplay = document.getElementById('planVersionDisplay');
@@ -383,6 +390,7 @@
       }
       updateReviewContextDisplay();
       updateContextControls();
+      updateEngineerFilterOptions();
       refreshWorkDoneYearSelector();
       await loadWorkDoneStoreAsync(currentFinancialYear);
       fData = null;
@@ -415,7 +423,7 @@
       const duSelect = document.getElementById('deliveryUnitSelect');
       if (duSelect) {
         const duOptions = getDeliveryUnitOptions();
-        duSelect.innerHTML = duOptions.map(unit => `<option value="${escapeHtml(unit)}">${unit === 'all' ? 'All Delivery Units' : escapeHtml(unit)}</option>`).join('');
+        duSelect.innerHTML = duOptions.map(unit => `<option value="${escapeHtml(unit)}">${escapeHtml(getDeliveryUnitLabel(unit))}</option>`).join('');
         duSelect.value = duOptions.includes(currentDeliveryUnit) ? currentDeliveryUnit : 'all';
       }
       const grid = document.getElementById('stageSelectionGrid');
@@ -805,7 +813,9 @@
       const select = document.getElementById('engineerFilter');
       if (!select) return;
       const current = select.value || 'all';
-      const engineers = window.getEngineers ? window.getEngineers() : [];
+      const engineers = currentDeliveryUnit !== 'all' && window.getEngineersForDeliveryUnit
+        ? window.getEngineersForDeliveryUnit(currentDeliveryUnit)
+        : (window.getEngineers ? window.getEngineers() : []);
       const options = [
         '<option value="all">All Engineers</option>',
         ...engineers.map(eng => `<option value="${escapeHtml(eng.id)}">${escapeHtml(eng.name)}</option>`)
@@ -816,7 +826,12 @@
 
     function getSelectedEngineerWorkGroups() {
       const engineerFilter = document.getElementById('engineerFilter')?.value || 'all';
-      if (engineerFilter === 'all' || !window.getEngineerWorkGroups) return null;
+      if (engineerFilter === 'all') {
+        return currentDeliveryUnit !== 'all' && window.getDeliveryUnitWorkGroups
+          ? window.getDeliveryUnitWorkGroups(currentDeliveryUnit)
+          : null;
+      }
+      if (!window.getEngineerWorkGroups) return null;
       return window.getEngineerWorkGroups(engineerFilter);
     }
 
@@ -1142,7 +1157,14 @@
       // shares the same conversation while comments from other FYs stay hidden.
       return allComments.filter(comment => {
         const commentFY = comment.fy || comment.financialYear;
-        return commentFY === currentFinancialYear;
+        if (commentFY !== currentFinancialYear) return false;
+        const engineerId = document.getElementById('engineerFilter')?.value || 'all';
+        const workGroupCode = document.getElementById('wgFilter')?.value || 'all';
+        return window.commentMatchesOrganisationScope?.(comment, {
+          deliveryUnitId: currentDeliveryUnit,
+          engineerId,
+          workGroupCode
+        }) ?? true;
       });
     }
 
@@ -1236,8 +1258,12 @@
           }
         });
         console.log('✓ Work group sets loaded:', window.workGroupSets.size);
+        const hierarchyErrors = window.validateOrganisationHierarchy?.(window.workGroupSets) || [];
+        if (hierarchyErrors.length) {
+          throw new Error(`Invalid organisational hierarchy:\n${hierarchyErrors.join('\n')}`);
+        }
       } else {
-        console.warn('⚠ work-group-sets-data.js not found - using raw values');
+        console.warn('⚠ organisation-data.js Work Group Set catalogue not found - using raw values');
       }
       // Check if external file loaded
       if (typeof STANDARD_JOBS_RAW !== 'undefined') {
@@ -1553,7 +1579,7 @@
         currentReviewStage,
         getTopVariancePeriodLabel(period),
         `Group: ${getSelectDisplayText('groupFilter')}`,
-        `Delivery unit: ${currentDeliveryUnit === 'all' ? 'All Delivery Units' : currentDeliveryUnit}`,
+        `Delivery unit: ${getDeliveryUnitLabel(currentDeliveryUnit)}`,
         `Engineer: ${getSelectDisplayText('engineerFilter')}`,
         `Work group: ${getSelectDisplayText('wgFilter')}`
       ].filter(Boolean);
@@ -3053,7 +3079,15 @@
         return activeGroup.jobNumbers.includes(job.jn);
       };
 
-      const filterByDeliveryUnit = (job) => currentDeliveryUnit === 'all' || job.mnt === currentDeliveryUnit;
+      // Organisational DU scope is already represented by engineerWorkGroups.
+      // Standard Job MNT remains independent metadata and never determines DU.
+      const filterByDeliveryUnit = (job) => {
+        if (currentDeliveryUnit === 'all') return true;
+        const duWorkGroups = window.getDeliveryUnitWorkGroups?.(currentDeliveryUnit) || [];
+        return Object.keys(job.wgs || {}).some(jobWorkGroup =>
+          duWorkGroups.some(code => normalizeWorkGroupSet(code) === normalizeWorkGroupSet(jobWorkGroup))
+        );
+      };
       const filterByEngineer = (job) => {
         // If no engineer selected, show all jobs
         if (!engineerWorkGroups || engineerWorkGroups.length === 0) return true;
@@ -4617,20 +4651,25 @@
       }
 
       if (commentEngineerTag) {
-        const engineers = window.getEngineers ? window.getEngineers() : [];
         commentEngineerTag.innerHTML = [
-          '<option value="">Tag engineer (optional)</option>',
-          ...engineers.map(eng => `<option value="${escapeHtml(eng.id)}">${escapeHtml(eng.name)}</option>`)
+          '<option value="">Engineer derived from work group</option>'
         ].join('');
+        commentEngineerTag.disabled = true;
+      }
+
+      if (commentWorkGroupTag && commentEngineerTag) {
+        commentWorkGroupTag.onchange = () => {
+          const organisation = window.getOrganisationForWorkGroup?.(commentWorkGroupTag.value);
+          commentEngineerTag.innerHTML = organisation?.engineer
+            ? `<option value="${escapeHtml(organisation.engineer.id)}">${escapeHtml(organisation.engineer.name)}</option>`
+            : '<option value="">Engineer derived from work group</option>';
+        };
       }
 
       commentText.value = '';
       commentAdd.onclick = () => {
         const taggedWorkGroup = commentWorkGroupTag?.value || '';
-        const taggedEngineerId = commentEngineerTag?.value || '';
-        const taggedEngineer = taggedEngineerId && window.getEngineerById
-          ? window.getEngineerById(taggedEngineerId)
-          : null;
+        const taggedEngineer = window.getOrganisationForWorkGroup?.(taggedWorkGroup)?.engineer || null;
         addJobComment(job.jn, commentType.value, commentText.value, {
           rootCause: '',
           correctiveAction: '',
@@ -4680,13 +4719,18 @@
             : filteredWorkGroupCode;
         }
         const filteredEngineerName = String(entry.filteredEngineerName || '').trim();
+        const currentOrganisation = window.getCommentOrganisation?.(entry);
+        const currentEngineerName = currentOrganisation?.engineer?.name || '';
+        const currentDeliveryUnitName = currentOrganisation?.deliveryUnit?.name || '';
         return `
         <div class="comment-card">
           <div class="comment-card-header">
             <div class="comment-header-left">
               <span class="comment-type">${escapeHtml(entry.category)}</span>
               ${filteredWorkGroupLabel ? `<span class="comment-context-tag" title="Comment added while filtered to a work group set">WG: ${escapeHtml(filteredWorkGroupLabel)}</span>` : ''}
-              ${filteredEngineerName ? `<span class="comment-context-tag" title="Comment added while filtered to an engineer">Engineer: ${escapeHtml(filteredEngineerName)}</span>` : ''}
+              ${currentEngineerName ? `<span class="comment-context-tag" title="Current Engineer derived from the Work Group Set">Engineer: ${escapeHtml(currentEngineerName)}</span>` : ''}
+              ${currentDeliveryUnitName ? `<span class="comment-context-tag" title="Current Delivery Unit classification">DU: ${escapeHtml(currentDeliveryUnitName)}</span>` : ''}
+              ${filteredEngineerName && filteredEngineerName !== currentEngineerName ? `<span class="comment-context-tag" title="Preserved historical Engineer tag">Originally: ${escapeHtml(filteredEngineerName)}</span>` : ''}
             </div>
             <span class="comment-meta">${escapeHtml(entry.rf || entry.reviewStage || '')}${entry.rf || entry.reviewStage ? ' • ' : ''}${formatTimestamp(entry.timestamp)}</span>
           </div>
