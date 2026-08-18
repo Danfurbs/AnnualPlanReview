@@ -37,6 +37,21 @@ test('orphan allocations resolve through the approved Engineer and DU', () => {
   assert.equal(atg.deliveryUnit.id, 'liverpool');
 });
 
+test('work groups resolve from codes, descriptions, and combined labels', () => {
+  const { window } = loadHierarchy();
+  assert.equal(window.resolveWorkGroupCode('DBCANOFT'), 'DBCANOFT');
+  assert.equal(window.resolveWorkGroupCode('Carnforth SM Drainage'), 'DBCANOFT');
+  assert.equal(window.resolveWorkGroupCode('DBCANOFT Carnforth SM Drainage'), 'DBCANOFT');
+  assert.equal(window.getOrganisationForWorkGroup('Carnforth SM Drainage').engineer.id, 'preston');
+});
+
+test('Delivery Units resolve from stable IDs and display names', () => {
+  const { window } = loadHierarchy();
+  assert.equal(window.resolveDeliveryUnit('liverpool').id, 'liverpool');
+  assert.equal(window.resolveDeliveryUnit('Lancs and Cumbria').id, 'lancs-cumbria');
+  assert.equal(window.resolveDeliveryUnit('unknown'), null);
+});
+
 test('comments follow current WGS hierarchy and untagged comments use the approved fallback', () => {
   const { window } = loadHierarchy();
   const bauDeliveryUnit = window.encodeCommentDeliveryUnit('manchester');
@@ -93,4 +108,16 @@ test('DU-only comment scope includes all descendant comments and optional filter
   assert.equal(window.commentMatchesOrganisationScope(liverpool, {
     deliveryUnitId: 'liverpool', workGroupCode: 'DCCRETRA'
   }), false);
+});
+
+test('description-tagged comments remain visible in their current hierarchy', () => {
+  const { window } = loadHierarchy();
+  const comment = {
+    filteredWorkGroup: 'Manchester South ENG(TRACK)',
+    deliveryUnit: window.encodeCommentDeliveryUnit('manchester')
+  };
+  assert.equal(window.getCommentOrganisation(comment).engineer.id, 'manchester');
+  assert.equal(window.commentMatchesOrganisationScope(comment, {
+    deliveryUnitId: 'manchester', workGroupCode: 'DEMNSTRE'
+  }), true);
 });
