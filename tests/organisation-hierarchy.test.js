@@ -110,6 +110,26 @@ test('DU-only comment scope includes all descendant comments and optional filter
   }), false);
 });
 
+test('DU-only standard-job comment scope remains broad across Engineer and WGS selections', () => {
+  const { window } = loadHierarchy();
+  const marker = window.encodeCommentDeliveryUnit('liverpool');
+  const comments = [
+    { fy: 'FY27', rf: 'RF3', filteredWorkGroup: 'DCATGTRA', deliveryUnit: marker },
+    { fy: 'FY27', rf: 'RF9', filteredWorkGroup: 'DCCRETRA', deliveryUnit: marker }
+  ];
+
+  // The breakdown supplies only its DU scope. A page-level Warrington / DCATGTRA
+  // selection must therefore leave the Crewe / DCCRETRA RF9 comment visible.
+  const visible = comments.filter(comment =>
+    comment.fy === 'FY27' && window.commentMatchesOrganisationScope(comment, {
+      deliveryUnitId: 'liverpool'
+    })
+  );
+
+  assert.equal(visible.length, 2);
+  assert.deepEqual(Array.from(visible, comment => comment.rf), ['RF3', 'RF9']);
+});
+
 test('description-tagged comments remain visible in their current hierarchy', () => {
   const { window } = loadHierarchy();
   const comment = {
