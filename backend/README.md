@@ -1,11 +1,13 @@
 # Annual Plan Review - Backend API
 
-This backend server provides persistent storage for forecasts, baselines, and comments across multiple computers. It uses Express.js with SQLite database.
+> **Local-development documentation:** this page describes the legacy/local Express + SQLite setup only. The canonical production deployment uses **Render + PostgreSQL**; see the [root README](../README.md) for the authoritative production setup and storage model.
+
+This backend server provides persistent storage for forecasts, baselines, and comments across multiple computers. For local development, it uses Express.js with a SQLite database.
 
 ## Features
 
 - **RESTful API**: Full CRUD operations for forecasts, baselines, and comments
-- **SQLite Database**: Lightweight, file-based database for easy deployment
+- **Local SQLite Database**: Lightweight, file-based database for local development
 - **CORS Enabled**: Supports cross-origin requests
 - **Automatic Fallback**: Frontend maintains localStorage as cache/fallback
 - **Data Migration**: Built-in utilities to export/import data between localStorage and backend
@@ -210,29 +212,7 @@ To allow access from other computers on your local network:
 
 ### Production Deployment
 
-For production deployment:
-
-1. **Use a production database**: Consider PostgreSQL or MySQL instead of SQLite
-2. **Add authentication**: Implement user authentication and authorization
-3. **Enable HTTPS**: Use SSL/TLS certificates
-4. **Use a process manager**: Use PM2 or similar to keep the server running
-5. **Set up reverse proxy**: Use Nginx or Apache as reverse proxy
-6. **Configure firewall**: Open only necessary ports
-7. **Set environment variables**: Use .env file for configuration
-
-Example with PM2:
-
-```bash
-# Install PM2
-npm install -g pm2
-
-# Start server with PM2
-pm2 start server.js --name "apr-backend"
-
-# Configure to start on boot
-pm2 startup
-pm2 save
-```
+Do not deploy the local SQLite setup as the authoritative production service. The supported production path is Render + PostgreSQL, as documented in the [root README](../README.md), `render.yaml`, and `RENDER_DEPLOYMENT.md`. Those root-level instructions cover the production database, environment variables, HTTPS endpoint, and service process.
 
 ## Troubleshooting
 

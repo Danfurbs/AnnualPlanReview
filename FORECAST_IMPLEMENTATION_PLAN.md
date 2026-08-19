@@ -273,6 +273,33 @@ Do not implement the following governance-review proposals in this phase:
 
 Basic authentication is desirable but should be delivered later as an isolated change after RF6 calculation and persistence stability.
 
+## Consolidated outstanding review backlog
+
+The following still-open corrective and product-review items were consolidated from the earlier review backlog. They are tracked in this plan so that deferred work has one authoritative list. They do not override the business rules or the RF6 implementation boundary above.
+
+### API correctness, consistency, and resilience
+
+- **CORS credentials and wildcard origins:** remove the invalid `credentials: true` plus `*` combination. Prefer disabling credentials for wildcard/local use and requiring an explicit origin allowlist before cookie- or credential-based authentication is introduced.
+- **Bulk comment field-presence validation:** treat only absent, `null`, or otherwise schema-invalid values as missing rather than rejecting every falsy value. Define the permitted type and empty-string behaviour for each field.
+- **Consistent route validation:** centralise reusable fiscal-year, plan-version, job, group, Work Done, and comment validators and apply them consistently across all routes. Consider a formal API schema only if its additional governance and maintenance cost is justified.
+- **Endpoint-specific payload limits:** replace the global 50 MB allowance with a lower default and narrowly raised limits for endpoints that genuinely accept large imports; retain proxy/gateway limits as defence in depth.
+
+These items should be accompanied by negative-path API tests and must preserve existing valid payloads. The previously reported stale forecast-comment reconciliation issue is not in this backlog because both PostgreSQL and SQLite full-replacement save paths now delete the prior comments for the same job, financial year, and plan version before inserting the submitted set.
+
+### Review insight and productivity opportunities
+
+- **Variance narratives:** evaluate deterministic, rule-based draft explanations for plan-versus-actual movements first. Any optional AI-assisted rewrite must remain human-approved, auditable, and separately governed.
+- **Materiality and alerting:** assess whether business owners want additional configurable percentage-based prioritisation by job type or Work Group, including whether sufficient history exists for volatility-based thresholds. Do not add an absolute-volume materiality condition or silently change the authoritative RAG boundaries without an explicit business-rule decision.
+- **Evidence links:** evaluate optional URL attachments to comments before native file uploads. Any later upload design must address storage, malware scanning, access control, retention, and deletion.
+- **Period reconciliation view:** deliver the table/export and trend/drill-through opportunity through the Priority 5 dashboard comparison and Priority 7 export work rather than creating a competing calculation model.
+- **Comment quality assistance:** retain free-form comments and nullable optional fields. Explore non-blocking lint suggestions and optional root-cause, corrective-action, owner, and due-date metadata only; do not turn them into mandatory workflow fields.
+- **Benchmarking and historical context:** evaluate prior-year same-period comparisons first, followed by a rolling multi-year median only when comparable, reliable history and clear missing-data rules are available.
+- **Reviewer productivity:** investigate saved filters/pivots, shareable views, and keyboard-first review. Bulk tagging or assignment may be considered only as lightweight productivity support; bulk approval and formal approval workflows remain rejected by the business rules.
+
+### Measures for later evaluation
+
+For any backlog item that proceeds, establish a baseline and measure stale/invalid comment incidents, median review time per job, optional commentary completeness, and reconciliation rework. Metrics must not create mandatory commentary or approval requirements that conflict with the target operating model.
+
 ## Database and migration plan
 
 ### No migration required for sparse V1
