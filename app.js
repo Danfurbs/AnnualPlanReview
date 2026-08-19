@@ -1164,15 +1164,14 @@
       const allComments = commentStore[jobNumber] || [];
       // Comments belong to the financial year, so every RF review in that FY
       // shares the same conversation while comments from other FYs stay hidden.
+      // The standard-job breakdown is a DU-level conversation: Engineer and
+      // Work Group Set filters affect job figures, but must never hide comments
+      // belonging to another part of the selected Delivery Unit.
       return allComments.filter(comment => {
         const commentFY = comment.fy || comment.financialYear;
         if (commentFY !== currentFinancialYear) return false;
-        const engineerId = document.getElementById('engineerFilter')?.value || 'all';
-        const workGroupCode = document.getElementById('wgFilter')?.value || 'all';
         return window.commentMatchesOrganisationScope?.(comment, {
-          deliveryUnitId: currentDeliveryUnit,
-          engineerId,
-          workGroupCode
+          deliveryUnitId: currentDeliveryUnit
         }) ?? true;
       });
     }
