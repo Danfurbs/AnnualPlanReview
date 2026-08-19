@@ -41,6 +41,10 @@ coverage/
 *.temp
 .cache/
 
+# Stray spreadsheet uploads (keep intentional templates in scoped subdirectories)
+*.xlsx
+*.xls
+
 # Local config overrides
 config.local.js
 *.local.json
