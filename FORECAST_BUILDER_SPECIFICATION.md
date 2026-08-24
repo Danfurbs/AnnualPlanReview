@@ -12,12 +12,24 @@ Repo: `Danfurbs/AnnualPlanReview`.
     with frontend and PostgreSQL service coverage. The additive database table
     is created by the existing idempotent schema initialisation; it does not
     migrate forecast records.
--   **Phase 2 --- implemented on the preview branch.** A separately labelled,
+-   **Phase 2 --- implemented and corrected on the preview branch.** A separately labelled,
     read-only Forecast Builder Preview now shows the selected planning FY,
     engineer queue, explicit All / Not Forecasted / Forecasted filters,
     progress, Standard Job cards, manual Standard Job addition, and the manual
     Forecasted workflow. Planning status persists independently from RF
     Reviewed and does not write forecast values.
+    The engineer queue is now scoped exclusively through the organisation
+    hierarchy to the dashboard's selected Delivery Unit; a concrete Delivery
+    Unit is required, and stale engineer selection, navigation, search,
+    filters, discovery caches, and metadata actions all use that same scoped
+    set. Changing Delivery Unit changes presentation context only and does not
+    rewrite or remove forecast or planning metadata. At widths up to 900px the
+    engineer buttons remain one keyboard-accessible, horizontally scrollable
+    row contained within the preview rather than widening the document.
+    Evidence loading is also implemented one FY at a time, with V0, V1, and
+    Work Done loaded concurrently within that FY, stale-request protection,
+    compact per-year evidence maps, cached engineer queues, and visible
+    spinner, FY progress, progress bar, and read-only reassurance.
 -   **Phases 3--5 --- not started.** Standard Job expansion, V0 inputs,
     Standard-Job saving, Planning Context/copy-forward, and profile charts are
     not available in the preview yet.
