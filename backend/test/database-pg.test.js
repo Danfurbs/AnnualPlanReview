@@ -129,3 +129,50 @@ test('comments save and restore with their financial year and RF stage', async (
   assert.equal(restored.rf, 'RF3');
   assert.deepEqual(restored.evidenceLinks, ['https://example.com/evidence']);
 });
+
+test('forecast planning metadata remains isolated by FY, Engineer, job and Work Group Set', async () => {
+  const calls = [];
+  const service = Object.create(DatabaseServicePG.prototype);
+  service.ready = Promise.resolve();
+  service.pool = { query: async (sql, params) => {
+    calls.push({ sql, params });
+    return { rows: [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: '', forecasted: true }] };
+  } };
+  const saved = await service.saveForecastPlanningMetadata({
+    fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: '', forecasted: true
+  });
+  assert.deepEqual(calls[0].params, ['FY28', 'track', '9005', '', true]);
+  assert.equal(calls[0].sql.includes('ON CONFLICT(fiscal_year, engineer_id, job_number, work_group)'), true);
+  assert.equal(saved.forecasted, true);
+});
+
+test('forecast planning metadata removal is blocked when selected-year V0 exists', async () => {
+  const calls = [];
+  const service = Object.create(DatabaseServicePG.prototype);
+  service.ready = Promise.resolve();
+  service.pool = { query: async (sql, params) => {
+    calls.push({ sql, params });
+    return sql.includes(' AS present') ? { rows: [{ present: true }] } : { rows: [] };
+  } };
+  await assert.rejects(service.deleteForecastPlanningMetadata({
+    fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: ''
+  }), error => error.code === 'PLANNING_METADATA_HAS_FORECAST_DATA');
+  assert.equal(calls.some(call => call.sql.startsWith('DELETE FROM forecast_planning_metadata')), false);
+  assert.deepEqual(calls[0].params, ['FY28', '9005']);
+});
+
+test('untouched planning metadata can be removed without touching forecast tables', async () => {
+  const calls = [];
+  const service = Object.create(DatabaseServicePG.prototype);
+  service.ready = Promise.resolve();
+  service.pool = { query: async (sql, params) => {
+    calls.push({ sql, params });
+    return sql.includes(' AS present') ? { rows: [{ present: false }] } : { rows: [] };
+  } };
+  await service.deleteForecastPlanningMetadata({
+    fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: ''
+  });
+  const deletion = calls.find(call => call.sql.startsWith('DELETE FROM forecast_planning_metadata'));
+  assert.deepEqual(deletion.params, ['FY28', 'track', '9005', '']);
+  assert.equal(calls.some(call => /^DELETE FROM forecasts/.test(call.sql)), false);
+});

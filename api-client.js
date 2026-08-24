@@ -788,6 +788,39 @@ async function deletePublicGroupFromApi(groupId) {
   }
 }
 
+async function loadForecastPlanningMetadataFromApi(fiscalYear) {
+  if (!isApiEnabled()) return null;
+  try {
+    const response = await apiRequest(`/forecast-planning?fiscalYear=${encodeURIComponent(fiscalYear)}`);
+    return response.success && Array.isArray(response.data) ? response.data : null;
+  } catch (err) {
+    console.warn('Failed to load forecast planning metadata:', err);
+    return null;
+  }
+}
+
+async function saveForecastPlanningMetadataToApi(item) {
+  if (!isApiEnabled()) return false;
+  try {
+    const response = await apiRequest('/forecast-planning', { method: 'PUT', body: item });
+    return response.success ? response.data : false;
+  } catch (err) {
+    console.error('Failed to save forecast planning metadata:', err);
+    return false;
+  }
+}
+
+async function deleteForecastPlanningMetadataFromApi(item) {
+  if (!isApiEnabled()) return false;
+  try {
+    const response = await apiRequest('/forecast-planning', { method: 'DELETE', body: item });
+    return response.success === true;
+  } catch (err) {
+    console.error('Failed to delete forecast planning metadata:', err);
+    return false;
+  }
+}
+
 async function loadWorkDoneFromApi(year) {
   if (!isApiEnabled()) return null;
   try {
@@ -914,6 +947,9 @@ window.deleteCommentFromApi = deleteCommentFromApi;
 window.loadPublicGroupsFromApi = loadPublicGroupsFromApi;
 window.savePublicGroupToApi = savePublicGroupToApi;
 window.deletePublicGroupFromApi = deletePublicGroupFromApi;
+window.loadForecastPlanningMetadataFromApi = loadForecastPlanningMetadataFromApi;
+window.saveForecastPlanningMetadataToApi = saveForecastPlanningMetadataToApi;
+window.deleteForecastPlanningMetadataFromApi = deleteForecastPlanningMetadataFromApi;
 window.loadWorkDoneFromApi = loadWorkDoneFromApi;
 window.saveWorkDoneToApi = saveWorkDoneToApi;
 window.deleteWorkDoneForYearFromApi = deleteWorkDoneForYearFromApi;

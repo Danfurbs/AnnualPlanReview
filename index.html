@@ -19,6 +19,7 @@
         <div class="top-bar-actions">
           <button class="group-action-button" onclick="openBaselinePage()">Baseline Management</button>
           <button class="group-action-button" onclick="openForecastEditor()">Forecast Builder</button>
+          <button class="group-action-button preview-button" onclick="openForecastBuilderPreview()">Forecast Builder Preview</button>
           <button class="primary-button" onclick="openModal()">Upload Files</button>
           <button class="settings-button" onclick="openSettings()" title="Settings">⚙️</button>
         </div>
@@ -442,6 +443,86 @@
           <p class="forecast-editor-meta" id="forecastEditorStatus"></p>
         </form>
       </main>
+    </div>
+  </div>
+
+  <div class="container page is-hidden" id="forecastBuilderPreviewPage">
+    <div class="forecast-page-header preview-page-header">
+      <div class="forecast-page-title">
+        <div class="forecast-page-icon">FB</div>
+        <div>
+          <div class="preview-eyebrow">Preview workflow</div>
+          <h1>Forecast Builder</h1>
+          <p class="subtitle">Build V0 by Engineer → Standard Job → Work Group Set</p>
+        </div>
+      </div>
+      <div class="forecast-page-actions">
+        <span class="preview-save-state" id="forecastPreviewState" role="status" aria-live="polite">Read-only planning view</span>
+        <label class="preview-year-control" for="forecastPreviewYear">Planning FY
+          <select id="forecastPreviewYear"></select>
+        </label>
+        <button class="group-action-button" type="button" onclick="openForecastEditor()">Current Forecast Builder</button>
+        <button class="primary-button" type="button" onclick="closeForecastBuilderPreview()">Back to Dashboard</button>
+      </div>
+    </div>
+
+    <div class="preview-builder-layout">
+      <aside class="preview-engineer-sidebar" aria-label="Engineer planning progress">
+        <div class="preview-sidebar-controls">
+          <label for="forecastPreviewEngineerSearch">Engineers</label>
+          <input type="search" id="forecastPreviewEngineerSearch" placeholder="Search engineer…">
+          <div class="preview-filter-tabs" role="group" aria-label="Forecast status filter">
+            <button type="button" class="active" data-preview-filter="all">All</button>
+            <button type="button" data-preview-filter="not-forecasted">Not Forecasted</button>
+            <button type="button" data-preview-filter="forecasted">Forecasted</button>
+          </div>
+        </div>
+        <div id="forecastPreviewEngineerList" class="preview-engineer-list"></div>
+      </aside>
+
+      <main class="preview-builder-main">
+        <div id="forecastPreviewLoading" class="preview-loading" role="status">Loading planning evidence…</div>
+        <div id="forecastPreviewContent" hidden>
+          <div class="preview-engineer-header">
+            <div>
+              <span class="preview-eyebrow">Selected engineer</span>
+              <h2 id="forecastPreviewEngineerTitle">Engineer</h2>
+              <div class="preview-progress-summary">
+                <span id="forecastPreviewProgressText">0 of 0 Standard Jobs forecasted</span>
+                <div class="preview-progress-track"><span id="forecastPreviewProgressBar"></span></div>
+              </div>
+            </div>
+            <div class="preview-engineer-actions">
+              <button type="button" class="group-action-button" id="forecastPreviewPrevious">← Previous Engineer</button>
+              <button type="button" class="group-action-button" id="forecastPreviewNext">Next Engineer →</button>
+              <button type="button" class="primary-button" id="forecastPreviewAddJob">+ Add Standard Job</button>
+            </div>
+          </div>
+          <div class="preview-section-label">Standard Jobs — SJN ascending</div>
+          <div id="forecastPreviewJobList" class="preview-job-list"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal" id="forecastPreviewAddJobModal" role="dialog" aria-modal="true" aria-labelledby="forecastPreviewAddJobTitle">
+    <div class="modal-content preview-add-job-modal">
+      <div class="modal-header">
+        <div>
+          <span class="preview-eyebrow">Planning queue</span>
+          <h2 id="forecastPreviewAddJobTitle">Add Standard Job</h2>
+          <p class="helper-text">Add genuinely new work that has no recent planning evidence.</p>
+        </div>
+        <button class="close" type="button" onclick="closeForecastPreviewAddJob()" aria-label="Close">×</button>
+      </div>
+      <label for="forecastPreviewJobSearch">Standard Job number or description</label>
+      <input id="forecastPreviewJobSearch" type="search" list="forecastPreviewJobOptions" placeholder="Search Standard Jobs…">
+      <datalist id="forecastPreviewJobOptions"></datalist>
+      <p class="forecast-editor-meta" id="forecastPreviewAddJobMessage"></p>
+      <div class="modal-actions">
+        <button type="button" class="group-action-button" onclick="closeForecastPreviewAddJob()">Cancel</button>
+        <button type="button" class="primary-button" id="forecastPreviewConfirmAddJob">Add to Forecast Builder</button>
+      </div>
     </div>
   </div>
 
@@ -1019,6 +1100,8 @@
   <script src="forecast-globals.js"></script>
   <script src="forecast-storage.js"></script>
   <script src="forecast-state.js"></script>
+  <script src="forecast-builder-data.js"></script>
+  <script src="forecast-builder-preview.js"></script>
   <script src="forecast-editor.js"></script>
   <script src="baseline-storage.js"></script>
   <script src="baseline-page.js"></script>

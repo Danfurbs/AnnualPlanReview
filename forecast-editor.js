@@ -45,8 +45,10 @@ async function openForecastEditor() {
   try {
     const dashboardPage = document.getElementById('dashboardPage');
     const forecastPage = document.getElementById('forecastPage');
+    const previewPage = document.getElementById('forecastBuilderPreviewPage');
 
     if (dashboardPage) dashboardPage.classList.add('is-hidden');
+    if (previewPage) previewPage.classList.add('is-hidden');
     if (forecastPage) forecastPage.classList.remove('is-hidden');
 
     await initializeForecastEditor();

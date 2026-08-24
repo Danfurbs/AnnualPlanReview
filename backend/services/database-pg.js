@@ -132,6 +132,17 @@ class DatabaseServicePG {
       ON v1_overrides(job_number, fiscal_year)
     `);
     await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS forecast_planning_metadata (
+        fiscal_year VARCHAR(10) NOT NULL,
+        engineer_id VARCHAR(120) NOT NULL,
+        job_number VARCHAR(50) NOT NULL,
+        work_group VARCHAR(120) NOT NULL DEFAULT '',
+        forecasted BOOLEAN NOT NULL DEFAULT FALSE,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(fiscal_year, engineer_id, job_number, work_group)
+      )
+    `);
+    await this.pool.query(`
       CREATE TABLE IF NOT EXISTS public_groups (
         id VARCHAR(100) PRIMARY KEY,
         name TEXT NOT NULL,
@@ -867,6 +878,45 @@ class DatabaseServicePG {
     await this.ready;
     const result = await this.pool.query('SELECT revision FROM revisions WHERE scope = $1 AND data_key = $2', [scope, dataKey]);
     return result.rows[0]?.revision || 0;
+  }
+  async getForecastPlanningMetadata(fiscalYear) {
+    await this.ready;
+    const result = await this.pool.query(`SELECT fiscal_year AS "fiscalYear", engineer_id AS "engineerId",
+      job_number AS "jobNumber", work_group AS "workGroup", forecasted
+      FROM forecast_planning_metadata WHERE fiscal_year = $1 ORDER BY engineer_id, job_number, work_group`, [fiscalYear]);
+    return result.rows;
+  }
+
+  async saveForecastPlanningMetadata(item) {
+    await this.ready;
+    const result = await this.pool.query(`INSERT INTO forecast_planning_metadata
+      (fiscal_year, engineer_id, job_number, work_group, forecasted, updated_at)
+      VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      ON CONFLICT(fiscal_year, engineer_id, job_number, work_group)
+      DO UPDATE SET forecasted = EXCLUDED.forecasted, updated_at = CURRENT_TIMESTAMP
+      RETURNING fiscal_year AS "fiscalYear", engineer_id AS "engineerId",
+        job_number AS "jobNumber", work_group AS "workGroup", forecasted`,
+      [item.fiscalYear, item.engineerId, item.jobNumber, item.workGroup || '', Boolean(item.forecasted)]);
+    return result.rows[0];
+  }
+
+  async deleteForecastPlanningMetadata(item) {
+    await this.ready;
+    if (!item.workGroup) {
+      const evidence = await this.pool.query(`SELECT
+        EXISTS(SELECT 1 FROM forecasts WHERE fiscal_year = $1 AND plan_version = 'v0' AND job_number = $2) OR
+        EXISTS(SELECT 1 FROM forecast_comments WHERE fiscal_year = $1 AND plan_version = 'v0'
+          AND job_number = $2 AND BTRIM(COALESCE(comment, '')) <> '') AS present`,
+      [item.fiscalYear, item.jobNumber]);
+      if (evidence.rows[0]?.present) {
+        const error = new Error('Planning metadata has V0 data');
+        error.code = 'PLANNING_METADATA_HAS_FORECAST_DATA';
+        throw error;
+      }
+    }
+    await this.pool.query(`DELETE FROM forecast_planning_metadata
+      WHERE fiscal_year = $1 AND engineer_id = $2 AND job_number = $3 AND work_group = $4`,
+      [item.fiscalYear, item.engineerId, item.jobNumber, item.workGroup || '']);
   }
   mapJobCommentRow(row) {
     return {

@@ -2,6 +2,35 @@
 
 Repo: `Danfurbs/AnnualPlanReview`.
 
+## Implementation status
+
+**Status date: 24 August 2026**
+
+-   **Phase 1 --- implemented and regression-tested on the preview branch,
+    awaiting deployment safety gate.** The FY-relative, current-ownership
+    discovery layer and isolated planning metadata persistence are implemented
+    with frontend and PostgreSQL service coverage. The additive database table
+    is created by the existing idempotent schema initialisation; it does not
+    migrate forecast records.
+-   **Phase 2 --- implemented on the preview branch.** A separately labelled,
+    read-only Forecast Builder Preview now shows the selected planning FY,
+    engineer queue, explicit All / Not Forecasted / Forecasted filters,
+    progress, Standard Job cards, manual Standard Job addition, and the manual
+    Forecasted workflow. Planning status persists independently from RF
+    Reviewed and does not write forecast values.
+-   **Phases 3--5 --- not started.** Standard Job expansion, V0 inputs,
+    Standard-Job saving, Planning Context/copy-forward, and profile charts are
+    not available in the preview yet.
+-   **Phase 6 --- not authorised.** The current Forecast Builder remains the
+    production workflow alongside the clearly labelled preview and must not be
+    retired without the product owner's explicit confirmation.
+
+At this break, the dashboard has a new **Forecast Builder Preview** action.
+Opening it shows the read-only Phase 2 planning queue; the current Forecast
+Builder remains available from both the dashboard and the preview header. The
+next implementation break will add Phase 3 expansion, V0 Work Group Set inputs,
+comments, and explicit per-Standard-Job saving.
+
 This replaces the current Work-Group-Set-first Forecast Builder
 (`forecast-editor.js`, Forecast Builder section of `index.html`) with a
 new **Engineer → Standard Job → Work Group Set** planning workflow.
@@ -56,6 +85,24 @@ change.
 The earlier V0/V1 work required many follow-up fixes because related
 changes were landed in large batches. Phase 1 in particular must be
 correct and fully tested before UI work is built on top of it.
+
+### Parallel preview and retirement approval
+
+Phases 1--5 must be built alongside the current Forecast Builder rather
+than replacing it in place. Expose the rebuilt workflow through a clearly
+labelled **Forecast Builder Preview** route/navigation entry, and provide
+an obvious way back to the current Forecast Builder. The current builder
+must remain available and operational throughout preview testing.
+
+Both builders use the same canonical forecast records; the preview is not
+a second forecast store and must not duplicate or migrate forecast data.
+Keep the new screen/controller isolated from the current builder UI where
+practical so it can be enabled, disabled, or rolled back without changing
+the existing workflow.
+
+Phase 6 is optional and requires the product owner's explicit approval.
+Passing automated tests, completing Phases 1--5, or making the preview
+available does not by itself authorise removal of the current builder.
 
 ## Out of scope for this entire prompt --- do not touch
 
@@ -300,6 +347,14 @@ begins.
 Build the screen structure using real Phase 1 data before enabling V0
 editing.
 
+The supplied visual mock-up is directional rather than a pixel-perfect
+contract. Preserve the application's current theme, terminology, and
+component conventions, while using the mock-up's useful overall hierarchy:
+engineer navigation, expandable Standard Job cards, an in-context profile,
+and Work Group Set rows. Prefer a more usable or accessible interaction
+where it meets the same planning need. In particular, do not copy mock-up
+labels that conflict with the Forecasted rules below.
+
 ## Engineer sidebar
 
 Include:
@@ -427,10 +482,17 @@ If entering V0 data/comments against that exceptional Work Group Set
 naturally makes it remain visible under the current engineer using the
 existing data model, preserve that behaviour.
 
-However, **do not create a complex shadow ownership/engineer-override
-model solely to persist exceptional cross-owner rows**. If this would
-require significant new organisational state, keep the implementation
-simple and rely on `organisation-data.js` being corrected.
+Persist an added exceptional row as lightweight planning-workspace metadata
+scoped by **Financial Year + Engineer + Standard Job + Work Group Set** so
+that an untouched row survives reload. This metadata is only a visibility
+association for the selected planning workspace: it must not change
+organisation ownership or create forecast values/comments. An untouched
+association may be removed without affecting business data; once V0 data or
+comments exist, removing the association must never delete those records.
+
+Do not turn this lightweight association into a shadow ownership or
+engineer-override model. Current ownership remains authoritative for normal
+automatic discovery and organisational reporting.
 
 ## Save Standard Job
 
@@ -663,9 +725,12 @@ older years without affecting current edits.
 
 ------------------------------------------------------------------------
 
-# Phase 6: Remove the old Work-Group-Set-first Forecast Builder
+# Phase 6: Optional retirement of the old Work-Group-Set-first Forecast Builder
 
-Do this **only after Phases 1--5 are working and tested**.
+Do this **only after Phases 1--5 are working and tested and the product
+owner has explicitly confirmed that the preview is accepted**. This must be
+a separate retirement commit/PR. Do not infer approval from preview usage,
+automated test results, or completion of earlier phases.
 
 Remove from the Forecast Builder UI specifically:
 
@@ -687,10 +752,11 @@ unaffected.
 
 Run its existing tests and confirm they still pass unchanged.
 
-**Acceptance criteria:** the old construction UI no longer exists, the
-new Engineer → Standard Job → Work Group Set V0 builder is the only
-Forecast Builder entry workflow, and existing V1/Reforecast
-functionality remains intact.
+**Acceptance criteria:** explicit product-owner approval is recorded; the
+old construction UI no longer exists; the new Engineer → Standard Job →
+Work Group Set V0 builder is the only Forecast Builder entry workflow; a
+tested rollback path exists; and existing V1/Reforecast functionality
+remains intact.
 
 ------------------------------------------------------------------------
 
