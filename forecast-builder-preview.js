@@ -107,6 +107,22 @@
     return requestId === state.requestSerial && year === state.selectedYear;
   }
 
+  function getScopedEngineers() {
+    const deliveryUnitId = window.getCurrentDeliveryUnitId?.() || '';
+    if (!deliveryUnitId || deliveryUnitId === 'all') return [];
+    return window.getEngineersForDeliveryUnit?.(deliveryUnitId) || [];
+  }
+
+  window.forecastBuilderPreviewContext = Object.freeze({ getScopedEngineers });
+
+  function ensureSelectedEngineer() {
+    const engineers = getScopedEngineers();
+    if (!engineers.some(engineer => engineer.id === state.selectedEngineerId)) {
+      state.selectedEngineerId = engineers[0]?.id || '';
+    }
+    return engineers;
+  }
+
   async function loadPlanningEvidence(year, requestId) {
     const historyYears = window.getPlanningHistoryYears(year);
     const allYears = [year, ...historyYears];
@@ -139,7 +155,7 @@
   function discoveryOptions(engineerId = state.selectedEngineerId) {
     return {
       selectedYear: state.selectedYear, engineerId,
-      engineers: window.getEngineers?.() || [], planningMetadata: state.metadata,
+      engineers: getScopedEngineers(), planningMetadata: state.metadata,
       effectiveForecastsByYear: state.effectiveForecastsByYear,
       v0ForecastsByYear: state.v0ForecastsByYear,
       workDoneByYear: state.workDoneByYear,
@@ -149,7 +165,7 @@
 
   function rebuildJobCache() {
     const next = new Map();
-    (window.getEngineers?.() || []).forEach(engineer => {
+    getScopedEngineers().forEach(engineer => {
       next.set(engineer.id, window.getStandardJobsForEngineer(discoveryOptions(engineer.id)));
     });
     state.jobsByEngineer = next;
@@ -171,7 +187,7 @@
   }
 
   function renderEngineerList() {
-    const engineers = window.getEngineers?.() || [];
+    const engineers = getScopedEngineers();
     const query = state.search.trim().toLowerCase();
     const visible = engineers.filter(engineer => (!query || engineer.name.toLowerCase().includes(query)) && matchesFilter(getJobs(engineer.id)));
     byId('forecastPreviewEngineerList').innerHTML = visible.length ? visible.map(engineer => {
@@ -204,7 +220,7 @@
   }
 
   function renderSelectedEngineer() {
-    const engineers = window.getEngineers?.() || [];
+    const engineers = ensureSelectedEngineer();
     const engineer = engineers.find(item => item.id === state.selectedEngineerId) || engineers[0];
     if (!engineer) return;
     state.selectedEngineerId = engineer.id;
@@ -215,7 +231,13 @@
     byId('forecastPreviewProgressBar').style.width = `${percent}%`;
     renderJobList();
   }
-  function renderAll() { renderEngineerList(); renderSelectedEngineer(); }
+  function renderAll() {
+    ensureSelectedEngineer();
+    renderEngineerList();
+    renderSelectedEngineer();
+    byId('forecastPreviewEngineerList')?.querySelector('.preview-engineer-item.active')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
 
   async function refreshPreview() {
     const requestId = ++state.requestSerial;
@@ -239,8 +261,8 @@
       if (!requestIsCurrent(requestId, requestedYear)) return;
       rebuildJobCache();
 
-      const engineers = window.getEngineers?.() || [];
-      if (!engineers.some(item => item.id === state.selectedEngineerId)) state.selectedEngineerId = engineers[0]?.id || '';
+      const engineers = ensureSelectedEngineer();
+      if (!engineers.length) throw new Error('Select a Delivery Unit before opening the Forecast Builder Preview.');
       setLoadingProgress('Organising Standard Jobs', 'Ready', 100);
       renderAll();
       byId('forecastPreviewLoading').hidden = true;
@@ -257,6 +279,10 @@
   }
 
   async function openForecastBuilderPreview() {
+    if (!getScopedEngineers().length) {
+      window.Toast?.error('Select a Delivery Unit before opening the Forecast Builder Preview.');
+      return;
+    }
     byId('dashboardPage')?.classList.add('is-hidden'); byId('forecastPage')?.classList.add('is-hidden');
     byId('baselinePage')?.classList.add('is-hidden'); byId('forecastBuilderPreviewPage')?.classList.remove('is-hidden');
     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -273,6 +299,7 @@
   }
 
   async function toggleForecasted(button) {
+    if (!getScopedEngineers().some(engineer => engineer.id === state.selectedEngineerId)) return;
     const item = { fiscalYear: state.selectedYear, engineerId: state.selectedEngineerId, jobNumber: button.dataset.jobNumber, workGroup: '', forecasted: button.dataset.forecasted !== 'true' };
     button.disabled = true; byId('forecastPreviewState').textContent = 'Saving planning status…';
     try {
@@ -283,6 +310,7 @@
   }
 
   async function removeStandardJob(button) {
+    if (!getScopedEngineers().some(engineer => engineer.id === state.selectedEngineerId)) return;
     const item = { fiscalYear: state.selectedYear, engineerId: state.selectedEngineerId, jobNumber: button.dataset.removeJob, workGroup: '', forecasted: false };
     if (!window.confirm('Remove this untouched Standard Job from the planning queue? No forecast data will be deleted.')) return;
     button.disabled = true;
@@ -294,16 +322,20 @@
   }
 
   function navigateEngineer(offset) {
-    const engineers = window.getEngineers?.() || [], current = engineers.findIndex(item => item.id === state.selectedEngineerId);
+    const engineers = ensureSelectedEngineer();
+    if (!engineers.length) return;
+    const current = engineers.findIndex(item => item.id === state.selectedEngineerId);
     state.selectedEngineerId = engineers[(current + offset + engineers.length) % engineers.length]?.id || state.selectedEngineerId; renderAll();
   }
   function openForecastPreviewAddJob() {
+    if (!getScopedEngineers().some(engineer => engineer.id === state.selectedEngineerId)) return;
     byId('forecastPreviewJobOptions').innerHTML = (window.STANDARD_JOBS || []).map(job => `<option value="${escapeHtml(job.standardJobNo)} — ${escapeHtml(job.standardJobDescription)}"></option>`).join('');
     byId('forecastPreviewJobSearch').value = ''; byId('forecastPreviewAddJobMessage').textContent = '';
     byId('forecastPreviewAddJobModal').classList.add('open'); byId('forecastPreviewJobSearch').focus();
   }
   function closeForecastPreviewAddJob() { byId('forecastPreviewAddJobModal').classList.remove('open'); }
   async function addStandardJob() {
+    if (!getScopedEngineers().some(engineer => engineer.id === state.selectedEngineerId)) return;
     const value = byId('forecastPreviewJobSearch').value.trim(), jobNumber = value.match(/^\s*(\d+)/)?.[1];
     const exists = (window.STANDARD_JOBS || []).some(job => String(job.standardJobNo) === jobNumber);
     if (!jobNumber || !exists) { byId('forecastPreviewAddJobMessage').textContent = 'Select a valid Standard Job from the list.'; return; }
