@@ -717,8 +717,8 @@ function renderForecastEditorTable() {
         <th>Unit</th>
         ${window.FORECAST_PERIODS.map(period => `<th>${period}</th>`).join('')}
         <th>Total</th>
-        <th>Actions</th>
         <th>Comment</th>
+        <th><span class="visually-hidden">Row actions</span></th>
       </tr>
     </thead>
   `;
@@ -794,6 +794,9 @@ function renderForecastEditorTable() {
                   placeholder="Comment..."
                   rows="1"
                 >${escapeHtml(comment)}</textarea>
+              </td>
+              <td class="forecast-action-cell">
+                <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}" title="Remove this forecast row" aria-label="Remove forecast row ${escapeHtml(jobNumber || String(index + 1))}">&times;</button>
               </td>
             </tr>
           `;
@@ -1820,7 +1823,7 @@ function handleForecastEditorDeleteRow(event) {
     const hasData = window.FORECAST_PERIODS.some(period => {
       const val = row.volumes?.[period];
       return val && Number(val) !== 0;
-    });
+    }) || Boolean(row.comment?.trim());
 
     if (hasData && !confirm(`Delete job ${jobNumber} from this forecast?`)) {
       return;
