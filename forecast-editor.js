@@ -717,8 +717,8 @@ function renderForecastEditorTable() {
         <th>Unit</th>
         ${window.FORECAST_PERIODS.map(period => `<th>${period}</th>`).join('')}
         <th>Total</th>
-        <th>Comment</th>
         <th>Actions</th>
+        <th>Comment</th>
       </tr>
     </thead>
   `;
@@ -783,6 +783,9 @@ function renderForecastEditorTable() {
                 `;
               }).join('')}
               <td class="forecast-total-cell" data-role="row-total" data-job="${escapeHtml(jobNumber)}">${formatForecastNumber(rowTotal)}</td>
+              <td class="forecast-action-cell">
+                <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}" title="Remove row">×</button>
+              </td>
               <td class="forecast-comment-cell">
                 <textarea
                   class="forecast-comment-input${comment ? ' has-value' : ''}"
@@ -791,9 +794,6 @@ function renderForecastEditorTable() {
                   placeholder="Comment..."
                   rows="1"
                 >${escapeHtml(comment)}</textarea>
-              </td>
-              <td class="forecast-action-cell">
-                <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}" title="Remove row">×</button>
               </td>
             </tr>
           `;
@@ -854,14 +854,16 @@ function hasRowData(row) {
 function getJobMetadataByNumber(jobNumber) {
   if (!jobNumber) return null;
 
+  const normalizedJobNumber = normalizeForecastJobNumber(jobNumber);
+
   // Try standard jobs map first
-  if (window.stdJobs && window.stdJobs.has(jobNumber)) {
-    return window.stdJobs.get(jobNumber);
+  if (window.stdJobs && window.stdJobs.has(normalizedJobNumber)) {
+    return window.stdJobs.get(normalizedJobNumber);
   }
 
   // Try STANDARD_JOBS array
   if (window.STANDARD_JOBS) {
-    const job = window.STANDARD_JOBS.find(j => j.standardJobNo === jobNumber);
+    const job = window.STANDARD_JOBS.find(j => normalizeForecastJobNumber(j.standardJobNo) === normalizedJobNumber);
     if (job) {
       return {
         desc: job.standardJobDescription || '',
@@ -872,6 +874,15 @@ function getJobMetadataByNumber(jobNumber) {
   }
 
   return null;
+}
+
+/**
+ * Use the same six-digit Standard Job key as forecast imports and the dashboard.
+ * Non-numeric values are left intact so an invalid entry can still be corrected.
+ */
+function normalizeForecastJobNumber(value) {
+  const jobNumber = String(value || '').trim();
+  return /^\d{1,6}$/.test(jobNumber) ? jobNumber.padStart(6, '0') : jobNumber;
 }
 
 /**
@@ -897,7 +908,7 @@ function attachForecastTableHandlers() {
 function handleJobNumberChange(event) {
   const input = event.target;
   const rowIndex = parseInt(input.dataset.rowIndex, 10);
-  const newJobNumber = input.value.trim();
+  const newJobNumber = normalizeForecastJobNumber(input.value);
 
   if (isNaN(rowIndex) || rowIndex < 0 || rowIndex >= window.forecastEditorState.rows.length) {
     return;
@@ -908,6 +919,7 @@ function handleJobNumberChange(event) {
 
   // Update job number in state
   row.jobNumber = newJobNumber;
+  input.value = newJobNumber;
 
   // Auto-fill description and unit from job metadata
   const jobMeta = getJobMetadataByNumber(newJobNumber);
