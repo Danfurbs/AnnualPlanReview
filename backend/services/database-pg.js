@@ -171,7 +171,7 @@ class DatabaseServicePG {
    * @param {string} planVersion
    * @param {Object} forecastData - { periods: {...}, wgs: {...}, comments: {...} }
    */
-  async saveForecast(jobNumber, fiscalYear, planVersion, forecastData) {
+  async saveForecast(jobNumber, fiscalYear, planVersion, forecastData, expectedRevision) {
     await this.ready;
     const client = await this.pool.connect();
 
@@ -180,6 +180,9 @@ class DatabaseServicePG {
 
       const key = `${fiscalYear}:${planVersion}`;
       await client.query(`INSERT INTO revisions(scope,data_key,revision) VALUES ('forecast',$1,0) ON CONFLICT DO NOTHING`, [key]);
+      const currentResult = await client.query(`SELECT revision FROM revisions WHERE scope = 'forecast' AND data_key = $1 FOR UPDATE`, [key]);
+      const current = currentResult.rows[0].revision;
+      if (current !== expectedRevision) throw revisionConflict();
 
       const { wgs, comments } = forecastData;
 
@@ -902,17 +905,17 @@ class DatabaseServicePG {
 
   async deleteForecastPlanningMetadata(item) {
     await this.ready;
-    if (!item.workGroup) {
-      const evidence = await this.pool.query(`SELECT
-        EXISTS(SELECT 1 FROM forecasts WHERE fiscal_year = $1 AND plan_version = 'v0' AND job_number = $2) OR
-        EXISTS(SELECT 1 FROM forecast_comments WHERE fiscal_year = $1 AND plan_version = 'v0'
-          AND job_number = $2 AND BTRIM(COALESCE(comment, '')) <> '') AS present`,
-      [item.fiscalYear, item.jobNumber]);
-      if (evidence.rows[0]?.present) {
-        const error = new Error('Planning metadata has V0 data');
-        error.code = 'PLANNING_METADATA_HAS_FORECAST_DATA';
-        throw error;
-      }
+    const evidence = await this.pool.query(`SELECT
+      EXISTS(SELECT 1 FROM forecasts WHERE fiscal_year = $1 AND plan_version = 'v0' AND job_number = $2
+        AND ($3 = '' OR work_group = $3)) OR
+      EXISTS(SELECT 1 FROM forecast_comments WHERE fiscal_year = $1 AND plan_version = 'v0'
+        AND job_number = $2 AND ($3 = '' OR work_group = $3)
+        AND BTRIM(COALESCE(comment, '')) <> '') AS present`,
+    [item.fiscalYear, item.jobNumber, item.workGroup || '']);
+    if (evidence.rows[0]?.present) {
+      const error = new Error('Planning metadata has V0 data');
+      error.code = 'PLANNING_METADATA_HAS_FORECAST_DATA';
+      throw error;
     }
     await this.pool.query(`DELETE FROM forecast_planning_metadata
       WHERE fiscal_year = $1 AND engineer_id = $2 AND job_number = $3 AND work_group = $4`,
