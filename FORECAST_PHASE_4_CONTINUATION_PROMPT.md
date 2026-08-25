@@ -1,8 +1,10 @@
 # Continuation Prompt: Forecast Builder Preview Phase 4
 
-> **Completion note:** Phase 4 and the subsequent Phase 5 profile chart are now
-> implemented in the Preview. This file is retained as the delivery contract
-> and regression checklist, not as an instruction to repeat the phase.
+> **Completion note:** Phase 4, the subsequent Phase 5 per-Work-Group-Set
+> profile chart, and the separately authorised temporary Work Done evidence
+> input are now implemented in the Preview. This file is retained as the
+> delivery contract and regression checklist, not as an instruction to repeat
+> the phase.
 
 Continue work in `/workspace/AnnualPlanReview` from the completed Phase 3
 Forecast Builder Preview.
@@ -76,8 +78,9 @@ review data, planning metadata, or organisation data. Do not modify V1 writers
 or sparse-V1 semantics. Do not add a global save. Do not change organisation
 ownership. Do not hard-code an FY.
 
-The separately specified temporary lightweight Work Done evidence importer is
-not part of Phase 4 unless it receives separate explicit authorisation.
+The separately specified temporary lightweight Work Done evidence importer was
+implemented after Phase 4 under separate explicit authorisation. It remains
+Preview-only and in-memory.
 
 ## Required tests and browser checks
 

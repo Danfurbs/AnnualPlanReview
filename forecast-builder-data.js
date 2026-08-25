@@ -206,9 +206,37 @@
     }));
   }
 
+  function buildTemporaryWorkDoneEvidence(rows, options = {}) {
+    const aliases = {
+      job: ['standard job number & desc', 'standard job no', 'standard job', 'standard job number', 'sjn'],
+      workGroup: ['work group set', 'work group set description', 'workgroup set', 'wgs'],
+      period: ['work order closed period', 'period completed', 'completed period', 'period'],
+      units: ['units complete', 'units completed', 'completed units']
+    };
+    const read = (row, names) => Object.entries(row || {}).find(([key]) => names.includes(String(key).trim().toLowerCase()))?.[1];
+    const data = new Map(); let accepted = 0, rejected = 0;
+    (rows || []).forEach(row => {
+      const rawJob = read(row, aliases.job);
+      const extractedJob = options.extractJob?.(rawJob) || String(rawJob || '').trim().split('-')[0].match(/\d+/)?.[0];
+      const jobNumber = normalizeJobNumber(extractedJob);
+      const workGroup = options.resolveWorkGroupCode?.(read(row, aliases.workGroup)) || '';
+      const periodMatch = /^P?(\d{1,2})$/i.exec(String(read(row, aliases.period) || '').trim());
+      const units = Number(read(row, aliases.units));
+      if (!jobNumber || (options.activeJobs && !options.activeJobs.has(jobNumber)) || !workGroup || (options.activeWorkGroups && !options.activeWorkGroups.has(workGroup)) ||
+          !periodMatch || Number(periodMatch[1]) < 1 || Number(periodMatch[1]) > 13 || !Number.isFinite(units) || units < 0) {
+        rejected += 1; return;
+      }
+      const period = `P${Number(periodMatch[1])}`, job = data.get(jobNumber) || { periods: {}, wgs: {}, comments: {} };
+      if (!job.wgs[workGroup]) job.wgs[workGroup] = {};
+      job.wgs[workGroup][period] = (Number(job.wgs[workGroup][period]) || 0) + units;
+      data.set(jobNumber, job); accepted += 1;
+    });
+    return { data, accepted, rejected };
+  }
+
   return {
     REASONS, getPlanningHistoryYears, getStandardJobsForEngineer,
     getWorkGroupSetsForStandardJob, canRemoveManuallyAddedStandardJob, normalizeJobNumber,
-    getWorkDoneCoverage, getPlanningContext, copyPlanningProfile
+    getWorkDoneCoverage, getPlanningContext, copyPlanningProfile, buildTemporaryWorkDoneEvidence
   };
 });

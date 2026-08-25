@@ -72,8 +72,9 @@ Repo: `Danfurbs/AnnualPlanReview`.
     current-year Work Group Set row and source comment only; they never save
     automatically or change queue membership.
 -   **Phase 5 --- implemented in the parallel preview.** Every expanded Standard
-    Job has a responsive P1--P13 line chart combining its displayed Work Group
-    Sets. The selected FY V0 line updates directly from the unsaved draft. The
+    Job has a responsive P1--P13 line chart below the forecast-input grid. The
+    chart shows one Work Group Set at a time, with accessible previous/next WGS
+    controls. The selected FY V0 line updates directly from the unsaved draft. The
     immediately preceding FY is shown by default using corrected Work Done
     through its coverage point and final effective forecast thereafter, with a
     labelled transition and dashed forecast tail. Show all history lazily loads
@@ -91,13 +92,13 @@ modal/grid CSS, non-negative validation, revision conflicts, and transactional
 job-level rollback. Browser screenshots were not captured in the repository's
 Node-only test environment.
 
-## Proposed follow-up: temporary lightweight Work Done evidence upload
+## Temporary lightweight Work Done evidence upload
 
-**Status: specified only; not implemented and not part of Phases 3--5.**
+**Status: implemented as a Preview-only, in-memory evidence input.**
 
 Large operational Work Done files contain substantially more detail than the
 Forecast Builder needs for planning discovery. A separately authorised
-follow-up may add a **Preview-only temporary Work Done evidence upload**. This
+follow-up provides a **Preview-only temporary Work Done evidence upload**. This
 must be an optional input to the planning workspace, not a replacement for the
 existing authoritative Work Done upload, correction, storage, dashboard, or
 reporting paths.
@@ -106,7 +107,15 @@ The user must select the financial year represented by the file. The import
 must remain FY-relative and must not infer the FY from today's date, the file
 name, or a hard-coded production year.
 
-The temporary importer should read the source file locally and retain only a
+The Preview accepts the **same Excel report layout as the main-page Work Done
+upload**, rather than requiring users to prepare a second compact file. It reads
+the `Detail` worksheet using a user-selectable header row (default row 2), and
+recognises the operational `Standard Job Number & Desc`/`Standard Job No`,
+`Work Order Closed Period`, `Units Complete`, and `Work Group Set`/`Work Group
+Set Description` columns. The full source workbook remains local and is reduced
+to the compact evidence shape below after validation.
+
+The temporary importer reads the source file locally and retains only a
 compact aggregation at:
 
 -   Standard Job;
@@ -125,9 +134,10 @@ The compact in-memory shape should be equivalent to:
 `Standard Job -> Work Group Set -> P1--P13 completed-unit totals`
 
 Duplicate source rows at that grain are summed. All other source columns may be
-discarded after validation and aggregation. The importer should use streaming
-or chunked parsing where practical so the original large file is not retained
-in browser memory longer than necessary.
+discarded after validation and aggregation. The existing browser XLSX library
+reads the selected worksheet before aggregation rather than offering true
+streaming; the parsed source rows are not retained in Preview state after the
+compact map is built.
 
 ### Temporary-data and preservation rules
 
@@ -148,9 +158,9 @@ in browser memory longer than necessary.
 -   It must not create forecasts, comments, Forecasted metadata, review status,
     Work Order corrections, or organisation changes.
 
-### Follow-up acceptance coverage
+### Acceptance coverage
 
-Before implementation is accepted, test that the importer:
+The importer is required and tested to:
 
 1.  requires an explicit valid FY;
 2.  accepts only valid Standard Job, Work Group Set, completed-period, and
@@ -165,8 +175,8 @@ Before implementation is accepted, test that the importer:
 9.  protects against stale results when FY/file changes during parsing; and
 10. clears completely on Preview/session exit without affecting stored data.
 
-This follow-up requires its own implementation commit/PR. Recording it here
-does not start Phase 4, Phase 5, or a redesign of production Work Done.
+This temporary input does not redesign production Work Done and does not start
+Phase 6 retirement work.
 
 This replaces the current Work-Group-Set-first Forecast Builder
 (`forecast-editor.js`, Forecast Builder section of `index.html`) with a

@@ -155,11 +155,38 @@ test('older Planning Context loads lazily one FY at a time with stale-response p
 test('Phase 5 profile uses live draft V0, blended history, transitions, and show-all history', () => {
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
   assert.match(source, /function profileSeries/);
-  assert.match(source, /V0 \(current draft\)/);
+  assert.match(source, /V0 · \$\{series\.workGroup\} \(current draft\)/);
   assert.match(source, /window\.copyPlanningProfile\(context, 'work-done'\)/);
   assert.match(source, /Work Done ends after P\$\{item\.coverage\.lastPeriod\} → forecast begins/);
   assert.match(source, /segment: \{ borderDash:/);
   assert.match(source, /function updateCurrentProfileChart/);
   assert.match(source, /updateCurrentProfileChart\(e\.target\.dataset\.gridJob\)/);
   assert.match(source, /function toggleAllHistory/);
+});
+
+test('profile renders below inputs and switches left or right between Work Group Sets', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  assert.match(source, /\$\{renderGrid\(job\)\}\$\{renderProfile\(job\.jobNumber\)\}/);
+  assert.match(source, /data-profile-step="-1"/);
+  assert.match(source, /data-profile-step="1"/);
+  assert.match(source, /function switchProfileWorkGroup/);
+  assert.match(source, /const current = Object\.fromEntries\(PERIODS\.map\(period => \[period, Number\(row\?\.periods\[period\]\) \|\| 0\]\)\)/);
+});
+
+test('temporary lightweight Work Done import remains in memory and never calls persistence APIs', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.match(html, /id="forecastPreviewEvidenceYear"/);
+  assert.match(html, /id="forecastPreviewEvidenceHeaderRow"[^>]*value="2"/);
+  assert.match(html, /same Work Done report used by the main-page upload/);
+  assert.match(html, /nothing is uploaded or saved/i);
+  assert.match(source, /async function loadTemporaryWorkDone/);
+  assert.match(source, /workbook\.Sheets\.Detail/);
+  assert.match(source, /sheet_to_json\(sheet, \{ range: headerRow - 1, defval: '' \}\)/);
+  assert.match(source, /Standard Job Number & Desc/);
+  assert.match(source, /Work Order Closed Period/);
+  assert.match(source, /Work Group Set Description/);
+  assert.match(source, /state\.workDoneByYear\[year\] = aggregated/);
+  assert.match(source, /rows accepted, \$\{rejected\} rejected\. Temporary evidence is not saved/);
+  assert.doesNotMatch(source, /loadTemporaryWorkDone[\s\S]*?saveWorkDoneToApi/);
 });

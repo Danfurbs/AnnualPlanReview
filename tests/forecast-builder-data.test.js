@@ -3,7 +3,7 @@ const test = require('node:test');
 const {
   REASONS, getPlanningHistoryYears, getStandardJobsForEngineer,
   getWorkGroupSetsForStandardJob, canRemoveManuallyAddedStandardJob,
-  getPlanningContext, copyPlanningProfile
+  getPlanningContext, copyPlanningProfile, buildTemporaryWorkDoneEvidence
 } = require('../forecast-builder-data');
 
 const engineers = [
@@ -168,4 +168,21 @@ test('copy forecast uses effective profile and copy Work Done fills its tail fro
   assert.equal(copied.P1, 2);
   assert.equal(copied.P2, 0);
   assert.equal(copied.P3, 10);
+});
+
+test('temporary Work Done evidence accepts the main-page report columns and aggregates duplicates', () => {
+  const result = buildTemporaryWorkDoneEvidence([
+    { 'Standard Job Number & Desc': '000105 - Replace rail', 'Work Group Set Description': 'Track team', 'Work Order Closed Period': 'P2', 'Units Complete': 3 },
+    { 'Standard Job No': '000105', 'Work Group Set': 'WG-TRACK', 'Work Order Closed Period': '2', 'Units Complete': 4 },
+    { 'Standard Job No': '000105', 'Work Group Set': 'UNKNOWN', 'Work Order Closed Period': 'P2', 'Units Complete': 9 },
+    { 'Standard Job No': '000105', 'Work Group Set': 'WG-TRACK', 'Work Order Closed Period': 'P14', 'Units Complete': 1 },
+    { 'Standard Job No': '000105', 'Work Group Set': 'WG-TRACK', 'Work Order Closed Period': 'P3', 'Units Complete': -1 }
+  ], {
+    resolveWorkGroupCode: value => value === 'Track team' ? 'WG-TRACK' : value,
+    activeWorkGroups: new Set(['WG-TRACK'])
+  });
+  assert.equal(result.accepted, 2);
+  assert.equal(result.rejected, 3);
+  assert.equal(result.data.get('105').wgs['WG-TRACK'].P2, 7);
+  assert.deepEqual(Object.keys(result.data.get('105')), ['periods', 'wgs', 'comments']);
 });
