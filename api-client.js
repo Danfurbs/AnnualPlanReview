@@ -342,6 +342,11 @@ function validateSerializedForecastData(serialized) {
       if (!jobData.comments || typeof jobData.comments !== 'object' || Array.isArray(jobData.comments)) {
         return { valid: false, error: `Job ${jobNumber}: 'comments' must be a non-null object if present` };
       }
+      for (const [workGroup, comment] of Object.entries(jobData.comments)) {
+        if (!workGroup.trim() || workGroup.length > 50 || typeof comment !== 'string' || comment.length > 10000) {
+          return { valid: false, error: `Job ${jobNumber}: comments must use valid Work Group Set keys and text up to 10000 characters` };
+        }
+      }
     }
   }
 
@@ -430,7 +435,10 @@ async function saveForecastJobToApi(jobNumber, forecastData, year, planVersion) 
     return false;
   }
   try {
-    const response = await apiRequest(endpoint, { method: 'POST', body: forecastData });
+    const response = await apiRequest(endpoint, {
+      method: 'POST',
+      body: { ...forecastData, expectedRevision: forecastRevisions.get(`${year}:${planVersion}`) ?? 0 }
+    });
     if (response.success) forecastRevisions.set(`${year}:${planVersion}`, response.revision);
     return response.success === true;
   } catch (err) {
