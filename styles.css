@@ -1652,8 +1652,8 @@
 .preview-job-list { display: grid; gap: 10px; min-width: 0; }
 .preview-discipline-group { min-width: 0; margin-bottom: 22px; }
 .preview-discipline-group > h3 { margin: 0 0 10px; padding-bottom: 7px; border-bottom: 2px solid #dbeafe; color: #1e3a5f; font-size: 15px; overflow-wrap: anywhere; }
-.preview-job-card { padding: 15px 16px; border: 1px solid #dbe3ef; border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
-.preview-job-card-main { display: flex; justify-content: space-between; gap: 18px; align-items: center; }
+.preview-job-card { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; padding: 15px 16px; overflow: hidden; border: 1px solid #dbe3ef; border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); cursor: pointer; }
+.preview-job-card-main { display: flex; min-width: 0; justify-content: space-between; gap: 18px; align-items: center; }
 .preview-expand-job { display: flex; min-width: 0; align-items: center; gap: 9px; padding: 4px; border: 0; background: transparent; color: #0f172a; font: inherit; font-weight: 750; text-align: left; }
 .preview-expand-job span:last-child { overflow-wrap: anywhere; }
 .preview-job-title { display: flex; gap: 10px; align-items: baseline; color: #0f172a; font-weight: 750; }
@@ -1661,7 +1661,7 @@
 .preview-job-meta { margin-top: 6px; color: #8293ad; font-size: 11px; }
 .preview-reasons { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
 .preview-reason { padding: 3px 7px; border-radius: 999px; background: #eff6ff; color: #2563eb; font-size: 10px; font-weight: 700; }
-.preview-job-actions { display: flex; gap: 12px; align-items: center; }
+.preview-job-actions { display: flex; min-width: 0; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: flex-end; }
 .preview-job-total { min-width: 70px; text-align: right; }
 .preview-job-total span { display: block; color: #94a3b8; font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .preview-job-total strong { color: #0f172a; font-size: 16px; }
@@ -1683,8 +1683,12 @@
 .preview-catalogue-results button[aria-selected="true"] { background: #dbeafe; box-shadow: inset 3px 0 #2563eb; }
 .preview-catalogue-results button span { min-width: 0; overflow-wrap: anywhere; }
 .preview-catalogue-results button small { flex: 0 0 150px; color: #64748b; text-align: right; overflow-wrap: anywhere; }
-.preview-job-expanded { margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 14px; }
-.preview-grid-scroll { width: 100%; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.preview-job-expanded { margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 14px; cursor: default; }
+.preview-grid-scroll-hint { margin: 0 0 7px; color: #64748b; font-size: 11px; }
+.preview-grid-scroll { width: 100%; max-width: 100%; box-sizing: border-box; padding-bottom: 10px; overflow-x: scroll; overflow-y: hidden; overscroll-behavior-inline: contain; scrollbar-gutter: stable; scrollbar-color: #64748b #e2e8f0; scrollbar-width: auto; }
+.preview-grid-scroll::-webkit-scrollbar { height: 14px; }
+.preview-grid-scroll::-webkit-scrollbar-track { border-radius: 999px; background: #e2e8f0; }
+.preview-grid-scroll::-webkit-scrollbar-thumb { border: 3px solid #e2e8f0; border-radius: 999px; background: #64748b; }
 .preview-wgs-grid { min-width: 1620px; border-collapse: collapse; font-size: 11px; }
 .preview-wgs-grid th, .preview-wgs-grid td { padding: 7px; border: 1px solid #e2e8f0; vertical-align: top; }
 .preview-wgs-grid th { background: #f8fafc; }

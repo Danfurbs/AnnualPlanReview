@@ -50,8 +50,13 @@ Repo: `Danfurbs/AnnualPlanReview`.
     can be removed; rows with V0/comment content are protected.
     Dirty drafts survive card/filter rerenders and prompt before FY/engineer/page
     changes that would discard them; failed saves retain all browser values for
-    retry. Backend revision checks run before the job-scoped transaction deletes
-    and replaces that selected FY/V0/Standard Job only.
+    retry. Standard Job cards remain within the Preview width and non-interactive
+    card space can be clicked to expand/collapse; interactive controls retain
+    their own actions. The P1--P13 grid has an explicit contained horizontal
+    scrollbar, and current-year comments remain individual Work Group Set
+    comments saved with the Standard Job. Backend revision checks run before the
+    job-scoped transaction deletes and replaces that selected FY/V0/Standard Job
+    only.
 -   **Phases 4--5 --- not started.** The Planning Context cell is deliberately
     only a placeholder: historical context/copy-forward and profile charts are
     not implemented.
@@ -645,6 +650,12 @@ is untouched, and no other Standard Job is modified.
 ------------------------------------------------------------------------
 
 # Phase 4: Historical planning context + copy-forward
+
+Use `FORECAST_PHASE_4_CONTINUATION_PROMPT.md` as the implementation hand-off
+for this phase. It carries forward the Phase 3 card-width, card-wide expansion,
+contained horizontal-scroll, per-Work-Group-Set comment, dirty-state, and
+data-preservation requirements. The profile graph is not expected in Phase 4;
+it remains the separate Phase 5 deliverable below.
 
 Each Work Group Set row gets an expandable **Planning Context** area.
 

@@ -81,7 +81,7 @@ test('Phase 3 CSS contains padded modal and contained grid scrolling', () => {
   const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
   assert.match(css, /\.preview-modal-body\s*\{[^}]*padding:/s);
   assert.match(css, /\.preview-add-job-modal \.modal-actions\s*\{[^}]*gap:[^}]*padding:/s);
-  assert.match(css, /\.preview-grid-scroll\s*\{[^}]*overflow-x:\s*auto/s);
+  assert.match(css, /\.preview-grid-scroll\s*\{[^}]*overflow-x:\s*(?:auto|scroll)/s);
 });
 
 test('Phase 3 retains stored job identity and wires manual job removal', () => {
@@ -98,4 +98,21 @@ test('Phase 3 listboxes support arrow selection and V0 rows support safe multi-v
   assert.match(source, /event\.key === 'ArrowDown'/);
   assert.match(source, /function handlePeriodPaste/);
   assert.match(source, /values\.some\(value => !Number\.isFinite\(Number\(value\)\) \|\| Number\(value\) < 0\)/);
+});
+
+test('expanded grid exposes a visible contained horizontal scrollbar and per-WGS comments', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
+  assert.match(source, /preview-grid-scroll" tabindex="0" aria-label="Work Group Set periods; scroll horizontally/);
+  assert.match(source, /Comments per Work Group Set/);
+  assert.match(source, /data-comment-wgs=/);
+  assert.match(css, /\.preview-grid-scroll\s*\{[^}]*overflow-x:\s*scroll[^}]*scrollbar-gutter:\s*stable/s);
+  assert.match(css, /\.preview-grid-scroll::\-webkit-scrollbar\s*\{[^}]*height:\s*14px/s);
+});
+
+test('non-interactive card space expands while controls and grid interactions remain isolated', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  assert.match(source, /data-expand-card=/);
+  assert.match(source, /function toggleExpandedJob/);
+  assert.match(source, /!e\.target\.closest\('button, input, textarea, select, a, \.preview-job-expanded'\)/);
 });
