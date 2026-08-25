@@ -61,6 +61,40 @@ test('insert failure rolls back and releases PostgreSQL client', async () => {
   assert.equal(fixture.wasReleased(), true);
 });
 
+test('standard-job V0 save checks revision before replacing only that job', async () => {
+  const fixture = serviceWithClient(sql => {
+    if (sql.includes('SELECT revision')) return { rows: [{ revision: 7 }] };
+    if (sql.includes('RETURNING revision')) return { rows: [{ revision: 8 }] };
+    return { rows: [] };
+  });
+  const data = { wgs: { WG1: { P1: 0, P2: 4 }, WG2: { P1: 2 } }, comments: { WG2: 'Current-year V0 note' } };
+  assert.equal(await fixture.service.saveForecast('9005', 'FY28', 'v0', data, 7), 8);
+  const deletes = fixture.calls.filter(call => call.sql.startsWith('DELETE FROM forecast'));
+  assert.equal(deletes.length, 2);
+  assert.equal(deletes.every(call => call.params[0] === '9005' && call.params[1] === 'FY28' && call.params[2] === 'v0'), true);
+  assert.equal(fixture.calls.some(call => call.sql === 'COMMIT'), true);
+});
+
+test('failed standard-job save rolls back its values and comments together', async () => {
+  const fixture = serviceWithClient(sql => {
+    if (sql.includes('SELECT revision')) return { rows: [{ revision: 2 }] };
+    if (sql.includes('INSERT INTO forecast_comments')) throw new Error('comment failed');
+    return { rows: [] };
+  });
+  await assert.rejects(fixture.service.saveForecast('9005', 'FY28', 'v0', {
+    wgs: { WG1: { P1: 3 } }, comments: { WG1: 'note' }
+  }, 2), /comment failed/);
+  assert.equal(fixture.calls.some(call => call.sql === 'ROLLBACK'), true);
+  assert.equal(fixture.calls.some(call => call.sql === 'COMMIT'), false);
+});
+
+test('stale standard-job save does not delete forecast or comment rows', async () => {
+  const fixture = serviceWithClient(sql => sql.includes('SELECT revision') ? { rows: [{ revision: 3 }] } : { rows: [] });
+  await assert.rejects(fixture.service.saveForecast('9005', 'FY28', 'v0', { wgs: {}, comments: {} }, 2), error => error.code === 'REVISION_CONFLICT');
+  assert.equal(fixture.calls.some(call => call.sql.startsWith('DELETE FROM forecast')), false);
+  assert.equal(fixture.calls.some(call => call.sql === 'ROLLBACK'), true);
+});
+
 test('empty V1 override replacement deletes the existing FY set', async () => {
   const fixture = serviceWithClient(() => ({ rows: [] }));
   await fixture.service.saveAllV1Overrides([], 'FY27');
@@ -128,4 +162,61 @@ test('comments save and restore with their financial year and RF stage', async (
   assert.equal(restored.fy, 'FY27');
   assert.equal(restored.rf, 'RF3');
   assert.deepEqual(restored.evidenceLinks, ['https://example.com/evidence']);
+});
+
+test('forecast planning metadata remains isolated by FY, Engineer, job and Work Group Set', async () => {
+  const calls = [];
+  const service = Object.create(DatabaseServicePG.prototype);
+  service.ready = Promise.resolve();
+  service.pool = { query: async (sql, params) => {
+    calls.push({ sql, params });
+    return { rows: [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: '', forecasted: true, manuallyAdded: false }] };
+  } };
+  const saved = await service.saveForecastPlanningMetadata({
+    fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: '', forecasted: true, manuallyAdded: false
+  });
+  assert.deepEqual(calls[0].params, ['FY28', 'track', '9005', '', true, false]);
+  assert.equal(calls[0].sql.includes('ON CONFLICT(fiscal_year, engineer_id, job_number, work_group)'), true);
+  assert.equal(saved.forecasted, true);
+});
+
+test('forecast planning metadata removal is blocked when selected-year V0 exists', async () => {
+  const calls = [];
+  const service = Object.create(DatabaseServicePG.prototype);
+  service.ready = Promise.resolve();
+  service.pool = { query: async (sql, params) => {
+    calls.push({ sql, params });
+    return sql.includes(' AS present') ? { rows: [{ present: true }] } : { rows: [] };
+  } };
+  await assert.rejects(service.deleteForecastPlanningMetadata({
+    fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: ''
+  }), error => error.code === 'PLANNING_METADATA_HAS_FORECAST_DATA');
+  assert.equal(calls.some(call => call.sql.startsWith('DELETE FROM forecast_planning_metadata')), false);
+  assert.deepEqual(calls[0].params, ['FY28', '9005', '']);
+});
+
+test('untouched planning metadata can be removed without touching forecast tables', async () => {
+  const calls = [];
+  const service = Object.create(DatabaseServicePG.prototype);
+  service.ready = Promise.resolve();
+  service.pool = { query: async (sql, params) => {
+    calls.push({ sql, params });
+    return sql.includes(' AS present') ? { rows: [{ present: false }] } : { rows: [] };
+  } };
+  await service.deleteForecastPlanningMetadata({
+    fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: ''
+  });
+  const deletion = calls.find(call => call.sql.startsWith('DELETE FROM forecast_planning_metadata'));
+  assert.deepEqual(deletion.params, ['FY28', 'track', '9005', '']);
+  assert.equal(calls.some(call => /^DELETE FROM forecasts/.test(call.sql)), false);
+});
+
+test('exceptional Work Group Set removal checks only that selected V0 row', async () => {
+  const calls = [];
+  const service = Object.create(DatabaseServicePG.prototype);
+  service.ready = Promise.resolve();
+  service.pool = { query: async (sql, params) => { calls.push({ sql, params }); return sql.includes(' AS present') ? { rows: [{ present: false }] } : { rows: [] }; } };
+  await service.deleteForecastPlanningMetadata({ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: 'WG2' });
+  assert.deepEqual(calls[0].params, ['FY28', '9005', 'WG2']);
+  assert.match(calls[0].sql, /work_group = \$3/);
 });

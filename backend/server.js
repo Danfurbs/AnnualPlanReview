@@ -97,6 +97,7 @@ const groupRoutes = require('./routes/groups')(db);
 const workDoneRoutes = require('./routes/work-done')(db);
 const reviewRoutes = require('./routes/reviews')(db);
 const workOrderAmendmentRoutes = require('./routes/work-order-amendments')(db);
+const forecastPlanningRoutes = require('./routes/forecast-planning')(db);
 
 app.use('/api/forecasts', forecastRoutes);
 app.use('/api/baselines', baselineRoutes);
@@ -105,6 +106,7 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/work-done', workDoneRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/work-order-amendments', workOrderAmendmentRoutes);
+app.use('/api/forecast-planning', forecastPlanningRoutes);
 
 // Fallback route for SPA - serve index.html for any non-API routes
 app.get('*', (req, res) => {

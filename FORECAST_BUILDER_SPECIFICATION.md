@@ -2,6 +2,191 @@
 
 Repo: `Danfurbs/AnnualPlanReview`.
 
+## Implementation status
+
+**Status date: 25 August 2026**
+
+-   **Phase 1 --- implemented and regression-tested on the preview branch,
+    awaiting deployment safety gate.** The FY-relative, current-ownership
+    discovery layer and isolated planning metadata persistence are implemented
+    with frontend and PostgreSQL service coverage. The additive database table
+    is created by the existing idempotent schema initialisation; it does not
+    migrate forecast records.
+-   **Phase 2 --- implemented and corrected on the preview branch.** A separately labelled,
+    read-only Forecast Builder Preview now shows the selected planning FY,
+    engineer queue, explicit All / Not Forecasted / Forecasted filters,
+    progress, Standard Job cards, manual Standard Job addition, and the manual
+    Forecasted workflow. Planning status persists independently from RF
+    Reviewed and does not write forecast values.
+    The engineer queue is now scoped exclusively through the organisation
+    hierarchy to the dashboard's selected Delivery Unit; a concrete Delivery
+    Unit is required, and stale engineer selection, navigation, search,
+    filters, discovery caches, and metadata actions all use that same scoped
+    set. Changing Delivery Unit changes presentation context only and does not
+    rewrite or remove forecast or planning metadata. At widths up to 900px the
+    engineer buttons remain one keyboard-accessible, horizontally scrollable
+    row contained within the preview rather than widening the document.
+    Evidence loading is also implemented one FY at a time, with V0, V1, and
+    Work Done loaded concurrently within that FY, stale-request protection,
+    compact per-year evidence maps, cached engineer queues, and visible
+    spinner, FY progress, progress bar, and read-only reassurance.
+-   **Phase 3 --- implemented in the parallel preview.** Jobs are presented
+    under the canonical catalogue discipline (alphabetical headings, with
+    `Other / Unclassified` as the stable fallback) and Standard Job numbers
+    are ordered numerically within each group. Padded/unpadded identities are
+    normalised for comparison only; stored identities are not rewritten.
+    Cards expand to a contained P1--P13 V0 Work Group Set grid with current-year
+    Work Group Set comments, reason badges, a non-functional Phase 4 history
+    placeholder, and one explicit atomic **Save Standard Job** action. Blank
+    period inputs save as V0 zero; negative values are rejected in the browser
+    and backend. Saving never marks Forecasted and Forecasted never saves a
+    draft.
+    The Add Standard Job dialog now uses a padded, responsive, keyboard-focusable
+    searchable list grouped by catalogue discipline, identifies jobs already in
+    the engineer queue, and returns focus to its trigger. The exceptional Add
+    Work Group Set failsafe searches the full active catalogue and persists only
+    FY + Engineer + Standard Job + Work Group Set visibility metadata without
+    changing ownership or creating forecast data. Untouched exceptional rows
+    can be removed; rows with V0/comment content are protected.
+    Dirty drafts survive card/filter rerenders and prompt before FY/engineer/page
+    changes that would discard them; failed saves retain all browser values for
+    retry. Standard Job cards remain within the Preview width and non-interactive
+    card space can be clicked to expand/collapse; interactive controls retain
+    their own actions. The P1--P13 grid has an explicit contained horizontal
+    scrollbar, and current-year comments remain individual Work Group Set
+    comments saved with the Standard Job. Backend revision checks run before the
+    job-scoped transaction deletes and replaces that selected FY/V0/Standard Job
+    only.
+    Manual queue membership is stored separately from Forecasted status, so
+    marking an automatically discovered job Forecasted never adds a `manually
+    added` reason, while a genuinely manual job remains manual after its status
+    changes. Incremental metadata/save updates rebuild only the active
+    engineer's cached queue, and ordinary cell blur no longer rerenders the
+    complete grouped card list.
+-   **Phase 4 --- implemented in the parallel preview.** Each Work Group Set has
+    an accessible Planning Context expander showing FY-relative final effective
+    forecast, corrected Work Done, explicit Work Done coverage, current-scope
+    historical comments, and Copy Forecast / Copy Work Done actions. Older
+    configured FYs load only when Planning Context is first opened, one FY at a
+    time with stale-response protection. Copy actions update the unsaved
+    current-year Work Group Set row and source comment only; they never save
+    automatically or change queue membership.
+-   **Phase 5 --- implemented in the parallel preview.** Every expanded Standard
+    Job has a responsive P1--P13 line chart below the forecast-input grid. The
+    chart shows one Work Group Set at a time, with accessible previous/next WGS
+    controls. The selected FY V0 line updates directly from the unsaved draft. The
+    immediately preceding FY is shown by default using corrected Work Done
+    through its coverage point and final effective forecast thereafter, with a
+    labelled transition and dashed forecast tail. Show all history lazily loads
+    and overlays every older configured FY without resetting current edits.
+-   **Phase 6 --- not authorised.** The current Forecast Builder remains the
+    production workflow alongside the clearly labelled preview and must not be
+    retired without the product owner's explicit confirmation.
+
+At this break, the dashboard has a new **Forecast Builder Preview** action.
+Opening it shows the completed Phase 3--5 planning workspace; the current Forecast Builder
+remains available from both the dashboard and the preview header. Automated
+coverage includes Phase 1 discovery, Phase 2 Delivery Unit scoping/responsive
+engineer-strip behaviour, discipline grouping/numeric ordering, responsive
+modal/grid CSS, non-negative validation, revision conflicts, and transactional
+job-level rollback. Browser screenshots were not captured in the repository's
+Node-only test environment.
+
+## Temporary lightweight Work Done evidence upload
+
+**Status: implemented as a Preview-only, in-memory evidence input.**
+
+Large operational Work Done files contain substantially more detail than the
+Forecast Builder needs for planning discovery. A separately authorised
+follow-up provides a **Preview-only temporary Work Done evidence upload**. This
+must be an optional input to the planning workspace, not a replacement for the
+existing authoritative Work Done upload, correction, storage, dashboard, or
+reporting paths.
+
+The user must select the financial year represented by the file. The source-FY
+control offers the selected current planning FY and its three preceding
+historical financial years; it must not offer a later year. The import
+must remain FY-relative and must not infer the FY from today's date, the file
+name, or a hard-coded production year. Changing the planning FY rebuilds this
+current-and-historical list and clears any mismatched temporary evidence.
+
+Planning Context is displayed outside the horizontally scrolling period grid as
+a compact, responsive set of year summaries. Each summary shows only forecast,
+Work Done and coverage by default, keeps copy actions alongside that year, and
+places detailed historical comments behind an optional disclosure. Expanding
+context must not widen the grid or introduce another horizontal scroll area.
+
+The Preview accepts the **same Excel report layout as the main-page Work Done
+upload**, rather than requiring users to prepare a second compact file. It reads
+the `Detail` worksheet using a user-selectable header row (default row 2), and
+recognises the operational `Standard Job Number & Desc`/`Standard Job No`,
+`Work Order Closed Period`, `Units Complete`, and `Work Group Set`/`Work Group
+Set Description` columns. The full source workbook remains local and is reduced
+to the compact evidence shape below after validation.
+
+The temporary importer reads the source file locally and retains only a
+compact aggregation at:
+
+-   Standard Job;
+-   Work Group Set;
+-   completed period; and
+-   units complete.
+
+**Work Group Set remains required.** Standard Job + period + units alone cannot
+support the ownership-safe discovery rule: the Preview assigns historical Work
+Done evidence to the engineer who currently owns the delivering Work Group Set.
+It must not infer an engineer or Work Group Set from Standard Job discipline,
+MNT, descriptions, names, or historical organisation metadata.
+
+The compact in-memory shape should be equivalent to:
+
+`Standard Job -> Work Group Set -> P1--P13 completed-unit totals`
+
+Duplicate source rows at that grain are summed. All other source columns may be
+discarded after validation and aggregation. The existing browser XLSX library
+reads the selected worksheet before aggregation rather than offering true
+streaming; the parsed source rows are not retained in Preview state after the
+compact map is built.
+
+### Temporary-data and preservation rules
+
+-   Do not upload or persist the original file.
+-   Do not write the compact evidence to PostgreSQL, local storage, forecast
+    records, forecast comments, planning metadata, or the existing Work Done
+    snapshot store.
+-   Keep it in memory for the active Preview session only.
+-   Clearly label the evidence as temporary and not saved.
+-   Display the selected source FY, accepted/rejected row counts, and any
+    validation errors.
+-   Replacing or clearing temporary evidence must not delete or change the
+    application's authoritative Work Done snapshot for that FY.
+-   Switching the planning FY must discard or explicitly reselect mismatched
+    temporary evidence; stale parsing responses must not populate another FY.
+-   Temporary evidence may participate in Phase 1 queue discovery for its
+    selected FY, but current Work Group Set ownership remains authoritative.
+-   It must not create forecasts, comments, Forecasted metadata, review status,
+    Work Order corrections, or organisation changes.
+
+### Acceptance coverage
+
+The importer is required and tested to:
+
+1.  requires an explicit valid FY;
+2.  accepts only valid Standard Job, Work Group Set, completed-period, and
+    non-negative units-complete values;
+3.  aggregates duplicate rows into P1--P13 totals;
+4.  rejects or reports missing/unknown Work Group Sets rather than inferring
+    ownership;
+5.  seeds the same ownership-safe discovery path as authoritative Work Done;
+6.  follows a Work Group Set to its current engineer after an ownership change;
+7.  never calls the existing Work Done save/delete APIs;
+8.  never writes forecast or planning metadata;
+9.  protects against stale results when FY/file changes during parsing; and
+10. clears completely on Preview/session exit without affecting stored data.
+
+This temporary input does not redesign production Work Done and does not start
+Phase 6 retirement work.
+
 This replaces the current Work-Group-Set-first Forecast Builder
 (`forecast-editor.js`, Forecast Builder section of `index.html`) with a
 new **Engineer → Standard Job → Work Group Set** planning workflow.
@@ -56,6 +241,24 @@ change.
 The earlier V0/V1 work required many follow-up fixes because related
 changes were landed in large batches. Phase 1 in particular must be
 correct and fully tested before UI work is built on top of it.
+
+### Parallel preview and retirement approval
+
+Phases 1--5 must be built alongside the current Forecast Builder rather
+than replacing it in place. Expose the rebuilt workflow through a clearly
+labelled **Forecast Builder Preview** route/navigation entry, and provide
+an obvious way back to the current Forecast Builder. The current builder
+must remain available and operational throughout preview testing.
+
+Both builders use the same canonical forecast records; the preview is not
+a second forecast store and must not duplicate or migrate forecast data.
+Keep the new screen/controller isolated from the current builder UI where
+practical so it can be enabled, disabled, or rolled back without changing
+the existing workflow.
+
+Phase 6 is optional and requires the product owner's explicit approval.
+Passing automated tests, completing Phases 1--5, or making the preview
+available does not by itself authorise removal of the current builder.
 
 ## Out of scope for this entire prompt --- do not touch
 
@@ -300,6 +503,14 @@ begins.
 Build the screen structure using real Phase 1 data before enabling V0
 editing.
 
+The supplied visual mock-up is directional rather than a pixel-perfect
+contract. Preserve the application's current theme, terminology, and
+component conventions, while using the mock-up's useful overall hierarchy:
+engineer navigation, expandable Standard Job cards, an in-context profile,
+and Work Group Set rows. Prefer a more usable or accessible interaction
+where it meets the same planning need. In particular, do not copy mock-up
+labels that conflict with the Forecasted rules below.
+
 ## Engineer sidebar
 
 Include:
@@ -427,10 +638,17 @@ If entering V0 data/comments against that exceptional Work Group Set
 naturally makes it remain visible under the current engineer using the
 existing data model, preserve that behaviour.
 
-However, **do not create a complex shadow ownership/engineer-override
-model solely to persist exceptional cross-owner rows**. If this would
-require significant new organisational state, keep the implementation
-simple and rely on `organisation-data.js` being corrected.
+Persist an added exceptional row as lightweight planning-workspace metadata
+scoped by **Financial Year + Engineer + Standard Job + Work Group Set** so
+that an untouched row survives reload. This metadata is only a visibility
+association for the selected planning workspace: it must not change
+organisation ownership or create forecast values/comments. An untouched
+association may be removed without affecting business data; once V0 data or
+comments exist, removing the association must never delete those records.
+
+Do not turn this lightweight association into a shadow ownership or
+engineer-override model. Current ownership remains authoritative for normal
+automatic discovery and organisational reporting.
 
 ## Save Standard Job
 
@@ -469,6 +687,12 @@ is untouched, and no other Standard Job is modified.
 ------------------------------------------------------------------------
 
 # Phase 4: Historical planning context + copy-forward
+
+Use `FORECAST_PHASE_4_CONTINUATION_PROMPT.md` as the implementation hand-off
+for this phase. It carries forward the Phase 3 card-width, card-wide expansion,
+contained horizontal-scroll, per-Work-Group-Set comment, dirty-state, and
+data-preservation requirements. The profile graph is not expected in Phase 4;
+it remains the separate Phase 5 deliverable below.
 
 Each Work Group Set row gets an expandable **Planning Context** area.
 
@@ -663,9 +887,12 @@ older years without affecting current edits.
 
 ------------------------------------------------------------------------
 
-# Phase 6: Remove the old Work-Group-Set-first Forecast Builder
+# Phase 6: Optional retirement of the old Work-Group-Set-first Forecast Builder
 
-Do this **only after Phases 1--5 are working and tested**.
+Do this **only after Phases 1--5 are working and tested and the product
+owner has explicitly confirmed that the preview is accepted**. This must be
+a separate retirement commit/PR. Do not infer approval from preview usage,
+automated test results, or completion of earlier phases.
 
 Remove from the Forecast Builder UI specifically:
 
@@ -687,10 +914,11 @@ unaffected.
 
 Run its existing tests and confirm they still pass unchanged.
 
-**Acceptance criteria:** the old construction UI no longer exists, the
-new Engineer → Standard Job → Work Group Set V0 builder is the only
-Forecast Builder entry workflow, and existing V1/Reforecast
-functionality remains intact.
+**Acceptance criteria:** explicit product-owner approval is recorded; the
+old construction UI no longer exists; the new Engineer → Standard Job →
+Work Group Set V0 builder is the only Forecast Builder entry workflow; a
+tested rollback path exists; and existing V1/Reforecast functionality
+remains intact.
 
 ------------------------------------------------------------------------
 

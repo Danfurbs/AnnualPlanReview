@@ -45,8 +45,10 @@ async function openForecastEditor() {
   try {
     const dashboardPage = document.getElementById('dashboardPage');
     const forecastPage = document.getElementById('forecastPage');
+    const previewPage = document.getElementById('forecastBuilderPreviewPage');
 
     if (dashboardPage) dashboardPage.classList.add('is-hidden');
+    if (previewPage) previewPage.classList.add('is-hidden');
     if (forecastPage) forecastPage.classList.remove('is-hidden');
 
     await initializeForecastEditor();
@@ -781,6 +783,9 @@ function renderForecastEditorTable() {
                 `;
               }).join('')}
               <td class="forecast-total-cell" data-role="row-total" data-job="${escapeHtml(jobNumber)}">${formatForecastNumber(rowTotal)}</td>
+              <td class="forecast-action-cell">
+                <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}" title="Remove row">×</button>
+              </td>
               <td class="forecast-comment-cell">
                 <textarea
                   class="forecast-comment-input${comment ? ' has-value' : ''}"

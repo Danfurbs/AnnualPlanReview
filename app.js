@@ -55,6 +55,9 @@
     let currentDeliveryUnit = window.getDeliveryUnitById?.(storedDeliveryUnit)
       ? storedDeliveryUnit
       : '';
+    // Read-only application context for isolated preview screens. The dashboard
+    // remains the single owner of the selected Delivery Unit.
+    window.getCurrentDeliveryUnitId = () => currentDeliveryUnit;
 
     function loadBreakdownPlanVersion() {
       const saved = localStorage.getItem(BREAKDOWN_PLAN_VERSION_KEY);
