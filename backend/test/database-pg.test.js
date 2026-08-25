@@ -170,12 +170,12 @@ test('forecast planning metadata remains isolated by FY, Engineer, job and Work 
   service.ready = Promise.resolve();
   service.pool = { query: async (sql, params) => {
     calls.push({ sql, params });
-    return { rows: [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: '', forecasted: true }] };
+    return { rows: [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: '', forecasted: true, manuallyAdded: false }] };
   } };
   const saved = await service.saveForecastPlanningMetadata({
-    fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: '', forecasted: true
+    fiscalYear: 'FY28', engineerId: 'track', jobNumber: '9005', workGroup: '', forecasted: true, manuallyAdded: false
   });
-  assert.deepEqual(calls[0].params, ['FY28', 'track', '9005', '', true]);
+  assert.deepEqual(calls[0].params, ['FY28', 'track', '9005', '', true, false]);
   assert.equal(calls[0].sql.includes('ON CONFLICT(fiscal_year, engineer_id, job_number, work_group)'), true);
   assert.equal(saved.forecasted, true);
 });

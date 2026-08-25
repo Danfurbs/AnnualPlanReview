@@ -113,12 +113,14 @@ class DatabaseService {
         job_number TEXT NOT NULL,
         work_group TEXT NOT NULL DEFAULT '',
         forecasted INTEGER NOT NULL DEFAULT 0,
+        manually_added INTEGER,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY(fiscal_year, engineer_id, job_number, work_group)
       );
     `);
 
     this.ensureColumn('job_comments', 'root_cause', 'TEXT');
+    this.ensureColumn('forecast_planning_metadata', 'manually_added', 'INTEGER');
     this.ensureColumn('job_comments', 'corrective_action', 'TEXT');
     this.ensureColumn('job_comments', 'owner', 'TEXT');
     this.ensureColumn('job_comments', 'due_date', 'TEXT');
@@ -152,7 +154,9 @@ class DatabaseService {
     const exists = columns.some(column => column.name === columnName);
     if (!exists) {
       this.db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`);
+      return true;
     }
+    return false;
   }
 
   prepareStatements() {
@@ -814,19 +818,23 @@ class DatabaseService {
 
   getForecastPlanningMetadata(fiscalYear) {
     return this.db.prepare(`SELECT fiscal_year AS fiscalYear, engineer_id AS engineerId,
-      job_number AS jobNumber, work_group AS workGroup, forecasted
+      job_number AS jobNumber, work_group AS workGroup, forecasted, manually_added AS manuallyAdded
       FROM forecast_planning_metadata WHERE fiscal_year = ? ORDER BY engineer_id, job_number, work_group`)
-      .all(fiscalYear).map(row => ({ ...row, forecasted: Boolean(row.forecasted) }));
+      .all(fiscalYear).map(row => ({
+        ...row,
+        forecasted: Boolean(row.forecasted),
+        manuallyAdded: row.manuallyAdded == null ? null : Boolean(row.manuallyAdded)
+      }));
   }
 
   saveForecastPlanningMetadata(item) {
     this.db.prepare(`INSERT INTO forecast_planning_metadata
-      (fiscal_year, engineer_id, job_number, work_group, forecasted, updated_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      (fiscal_year, engineer_id, job_number, work_group, forecasted, manually_added, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(fiscal_year, engineer_id, job_number, work_group)
-      DO UPDATE SET forecasted = excluded.forecasted, updated_at = CURRENT_TIMESTAMP`)
-      .run(item.fiscalYear, item.engineerId, item.jobNumber, item.workGroup || '', item.forecasted ? 1 : 0);
-    return { ...item, workGroup: item.workGroup || '', forecasted: Boolean(item.forecasted) };
+      DO UPDATE SET forecasted = excluded.forecasted, manually_added = excluded.manually_added, updated_at = CURRENT_TIMESTAMP`)
+      .run(item.fiscalYear, item.engineerId, item.jobNumber, item.workGroup || '', item.forecasted ? 1 : 0, item.manuallyAdded ? 1 : 0);
+    return { ...item, workGroup: item.workGroup || '', forecasted: Boolean(item.forecasted), manuallyAdded: Boolean(item.manuallyAdded) };
   }
 
   deleteForecastPlanningMetadata(item) {

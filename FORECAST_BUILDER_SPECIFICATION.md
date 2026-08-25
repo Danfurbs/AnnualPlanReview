@@ -57,6 +57,12 @@ Repo: `Danfurbs/AnnualPlanReview`.
     comments saved with the Standard Job. Backend revision checks run before the
     job-scoped transaction deletes and replaces that selected FY/V0/Standard Job
     only.
+    Manual queue membership is stored separately from Forecasted status, so
+    marking an automatically discovered job Forecasted never adds a `manually
+    added` reason, while a genuinely manual job remains manual after its status
+    changes. Incremental metadata/save updates rebuild only the active
+    engineer's cached queue, and ordinary cell blur no longer rerenders the
+    complete grouped card list.
 -   **Phases 4--5 --- not started.** The Planning Context cell is deliberately
     only a placeholder: historical context/copy-forward and profile charts are
     not implemented.

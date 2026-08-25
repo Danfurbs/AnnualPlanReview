@@ -88,14 +88,14 @@ test('filters Work Group Sets to the selected engineer', () => {
 });
 
 test('manual jobs persist in the queue and start not Forecasted', () => {
-  const planningMetadata = [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '200', workGroup: '', forecasted: false }];
+  const planningMetadata = [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '200', workGroup: '', forecasted: false, manuallyAdded: true }];
   const result = getStandardJobsForEngineer({ ...base, planningMetadata });
   assert.equal(result[0].forecasted, false);
   assert.deepEqual(result[0].reasons, [REASONS.MANUALLY_ADDED]);
 });
 
 test('manual removal is allowed only before V0 data or comments exist', () => {
-  const planningMetadata = [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '200', workGroup: '', forecasted: false }];
+  const planningMetadata = [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '200', workGroup: '', forecasted: false, manuallyAdded: true }];
   const options = { ...base, jobNumber: '200', planningMetadata };
   assert.equal(canRemoveManuallyAddedStandardJob(options), true);
   assert.equal(canRemoveManuallyAddedStandardJob({
@@ -109,8 +109,33 @@ test('manual removal is allowed only before V0 data or comments exist', () => {
 test('manual exceptional Work Group Sets survive through isolated metadata', () => {
   const rows = getWorkGroupSetsForStandardJob({
     ...base, jobNumber: '201', planningMetadata: [{
-      fiscalYear: 'FY28', engineerId: 'track', jobNumber: '201', workGroup: 'WG-OLE', forecasted: false
+      fiscalYear: 'FY28', engineerId: 'track', jobNumber: '201', workGroup: 'WG-OLE', forecasted: false, manuallyAdded: true
     }]
   });
   assert.deepEqual(rows, [{ workGroup: 'WG-OLE', reasons: [REASONS.MANUALLY_ADDED] }]);
+});
+
+test('Forecasted metadata does not label an automatically discovered job as manually added', () => {
+  const result = getStandardJobsForEngineer({
+    ...base,
+    effectiveForecastsByYear: { FY27: new Map([['105', job('WG-TRACK', { P1: 1 })]]) },
+    planningMetadata: [{
+      fiscalYear: 'FY28', engineerId: 'track', jobNumber: '105', workGroup: '',
+      forecasted: true, manuallyAdded: false
+    }]
+  });
+  assert.equal(result[0].forecasted, true);
+  assert.deepEqual(result[0].reasons, [REASONS.RECENT_FORECAST]);
+});
+
+test('a manually added job remains manually added after it is marked Forecasted', () => {
+  const result = getStandardJobsForEngineer({
+    ...base,
+    planningMetadata: [{
+      fiscalYear: 'FY28', engineerId: 'track', jobNumber: '200', workGroup: '',
+      forecasted: true, manuallyAdded: true
+    }]
+  });
+  assert.equal(result[0].forecasted, true);
+  assert.deepEqual(result[0].reasons, [REASONS.MANUALLY_ADDED]);
 });

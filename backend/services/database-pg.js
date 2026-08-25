@@ -138,10 +138,19 @@ class DatabaseServicePG {
         job_number VARCHAR(50) NOT NULL,
         work_group VARCHAR(120) NOT NULL DEFAULT '',
         forecasted BOOLEAN NOT NULL DEFAULT FALSE,
+        manually_added BOOLEAN,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY(fiscal_year, engineer_id, job_number, work_group)
       )
     `);
+    const planningMetadataColumns = await this.pool.query(`SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'forecast_planning_metadata' AND column_name = 'manually_added'`);
+    if (!planningMetadataColumns.rows.length) {
+      // Keep legacy rows NULL rather than rewriting planning metadata. The
+      // discovery layer applies the old Forecasted=false interpretation only
+      // when this discriminator is absent; every new write supplies a boolean.
+      await this.pool.query(`ALTER TABLE forecast_planning_metadata ADD COLUMN manually_added BOOLEAN`);
+    }
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS public_groups (
         id VARCHAR(100) PRIMARY KEY,
@@ -885,7 +894,7 @@ class DatabaseServicePG {
   async getForecastPlanningMetadata(fiscalYear) {
     await this.ready;
     const result = await this.pool.query(`SELECT fiscal_year AS "fiscalYear", engineer_id AS "engineerId",
-      job_number AS "jobNumber", work_group AS "workGroup", forecasted
+      job_number AS "jobNumber", work_group AS "workGroup", forecasted, manually_added AS "manuallyAdded"
       FROM forecast_planning_metadata WHERE fiscal_year = $1 ORDER BY engineer_id, job_number, work_group`, [fiscalYear]);
     return result.rows;
   }
@@ -893,13 +902,13 @@ class DatabaseServicePG {
   async saveForecastPlanningMetadata(item) {
     await this.ready;
     const result = await this.pool.query(`INSERT INTO forecast_planning_metadata
-      (fiscal_year, engineer_id, job_number, work_group, forecasted, updated_at)
-      VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      (fiscal_year, engineer_id, job_number, work_group, forecasted, manually_added, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
       ON CONFLICT(fiscal_year, engineer_id, job_number, work_group)
-      DO UPDATE SET forecasted = EXCLUDED.forecasted, updated_at = CURRENT_TIMESTAMP
+      DO UPDATE SET forecasted = EXCLUDED.forecasted, manually_added = EXCLUDED.manually_added, updated_at = CURRENT_TIMESTAMP
       RETURNING fiscal_year AS "fiscalYear", engineer_id AS "engineerId",
-        job_number AS "jobNumber", work_group AS "workGroup", forecasted`,
-      [item.fiscalYear, item.engineerId, item.jobNumber, item.workGroup || '', Boolean(item.forecasted)]);
+        job_number AS "jobNumber", work_group AS "workGroup", forecasted, manually_added AS "manuallyAdded"`,
+      [item.fiscalYear, item.engineerId, item.jobNumber, item.workGroup || '', Boolean(item.forecasted), Boolean(item.manuallyAdded)]);
     return result.rows[0];
   }
 

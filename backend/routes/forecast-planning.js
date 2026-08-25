@@ -24,11 +24,11 @@ module.exports = function createForecastPlanningRoutes(db) {
     const engineerId = requiredText(req.body?.engineerId, 120);
     const jobNumber = requiredText(req.body?.jobNumber, 50);
     const workGroup = String(req.body?.workGroup || '').trim();
-    if (!fiscalYear || !engineerId || !jobNumber || workGroup.length > 120 || typeof req.body?.forecasted !== 'boolean') {
+    if (!fiscalYear || !engineerId || !jobNumber || workGroup.length > 120 || typeof req.body?.forecasted !== 'boolean' || typeof req.body?.manuallyAdded !== 'boolean') {
       return res.status(400).json({ success: false, error: 'Invalid planning metadata' });
     }
     try {
-      const data = await db.saveForecastPlanningMetadata({ fiscalYear, engineerId, jobNumber, workGroup, forecasted: req.body.forecasted });
+      const data = await db.saveForecastPlanningMetadata({ fiscalYear, engineerId, jobNumber, workGroup, forecasted: req.body.forecasted, manuallyAdded: req.body.manuallyAdded });
       return res.json({ success: true, data });
     } catch (error) {
       console.error('Failed to save forecast planning metadata:', error);

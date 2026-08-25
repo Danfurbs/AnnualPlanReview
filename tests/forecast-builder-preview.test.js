@@ -116,3 +116,11 @@ test('non-interactive card space expands while controls and grid interactions re
   assert.match(source, /function toggleExpandedJob/);
   assert.match(source, /!e\.target\.closest\('button, input, textarea, select, a, \.preview-job-expanded'\)/);
 });
+
+test('metadata updates rebuild only the active engineer queue and cell blur does not rerender every job', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  assert.match(source, /function rebuildEngineerJobCache/);
+  assert.match(source, /async function toggleForecasted[\s\S]*?rebuildEngineerJobCache\(\)/);
+  assert.match(source, /async function addStandardJob[\s\S]*?manuallyAdded: true[\s\S]*?rebuildEngineerJobCache\(\)/);
+  assert.doesNotMatch(source, /addEventListener\('change',\s*\(\)\s*=>\s*renderJobList/);
+});
