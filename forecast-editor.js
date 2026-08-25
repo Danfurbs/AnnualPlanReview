@@ -783,9 +783,6 @@ function renderForecastEditorTable() {
                 `;
               }).join('')}
               <td class="forecast-total-cell" data-role="row-total" data-job="${escapeHtml(jobNumber)}">${formatForecastNumber(rowTotal)}</td>
-              <td class="forecast-action-cell">
-                <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}" title="Remove row">×</button>
-              </td>
               <td class="forecast-comment-cell">
                 <textarea
                   class="forecast-comment-input${comment ? ' has-value' : ''}"
@@ -796,7 +793,7 @@ function renderForecastEditorTable() {
                 >${escapeHtml(comment)}</textarea>
               </td>
               <td class="forecast-action-cell">
-                <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}" title="Remove this forecast row" aria-label="Remove forecast row ${escapeHtml(jobNumber || String(index + 1))}">&times;</button>
+                <button type="button" class="forecast-delete-row" data-action="delete-row" data-row="${index}" title="Remove this saved forecast line" aria-label="Remove saved forecast for ${escapeHtml(jobNumber || `line ${index + 1}`)}">&times;</button>
               </td>
             </tr>
           `;
