@@ -1802,3 +1802,28 @@
   .preview-engineer-header { top: 0; }
   .preview-evidence-upload { display: none; }
 }
+
+/* Keep navigation in view and make the selected engineer header collapse when stuck. */
+.preview-builder-layout { overflow: visible; align-items: start; }
+.preview-engineer-sidebar { height: calc(100vh - 112px); }
+.preview-engineer-list { height: calc(100vh - 275px); max-height: none; }
+.preview-engineer-sentinel { width: 1px; height: 1px; }
+.preview-engineer-header { transition: padding .16s ease, box-shadow .16s ease; }
+.preview-engineer-header.is-condensed { align-items: center; padding-block: 7px; box-shadow: 0 5px 12px rgba(15, 23, 42, .08); }
+.preview-engineer-header.is-condensed .preview-eyebrow,
+.preview-engineer-header.is-condensed .preview-progress-summary { display: none; }
+.preview-engineer-header.is-condensed h2 { margin: 0; font-size: 15px; }
+.preview-engineer-header.is-condensed .preview-engineer-actions button { padding-block: 6px; }
+.preview-job-card { scroll-margin-top: 165px; }
+.preview-profile-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px; }
+.preview-profile-controls > label { display: grid; gap: 4px; color: #64748b; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.preview-profile-controls select { min-width: 92px; padding-block: 6px; }
+.preview-profile-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 8px; }
+.preview-profile-footer .preview-profile-transition { flex: 1 1 auto; margin: 0; }
+.preview-profile-footer .primary-button { flex: 0 0 auto; }
+@media (max-width: 900px) {
+  .preview-builder-layout { overflow: hidden; }
+  .preview-engineer-sidebar, .preview-engineer-list { height: auto; }
+  .preview-profile-footer { align-items: stretch; flex-direction: column; }
+  .preview-profile-footer .primary-button { align-self: flex-end; }
+}

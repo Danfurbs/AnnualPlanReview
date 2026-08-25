@@ -125,34 +125,27 @@ test('metadata updates rebuild only the active engineer queue and cell blur does
   assert.doesNotMatch(source, /addEventListener\('change',\s*\(\)\s*=>\s*renderJobList/);
 });
 
-test('Phase 4 Planning Context is per WGS, lazy in the UI, and copy actions only dirty the draft', () => {
+test('profile comparison replaces per-row History controls with an FY dropdown and copy action', () => {
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
-  assert.match(source, /function renderPlanningContext/);
-  assert.match(source, /data-context-wgs=/);
-  assert.match(source, /state\.contextExpanded\.has/);
-  assert.match(source, /function copyHistoricalProfile/);
-  assert.match(source, /row\.comment = button\.dataset\.copyContext === 'forecast'/);
-  assert.match(source, /draft\.dirty = true; renderJobList\(\)/);
-  assert.doesNotMatch(source, /function copyHistoricalProfile[\s\S]*?saveForecastJobToStorageAsync/);
+  assert.doesNotMatch(source, /data-context-wgs=/);
+  assert.match(source, /data-profile-year=/);
+  assert.match(source, /data-copy-profile=/);
+  assert.match(source, />Copy to forecast</);
+  assert.match(source, /function copySelectedProfile/);
+  assert.match(source, /state\.profileYear\.set/);
 });
 
-test('Phase 4 context labels Work Done coverage and historical comment scope/source', () => {
-  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
-  assert.match(source, /\$\{escapeHtml\(context\.coverage\.label\)\}/);
-  assert.match(source, /const allComments =/);
-  assert.match(source, /<details class="preview-history-comments">/);
-  assert.match(source, /comment\.filteredEngineerId/);
-  assert.match(source, /commentMatchesOrganisationScope/);
-});
-
-test('Planning Context renders outside the period table without forcing horizontal scroll', () => {
+test('persistent navigation and condensed engineer header avoid losing the top job on scroll', () => {
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
-  assert.match(source, /<\/tbody><\/table><\/div>\$\{rows\.filter/);
-  assert.doesNotMatch(source, /preview-context-row/);
-  assert.match(css, /\.preview-planning-context \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*overflow: hidden;/s);
-  assert.match(css, /\.preview-history-list \{[^}]*auto-fit[^}]*minmax\(min\(100%, 260px\), 1fr\)/s);
-  assert.doesNotMatch(css, /\.preview-planning-context \{[^}]*min-width: 900px/);
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.match(html, /id="forecastPreviewEngineerSentinel"/);
+  assert.match(source, /IntersectionObserver/);
+  assert.match(source, /function scrollActiveEngineerIntoView/);
+  assert.doesNotMatch(source, /querySelector\('\.active'\)\?\.scrollIntoView/);
+  assert.match(css, /\.preview-builder-layout \{ overflow: visible;/);
+  assert.match(css, /\.preview-engineer-header\.is-condensed/);
+  assert.match(css, /\.preview-job-card \{ scroll-margin-top:/);
 });
 
 test('older Planning Context loads lazily one FY at a time with stale-response protection', () => {
