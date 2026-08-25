@@ -114,6 +114,18 @@ test('expanded grid exposes a visible contained horizontal scrollbar and per-WGS
   assert.match(css, /\.preview-wgs-grid textarea\s*\{[^}]*width:\s*100%/s);
 });
 
+test('each Work Group Set can be queued for clearing and omitted when the job is saved', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
+  assert.match(source, /data-clear-wgs=/);
+  assert.match(source, /function clearWorkGroupForecast/);
+  assert.match(source, /draft\.clearedWorkGroups\.add\(workGroup\)/);
+  assert.match(source, /if \(draft\.clearedWorkGroups\.has\(code\)\) continue/);
+  assert.match(source, /The change will take effect when you select Save job/);
+  assert.match(css, /\.preview-clear-wgs\s*\{/);
+  assert.match(css, /\.preview-wgs-grid tr\.is-pending-clear/);
+});
+
 test('non-interactive card space expands while controls and grid interactions remain isolated', () => {
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
   assert.match(source, /data-expand-card=/);
