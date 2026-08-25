@@ -9,7 +9,7 @@
     effectiveForecastsByYear: {}, v0ForecastsByYear: {}, workDoneByYear: {},
     loading: false, requestSerial: 0, jobsByEngineer: new Map(), expanded: new Set(), contextExpanded: new Set(), showAllHistory: new Set(), profileWorkGroup: new Map(), charts: new Map(), drafts: new Map(),
     workDoneUploadedByYear: {}, jobComments: {},
-    historyLoadedForYear: '', temporaryEvidence: null, evidenceParseSerial: 0,
+    historyLoadedForYear: '', temporaryEvidenceByYear: new Map(), evidenceParseSerial: 0,
     selectedCatalogueJob: '', selectedWgs: '', addWgsJob: '', lastAddJobTrigger: null
   };
   const byId = id => document.getElementById(id);
@@ -63,18 +63,28 @@
     if (window.isApiEnabled?.()) return (await window.loadJobCommentsFromApi?.()) || {};
     try { return JSON.parse(localStorage.getItem('aprJobCommentsV2') || '{}'); } catch { return {}; }
   }
-  function clearTemporaryEvidence({ render = true } = {}) {
-    const evidence = state.temporaryEvidence;
-    if (evidence) {
-      const { year, originalData, originalUploadedAt } = evidence;
-      state.workDoneByYear[year] = originalData;
-      state.workDoneUploadedByYear[year] = originalUploadedAt;
-    }
-    state.temporaryEvidence = null;
-    byId('forecastPreviewEvidenceFile').value = '';
-    byId('forecastPreviewClearEvidence').hidden = true;
-    byId('forecastPreviewEvidenceStatus').textContent = 'No temporary evidence loaded.';
-    if (render && evidence) { rebuildJobCache(); renderAll(); }
+  function renderTemporaryEvidenceStatus() {
+    const entries = Array.from(state.temporaryEvidenceByYear.values()).sort((a, b) => b.year.localeCompare(a.year));
+    const selectedYear = byId('forecastPreviewEvidenceYear')?.value;
+    byId('forecastPreviewClearEvidence').hidden = !state.temporaryEvidenceByYear.has(selectedYear);
+    byId('forecastPreviewEvidenceCount').textContent = entries.length ? `${entries.length} FY loaded` : 'Optional';
+    byId('forecastPreviewEvidenceStatus').innerHTML = entries.length
+      ? entries.map(item => `<span class="preview-evidence-chip"><b>${escapeHtml(item.year)}</b> ${item.accepted.toLocaleString()} rows · ${escapeHtml(item.fileName)}</span>`).join('')
+      : 'No temporary evidence loaded.';
+  }
+  function clearTemporaryEvidence({ render = true, year = byId('forecastPreviewEvidenceYear')?.value, all = false } = {}) {
+    const years = all ? Array.from(state.temporaryEvidenceByYear.keys()) : [year];
+    let changed = false;
+    years.forEach(fy => {
+      const evidence = state.temporaryEvidenceByYear.get(fy);
+      if (!evidence) return;
+      state.workDoneByYear[fy] = evidence.originalData;
+      state.workDoneUploadedByYear[fy] = evidence.originalUploadedAt;
+      state.temporaryEvidenceByYear.delete(fy); changed = true;
+    });
+    if (byId('forecastPreviewEvidenceFile')) byId('forecastPreviewEvidenceFile').value = '';
+    renderTemporaryEvidenceStatus();
+    if (render && changed) { rebuildJobCache(); renderAll(); }
   }
   async function loadTemporaryWorkDone(file) {
     const year = byId('forecastPreviewEvidenceYear').value, parseId = ++state.evidenceParseSerial;
@@ -101,11 +111,14 @@
       activeJobs: new Set(catalogue().map(job => job.jobNumber))
     });
     if (parseId !== state.evidenceParseSerial) return;
-    clearTemporaryEvidence({ render: false });
-    state.temporaryEvidence = { year, originalData: state.workDoneByYear[year] || new Map(), originalUploadedAt: state.workDoneUploadedByYear[year] || null };
+    const previous = state.temporaryEvidenceByYear.get(year);
+    state.temporaryEvidenceByYear.set(year, {
+      year, fileName: file.name, accepted, rejected,
+      originalData: previous?.originalData || state.workDoneByYear[year] || new Map(),
+      originalUploadedAt: previous?.originalUploadedAt || state.workDoneUploadedByYear[year] || null
+    });
     state.workDoneByYear[year] = aggregated; state.workDoneUploadedByYear[year] = `temporary:${file.name}`;
-    byId('forecastPreviewClearEvidence').hidden = false;
-    status.textContent = `${year}: ${accepted} rows accepted, ${rejected} rejected. Temporary evidence is not saved.`;
+    renderTemporaryEvidenceStatus();
     rebuildJobCache(); renderAll();
   }
   function getScopedEngineers() { const id = window.getCurrentDeliveryUnitId?.() || ''; return (!id || id === 'all') ? [] : (window.getEngineersForDeliveryUnit?.(id) || []); }
@@ -222,12 +235,12 @@
     chart.data.datasets[0].data = PERIODS.map(period => series.current[period]);
     chart.update('none');
   }
-  function renderGrid(job) { const draft = getDraft(job.jobNumber); const rows = Object.entries(draft.rows); return `<div class="preview-job-expanded"><p class="preview-grid-scroll-hint">Scroll horizontally to view P1–P13, totals, and each Work Group Set comment.</p><div class="preview-grid-scroll" tabindex="0" aria-label="Work Group Set periods; scroll horizontally for all columns"><table class="preview-wgs-grid"><thead><tr><th>Work Group Set</th>${PERIODS.map(p => `<th>${p}</th>`).join('')}<th>Total</th><th>Comments per Work Group Set</th></tr></thead><tbody>${rows.map(([code, row]) => `<tr><th scope="row"><strong>${escapeHtml(code)}</strong><small>${escapeHtml(window.workGroupSets?.get(code) || '')}</small><button type="button" class="group-action-button preview-context-toggle" data-context-job="${escapeHtml(job.jobNumber)}" data-context-wgs="${escapeHtml(code)}" aria-expanded="${state.contextExpanded.has(contextKey(job.jobNumber, code))}">${state.contextExpanded.has(contextKey(job.jobNumber, code)) ? 'Hide context' : 'Planning context'}</button><span class="preview-reasons">${row.reasons.map(reason => `<span class="preview-reason">${escapeHtml(reason)}</span>`).join('')}</span>${row.reasons.includes('manually added') ? `<button type="button" class="preview-remove-wgs" data-remove-wgs="${escapeHtml(code)}" data-job="${escapeHtml(job.jobNumber)}">Remove</button>` : ''}</th>${PERIODS.map(p => `<td><input type="number" min="0" step="any" aria-label="${escapeHtml(code)} ${p}" data-grid-job="${escapeHtml(job.jobNumber)}" data-grid-wgs="${escapeHtml(code)}" data-period="${p}" value="${row.periods[p] || ''}"></td>`).join('')}<td class="preview-row-total">${PERIODS.reduce((n, p) => n + (Number(row.periods[p]) || 0), 0).toLocaleString()}</td><td><textarea data-comment-job="${escapeHtml(job.jobNumber)}" data-comment-wgs="${escapeHtml(code)}" aria-label="Current-year V0 comment for Work Group Set ${escapeHtml(code)}">${escapeHtml(row.comment)}</textarea></td></tr>`).join('')}</tbody></table></div>${rows.filter(([code]) => state.contextExpanded.has(contextKey(job.jobNumber, code))).map(([code]) => renderPlanningContext(job.jobNumber, code)).join('')}<div class="preview-job-footer"><button type="button" class="group-action-button" data-add-wgs="${escapeHtml(job.jobNumber)}">+ Add Work Group Set</button><span class="preview-job-save-message ${draft.error ? 'is-error' : ''}" role="status">${escapeHtml(draft.error || (draft.dirty ? 'Unsaved changes' : 'No unsaved changes'))}</span><button type="button" class="primary-button" data-save-job="${escapeHtml(job.jobNumber)}" ${!draft.dirty || draft.saving ? 'disabled' : ''}>${draft.saving ? 'Saving…' : 'Save Standard Job'}</button></div></div>`; }
+  function renderGrid(job) { const draft = getDraft(job.jobNumber); const rows = Object.entries(draft.rows); return `<div class="preview-job-expanded"><p class="preview-grid-scroll-hint">Enter P1–P13. Paste a row of values to fill consecutive periods.</p><div class="preview-grid-scroll" tabindex="0" aria-label="Work Group Set periods; scroll horizontally for all columns"><table class="preview-wgs-grid"><thead><tr><th>Work Group Set</th>${PERIODS.map(p => `<th>${p}</th>`).join('')}<th>Total</th><th>Comment</th></tr></thead><tbody>${rows.map(([code, row]) => `<tr><th scope="row"><strong>${escapeHtml(code)}</strong><small>${escapeHtml(window.workGroupSets?.get(code) || '')}</small><button type="button" class="group-action-button preview-context-toggle" data-context-job="${escapeHtml(job.jobNumber)}" data-context-wgs="${escapeHtml(code)}" aria-expanded="${state.contextExpanded.has(contextKey(job.jobNumber, code))}">${state.contextExpanded.has(contextKey(job.jobNumber, code)) ? 'Hide context' : 'History'}</button><span class="preview-reasons">${row.reasons.map(reason => `<span class="preview-reason">${escapeHtml(reason)}</span>`).join('')}</span>${row.reasons.includes('manually added') ? `<button type="button" class="preview-remove-wgs" data-remove-wgs="${escapeHtml(code)}" data-job="${escapeHtml(job.jobNumber)}">Remove</button>` : ''}</th>${PERIODS.map(p => `<td><input type="number" min="0" step="any" aria-label="${escapeHtml(code)} ${p}" data-grid-job="${escapeHtml(job.jobNumber)}" data-grid-wgs="${escapeHtml(code)}" data-period="${p}" value="${row.periods[p] || ''}"></td>`).join('')}<td class="preview-row-total">${PERIODS.reduce((n, p) => n + (Number(row.periods[p]) || 0), 0).toLocaleString()}</td><td><textarea data-comment-job="${escapeHtml(job.jobNumber)}" data-comment-wgs="${escapeHtml(code)}" aria-label="Current-year V0 comment for Work Group Set ${escapeHtml(code)}">${escapeHtml(row.comment)}</textarea></td></tr>`).join('')}</tbody></table></div>${rows.filter(([code]) => state.contextExpanded.has(contextKey(job.jobNumber, code))).map(([code]) => renderPlanningContext(job.jobNumber, code)).join('')}<div class="preview-job-footer"><button type="button" class="group-action-button" data-add-wgs="${escapeHtml(job.jobNumber)}">+ Add Work Group Set</button><span class="preview-job-save-message ${draft.error ? 'is-error' : ''}" role="status">${escapeHtml(draft.error || (draft.dirty ? 'Unsaved changes' : 'Up to date'))}</span><button type="button" class="primary-button" data-save-job="${escapeHtml(job.jobNumber)}" ${!draft.dirty || draft.saving ? 'disabled' : ''}>${draft.saving ? 'Saving…' : 'Save job'}</button></div></div>`; }
   function renderJobList() { const jobs = getJobs(), target = byId('forecastPreviewJobList'); if (!target) return; if (!jobs.length) { target.innerHTML = '<div class="preview-empty forecast-card">No Standard Jobs found. Use “Add Standard Job” for genuinely new work.</div>'; return; } target.innerHTML = groupJobs(jobs).map(group => `<section class="preview-discipline-group" aria-labelledby="discipline-${escapeHtml(group.discipline.replace(/\W+/g, '-'))}"><h3 id="discipline-${escapeHtml(group.discipline.replace(/\W+/g, '-'))}">${escapeHtml(group.discipline)}</h3><div class="preview-job-list">${group.jobs.map(job => { const details = job.catalogue || {}, expanded = state.expanded.has(draftKey(job.jobNumber)), stored = getStoredJob(job.jobNumber), total = Object.values(stored.periods || {}).reduce((n, value) => n + (Number(value) || 0), 0), canRemove = window.canRemoveManuallyAddedStandardJob({ ...discoveryOptions(), jobNumber: job.jobNumber }); return `<article class="preview-job-card" data-expand-card="${escapeHtml(job.jobNumber)}"><div class="preview-job-card-main"><button type="button" class="preview-expand-job" data-expand-job="${escapeHtml(job.jobNumber)}" aria-expanded="${expanded}"><span aria-hidden="true">${expanded ? '▾' : '▸'}</span><span class="preview-job-number">${escapeHtml(normalizeJob(job.jobNumber))}</span><span>${escapeHtml(details.description || 'Standard Job')}</span></button><div class="preview-job-actions"><div class="preview-job-total"><span>${escapeHtml(state.selectedYear)} V0 total</span><strong>${total.toLocaleString()}</strong></div>${canRemove ? `<button type="button" class="group-action-button preview-remove-job" data-remove-job="${escapeHtml(job.jobNumber)}">Remove</button>` : ''}<button type="button" class="preview-status-toggle ${job.forecasted ? 'is-forecasted' : ''}" data-job-number="${escapeHtml(job.jobNumber)}" data-forecasted="${job.forecasted}">${job.forecasted ? '✓ Forecasted' : 'Mark Forecasted'}</button></div></div><div class="preview-job-meta">${escapeHtml(details.unit || 'Unit not recorded')} · ${job.workGroupCount} Work Group Set${job.workGroupCount === 1 ? '' : 's'}</div><div class="preview-reasons">${job.reasons.map(r => `<span class="preview-reason">${escapeHtml(r)}</span>`).join('')}</div>${expanded ? `${renderGrid(job)}${renderProfile(job.jobNumber)}` : ''}</article>`; }).join('')}</div></section>`).join(''); window.requestAnimationFrame?.(renderProfileCharts); }
   function renderAll() { const engineers = ensureSelectedEngineer(), engineer = engineers.find(item => item.id === state.selectedEngineerId); renderEngineerList(); if (!engineer) return; const jobs = getJobs(), done = jobs.filter(j => j.forecasted).length; byId('forecastPreviewEngineerTitle').textContent = engineer.name; byId('forecastPreviewProgressText').textContent = `${done} of ${jobs.length} Standard Jobs forecasted`; byId('forecastPreviewProgressBar').style.width = `${jobs.length ? done / jobs.length * 100 : 0}%`; renderJobList(); byId('forecastPreviewEngineerList')?.querySelector('.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
   async function refreshPreview() { const id = ++state.requestSerial, year = state.selectedYear; state.loading = true; byId('forecastPreviewLoading').hidden = false; byId('forecastPreviewContent').hidden = true; try { const metadataPromise = loadMetadata(year), commentsPromise = loadHistoricalComments(), evidence = await loadPlanningEvidence(year, id); if (!evidence || !requestIsCurrent(id, year)) return; [state.metadata, state.jobComments] = await Promise.all([metadataPromise, commentsPromise]); if (!requestIsCurrent(id, year)) return; Object.assign(state, evidence); rebuildJobCache(); if (!ensureSelectedEngineer().length) throw new Error('Select a Delivery Unit before opening the Forecast Builder Preview.'); renderAll(); byId('forecastPreviewLoading').hidden = true; byId('forecastPreviewContent').hidden = false; byId('forecastPreviewState').textContent = 'V0 planning workspace loaded'; } catch (error) { if (requestIsCurrent(id, year)) byId('forecastPreviewLoading').textContent = error.message; } finally { if (requestIsCurrent(id, year)) state.loading = false; } }
   async function openForecastBuilderPreview() { if (!getScopedEngineers().length) return window.Toast?.error('Select a Delivery Unit before opening the Forecast Builder Preview.'); byId('dashboardPage')?.classList.add('is-hidden'); byId('forecastPage')?.classList.add('is-hidden'); byId('forecastBuilderPreviewPage')?.classList.remove('is-hidden'); const years = window.getFinancialYearOptions?.() || window.DEFAULT_FINANCIAL_YEARS || []; byId('forecastPreviewYear').innerHTML = years.map(year => `<option value="${escapeHtml(year)}">${escapeHtml(year)} — Original Approved Plan</option>`).join(''); state.selectedYear = window.currentFinancialYear || years[0]; byId('forecastPreviewYear').value = state.selectedYear; syncEvidenceYearOptions(); await refreshPreview(); }
-  function closeForecastBuilderPreview() { if (!confirmDiscard()) return; state.requestSerial += 1; state.evidenceParseSerial += 1; clearTemporaryEvidence({ render: false }); state.drafts.clear(); byId('forecastBuilderPreviewPage')?.classList.add('is-hidden'); byId('dashboardPage')?.classList.remove('is-hidden'); }
+  function closeForecastBuilderPreview() { if (!confirmDiscard()) return; state.requestSerial += 1; state.evidenceParseSerial += 1; clearTemporaryEvidence({ render: false, all: true }); state.drafts.clear(); byId('forecastBuilderPreviewPage')?.classList.add('is-hidden'); byId('dashboardPage')?.classList.remove('is-hidden'); }
   async function toggleForecasted(button) { const jobNumber = normalizeJob(button.dataset.jobNumber), existing = state.metadata.find(item => metadataKey(item) === metadataKey({ fiscalYear: state.selectedYear, engineerId: state.selectedEngineerId, jobNumber, workGroup: '' })); const item = { fiscalYear: state.selectedYear, engineerId: state.selectedEngineerId, jobNumber, workGroup: '', forecasted: button.dataset.forecasted !== 'true', manuallyAdded: Boolean(existing?.manuallyAdded ?? existing?.manually_added ?? (existing && !existing.forecasted)) }; const saved = await persistMetadata(item); state.metadata = [...state.metadata.filter(x => metadataKey(x) !== metadataKey(saved)), saved]; rebuildEngineerJobCache(); renderAll(); }
   async function saveJob(jobNumber) { const draft = getDraft(jobNumber); draft.saving = true; draft.error = ''; renderJobList(); const wgs = {}, comments = {}, periods = Object.fromEntries(PERIODS.map(p => [p, 0])); for (const [code, row] of Object.entries(draft.rows)) { wgs[code] = {}; for (const p of PERIODS) { const value = Number(row.periods[p]) || 0; if (value < 0) { draft.saving = false; draft.error = 'Volumes must be zero or positive.'; renderJobList(); return; } wgs[code][p] = value; periods[p] += value; } if (row.comment.trim()) comments[code] = row.comment; } const job = { periods, wgs, comments }, storageJobNumber = draft.storageJobNumber, snapshot = { data: new Map(state.v0ForecastsByYear[state.selectedYear]) }; snapshot.data.set(storageJobNumber, job); const saved = await window.saveForecastJobToStorageAsync?.(storageJobNumber, job, snapshot, state.selectedYear, 'v0'); if (!saved) { draft.saving = false; draft.error = 'Save failed. Your unsaved values are retained; retry when ready.'; renderJobList(); return; } state.v0ForecastsByYear[state.selectedYear] = snapshot.data; draft.dirty = false; draft.saving = false; rebuildEngineerJobCache(); renderAll(); byId('forecastPreviewState').textContent = 'Standard Job V0 and comments saved'; }
   function renderCatalogueResults() { const query = byId('forecastPreviewJobSearch').value.trim().toLowerCase(), queued = new Set(getJobs().map(j => normalizeJob(j.jobNumber))), matches = catalogue().filter(job => !query || job.jobNumber.includes(query) || job.description.toLowerCase().includes(query) || job.discipline.toLowerCase().includes(query)).slice(0, 150); byId('forecastPreviewJobOptions').innerHTML = groupJobs(matches).map(group => `<div class="preview-option-group" role="group" aria-label="${escapeHtml(group.discipline)}"><strong>${escapeHtml(group.discipline)}</strong>${group.jobs.map(job => { const exists = queued.has(job.jobNumber); return `<button type="button" role="option" data-catalogue-job="${escapeHtml(job.jobNumber)}" aria-selected="${state.selectedCatalogueJob === job.jobNumber}" ${exists ? 'disabled' : ''}><span>${escapeHtml(job.jobNumber)} — ${escapeHtml(job.description)}</span><small>${exists ? 'Already in this engineer’s queue' : job.discipline}</small></button>`; }).join('')}</div>`).join(''); }
@@ -269,9 +282,10 @@
       if (!requestIsCurrent(requestId, requestedYear)) return false;
       state.v0ForecastsByYear[year] = v0?.data || new Map();
       state.effectiveForecastsByYear[year] = (v0 || v1) ? window.getEffectiveForecastSnapshot(year).data : new Map();
-      if (state.temporaryEvidence?.year === year) {
-        state.temporaryEvidence.originalData = workDone.data;
-        state.temporaryEvidence.originalUploadedAt = workDone.uploadedAt;
+      const temporaryEvidence = state.temporaryEvidenceByYear.get(year);
+      if (temporaryEvidence) {
+        temporaryEvidence.originalData = workDone.data;
+        temporaryEvidence.originalUploadedAt = workDone.uploadedAt;
       } else {
         state.workDoneByYear[year] = workDone.data;
         state.workDoneUploadedByYear[year] = workDone.uploadedAt;
@@ -325,8 +339,8 @@
     state.drafts.clear(); state.expanded.clear(); window.openForecastEditor?.();
   };
   document.addEventListener('DOMContentLoaded', () => {
-    byId('forecastPreviewYear')?.addEventListener('change', event => { if (!confirmDiscard()) { event.target.value = state.selectedYear; return; } state.evidenceParseSerial += 1; clearTemporaryEvidence({ render: false }); state.drafts.clear(); state.expanded.clear(); state.selectedYear = event.target.value; syncEvidenceYearOptions(); refreshPreview(); });
-    byId('forecastPreviewEvidenceYear')?.addEventListener('change', () => { state.evidenceParseSerial += 1; clearTemporaryEvidence(); });
+    byId('forecastPreviewYear')?.addEventListener('change', event => { if (!confirmDiscard()) { event.target.value = state.selectedYear; return; } state.evidenceParseSerial += 1; clearTemporaryEvidence({ render: false, all: true }); state.drafts.clear(); state.expanded.clear(); state.selectedYear = event.target.value; syncEvidenceYearOptions(); refreshPreview(); });
+    byId('forecastPreviewEvidenceYear')?.addEventListener('change', () => { state.evidenceParseSerial += 1; byId('forecastPreviewEvidenceFile').value = ''; renderTemporaryEvidenceStatus(); });
     byId('forecastPreviewEngineerSearch')?.addEventListener('input', e => { state.search = e.target.value; renderEngineerList(); });
     document.querySelectorAll('[data-preview-filter]').forEach(button => button.addEventListener('click', () => { state.filter = button.dataset.previewFilter; document.querySelectorAll('[data-preview-filter]').forEach(b => b.classList.toggle('active', b === button)); renderEngineerList(); }));
     byId('forecastPreviewPrevious')?.addEventListener('click', () => navigateEngineer(-1)); byId('forecastPreviewNext')?.addEventListener('click', () => navigateEngineer(1)); byId('forecastPreviewAddJob')?.addEventListener('click', openForecastPreviewAddJob); byId('forecastPreviewConfirmAddJob')?.addEventListener('click', addStandardJob);

@@ -1748,3 +1748,57 @@
   .preview-catalogue-results button { flex-direction: column; gap: 4px; }
   .preview-catalogue-results button small { flex-basis: auto; text-align: left; }
 }
+
+/* Forecast Builder usability pass: denser workspace with progressive disclosure. */
+#forecastBuilderPreviewPage { max-width: 1800px; }
+.preview-page-header { position: sticky; top: 0; z-index: 20; padding-block: 12px; background: #fff; }
+.preview-page-header .forecast-page-title h1 { margin-block: 2px; }
+.preview-page-header .subtitle { margin: 0; }
+.preview-builder-layout { grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 120px); }
+.preview-engineer-sidebar { position: sticky; top: 96px; align-self: start; max-height: calc(100vh - 112px); overflow: hidden; }
+.preview-sidebar-controls { padding: 12px; }
+.preview-engineer-list { max-height: calc(100vh - 275px); }
+.preview-engineer-item { padding: 10px 12px; }
+.preview-engineer-item-meta { margin-top: 2px; }
+.preview-mini-track { margin-top: 6px; }
+.preview-evidence-upload { display: block; margin-top: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
+.preview-evidence-upload summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #0f172a; cursor: pointer; font-size: 11px; font-weight: 800; }
+.preview-evidence-upload[open] { display: grid; gap: 7px; }
+.preview-evidence-count { padding: 3px 7px; border-radius: 999px; background: #eff6ff; color: #1d4ed8 !important; font-size: 9px !important; white-space: nowrap; }
+#forecastPreviewEvidenceStatus { display: grid; gap: 4px; }
+.preview-evidence-chip { padding: 5px 7px; border-radius: 6px; background: #f1f5f9; color: #475569 !important; }
+.preview-builder-main { padding: 14px 18px 28px; }
+.preview-engineer-header { position: sticky; top: 92px; z-index: 10; align-items: center; margin: -14px -18px 12px; padding: 12px 18px; border-bottom: 1px solid #dbe3ef; background: rgba(244, 247, 251, .96); backdrop-filter: blur(8px); }
+.preview-engineer-header h2 { margin: 1px 0 5px; font-size: 20px; }
+.preview-progress-track { width: 160px; }
+.preview-section-label { display: flex; justify-content: space-between; margin: 0 0 7px; }
+.preview-section-label span { font-weight: 600; letter-spacing: 0; text-transform: none; }
+.preview-discipline-group { margin-bottom: 14px; }
+.preview-discipline-group > h3 { margin-bottom: 6px; padding-bottom: 5px; font-size: 13px; }
+.preview-job-list { gap: 6px; }
+.preview-job-card { padding: 10px 12px; border-radius: 8px; }
+.preview-job-card-main { gap: 10px; }
+.preview-job-meta { display: inline; margin-right: 8px; }
+.preview-job-card > .preview-reasons { display: inline-flex; margin-top: 4px; }
+.preview-job-expanded { margin-top: 10px; padding-top: 10px; }
+.preview-grid-scroll { padding-bottom: 7px; }
+.preview-grid-scroll::-webkit-scrollbar { height: 10px; }
+.preview-wgs-grid { min-width: 1190px; table-layout: fixed; }
+.preview-wgs-grid th, .preview-wgs-grid td { padding: 5px 3px; }
+.preview-wgs-grid thead th:first-child, .preview-wgs-grid tbody th { position: sticky; left: 0; z-index: 2; width: 155px; }
+.preview-wgs-grid thead th:first-child { z-index: 3; }
+.preview-wgs-grid thead th:not(:first-child) { width: 54px; }
+.preview-wgs-grid thead th:last-child { width: 150px; }
+.preview-wgs-grid input { width: 48px; padding: 6px 3px; text-align: right; }
+.preview-wgs-grid textarea { width: 142px; min-height: 42px; padding: 6px; resize: vertical; }
+.preview-wgs-grid tbody th small { margin: 2px 0; max-width: 150px; }
+.preview-wgs-grid tbody th .preview-reasons { display: none; }
+.preview-context-toggle { display: inline-block; margin-top: 4px; padding: 4px 7px; }
+.preview-job-footer { position: sticky; bottom: 0; z-index: 4; margin: 8px -12px -10px; padding: 8px 12px; border-top: 1px solid #e2e8f0; background: #fff; }
+.preview-profile { margin-top: 10px; padding: 10px; }
+.preview-chart-wrap { height: 210px; margin-top: 8px; }
+@media (max-width: 900px) {
+  .preview-engineer-sidebar { position: static; max-height: none; }
+  .preview-engineer-header { top: 0; }
+  .preview-evidence-upload { display: none; }
+}

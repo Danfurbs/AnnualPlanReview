@@ -104,7 +104,7 @@ test('expanded grid exposes a visible contained horizontal scrollbar and per-WGS
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
   assert.match(source, /preview-grid-scroll" tabindex="0" aria-label="Work Group Set periods; scroll horizontally/);
-  assert.match(source, /Comments per Work Group Set/);
+  assert.match(source, /<th>Comment<\/th>/);
   assert.match(source, /data-comment-wgs=/);
   assert.match(css, /\.preview-grid-scroll\s*\{[^}]*overflow-x:\s*scroll[^}]*scrollbar-gutter:\s*stable/s);
   assert.match(css, /\.preview-grid-scroll::\-webkit-scrollbar\s*\{[^}]*height:\s*14px/s);
@@ -189,7 +189,7 @@ test('temporary lightweight Work Done import remains in memory and never calls p
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(html, /id="forecastPreviewEvidenceYear"/);
   assert.match(html, /Work Done source FY/);
-  assert.match(html, /current planning FY or one of its three historical years/);
+  assert.match(html, /keep several years loaded together/);
   assert.match(html, /id="forecastPreviewEvidenceHeaderRow"[^>]*value="2"/);
   assert.match(html, /same Work Done report used by the main-page upload/);
   assert.match(html, /nothing is uploaded or saved/i);
@@ -204,6 +204,9 @@ test('temporary lightweight Work Done import remains in memory and never calls p
   assert.match(source, /Work Order Closed Period/);
   assert.match(source, /Work Group Set Description/);
   assert.match(source, /state\.workDoneByYear\[year\] = aggregated/);
-  assert.match(source, /rows accepted, \$\{rejected\} rejected\. Temporary evidence is not saved/);
+  assert.match(source, /temporaryEvidenceByYear: new Map/);
+  assert.match(source, /state\.temporaryEvidenceByYear\.set\(year/);
+  assert.match(html, /Remove selected year/);
+  assert.match(source, /renderTemporaryEvidenceStatus/);
   assert.doesNotMatch(source, /loadTemporaryWorkDone[\s\S]*?saveWorkDoneToApi/);
 });
