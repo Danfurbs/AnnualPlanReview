@@ -476,20 +476,18 @@
             <button type="button" data-preview-filter="not-forecasted">Not Forecasted</button>
             <button type="button" data-preview-filter="forecasted">Forecasted</button>
           </div>
-          <div class="preview-evidence-upload">
-            <strong>Temporary Work Done evidence</strong>
-            <p>Choose the same Work Done report used by the main-page upload. Only compact forecasting evidence is retained in this Preview session; nothing is uploaded or saved.</p>
+          <details class="preview-evidence-upload">
+            <summary><span>Work Done evidence</span><span class="preview-evidence-count" id="forecastPreviewEvidenceCount">Optional</span></summary>
+            <p>Add the same Work Done report used by the main-page upload, one year at a time. You can keep several years loaded together; nothing is uploaded or saved.</p>
             <label for="forecastPreviewEvidenceYear">Work Done source FY</label>
             <select id="forecastPreviewEvidenceYear"></select>
-            <span>Select the current planning FY or one of its three historical years.</span>
             <label for="forecastPreviewEvidenceHeaderRow">Header row</label>
             <input id="forecastPreviewEvidenceHeaderRow" type="number" value="2" min="1" step="1">
-            <span>Uses the report’s “Detail” sheet. Usually row 2, matching the main upload.</span>
             <label for="forecastPreviewEvidenceFile">Work Done file</label>
             <input id="forecastPreviewEvidenceFile" type="file" accept=".xlsx,.xls">
-            <button type="button" class="group-action-button" id="forecastPreviewClearEvidence" hidden>Clear temporary evidence</button>
+            <button type="button" class="group-action-button" id="forecastPreviewClearEvidence" hidden>Remove selected year</button>
             <span id="forecastPreviewEvidenceStatus" role="status" aria-live="polite">No temporary evidence loaded.</span>
-          </div>
+          </details>
         </div>
         <div id="forecastPreviewEngineerList" class="preview-engineer-list" role="region" aria-label="Delivery Unit engineers; scroll horizontally to see more"></div>
       </aside>
@@ -512,7 +510,7 @@
               <button type="button" class="primary-button" id="forecastPreviewAddJob">+ Add Standard Job</button>
             </div>
           </div>
-          <div class="preview-section-label">Standard Jobs — grouped by catalogue discipline, numeric SJN order</div>
+          <div class="preview-section-label">Standard Jobs <span>Grouped by discipline · Select a row to edit</span></div>
           <div id="forecastPreviewJobList" class="preview-job-list"></div>
         </div>
       </main>
