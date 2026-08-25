@@ -103,9 +103,18 @@ must be an optional input to the planning workspace, not a replacement for the
 existing authoritative Work Done upload, correction, storage, dashboard, or
 reporting paths.
 
-The user must select the financial year represented by the file. The import
+The user must select the financial year represented by the file. The source-FY
+control offers the selected current planning FY and its three preceding
+historical financial years; it must not offer a later year. The import
 must remain FY-relative and must not infer the FY from today's date, the file
-name, or a hard-coded production year.
+name, or a hard-coded production year. Changing the planning FY rebuilds this
+current-and-historical list and clears any mismatched temporary evidence.
+
+Planning Context is displayed outside the horizontally scrolling period grid as
+a compact, responsive set of year summaries. Each summary shows only forecast,
+Work Done and coverage by default, keeps copy actions alongside that year, and
+places detailed historical comments behind an optional disclosure. Expanding
+context must not widen the grid or introduce another horizontal scroll area.
 
 The Preview accepts the **same Excel report layout as the main-page Work Done
 upload**, rather than requiring users to prepare a second compact file. It reads

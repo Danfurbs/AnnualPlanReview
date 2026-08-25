@@ -138,10 +138,21 @@ test('Phase 4 Planning Context is per WGS, lazy in the UI, and copy actions only
 
 test('Phase 4 context labels Work Done coverage and historical comment scope/source', () => {
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
-  assert.match(source, /Coverage: \$\{escapeHtml\(context\.coverage\.label\)\}/);
-  assert.match(source, /Work Group Set · final forecast/);
+  assert.match(source, /\$\{escapeHtml\(context\.coverage\.label\)\}/);
+  assert.match(source, /const allComments =/);
+  assert.match(source, /<details class="preview-history-comments">/);
   assert.match(source, /comment\.filteredEngineerId/);
   assert.match(source, /commentMatchesOrganisationScope/);
+});
+
+test('Planning Context renders outside the period table without forcing horizontal scroll', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
+  assert.match(source, /<\/tbody><\/table><\/div>\$\{rows\.filter/);
+  assert.doesNotMatch(source, /preview-context-row/);
+  assert.match(css, /\.preview-planning-context \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*overflow: hidden;/s);
+  assert.match(css, /\.preview-history-list \{[^}]*auto-fit[^}]*minmax\(min\(100%, 260px\), 1fr\)/s);
+  assert.doesNotMatch(css, /\.preview-planning-context \{[^}]*min-width: 900px/);
 });
 
 test('older Planning Context loads lazily one FY at a time with stale-response protection', () => {
@@ -177,10 +188,16 @@ test('temporary lightweight Work Done import remains in memory and never calls p
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(html, /id="forecastPreviewEvidenceYear"/);
+  assert.match(html, /Work Done source FY/);
+  assert.match(html, /current planning FY or one of its three historical years/);
   assert.match(html, /id="forecastPreviewEvidenceHeaderRow"[^>]*value="2"/);
   assert.match(html, /same Work Done report used by the main-page upload/);
   assert.match(html, /nothing is uploaded or saved/i);
   assert.match(source, /async function loadTemporaryWorkDone/);
+  assert.match(source, /function syncEvidenceYearOptions/);
+  assert.match(source, /const sourceYears = \[state\.selectedYear, \.\.\.window\.getPlanningHistoryYears\(state\.selectedYear\)\]/);
+  assert.match(source, /index === 0 \? 'current FY' : 'historical'/);
+  assert.doesNotMatch(source, /forecastPreviewEvidenceYear'\)\.innerHTML = years\.map/);
   assert.match(source, /workbook\.Sheets\.Detail/);
   assert.match(source, /sheet_to_json\(sheet, \{ range: headerRow - 1, defval: '' \}\)/);
   assert.match(source, /Standard Job Number & Desc/);
