@@ -1696,13 +1696,13 @@
 .preview-grid-scroll::-webkit-scrollbar { height: 14px; }
 .preview-grid-scroll::-webkit-scrollbar-track { border-radius: 999px; background: #e2e8f0; }
 .preview-grid-scroll::-webkit-scrollbar-thumb { border: 3px solid #e2e8f0; border-radius: 999px; background: #64748b; }
-.preview-wgs-grid { min-width: 1620px; border-collapse: collapse; font-size: 11px; }
+.preview-wgs-grid { width: 100%; min-width: 1620px; border-collapse: collapse; font-size: 11px; }
 .preview-wgs-grid th, .preview-wgs-grid td { padding: 7px; border: 1px solid #e2e8f0; vertical-align: top; }
 .preview-wgs-grid th { background: #f8fafc; }
 .preview-wgs-grid tbody th { width: 190px; text-align: left; }
 .preview-wgs-grid tbody th small { display: block; margin: 4px 0; color: #64748b; font-weight: 400; overflow-wrap: anywhere; }
 .preview-wgs-grid input { width: 62px; box-sizing: border-box; }
-.preview-wgs-grid textarea { width: 190px; min-height: 58px; box-sizing: border-box; resize: vertical; }
+.preview-wgs-grid textarea { width: 100%; min-height: 58px; box-sizing: border-box; resize: vertical; }
 .preview-row-total { min-width: 64px; font-weight: 750; text-align: right; }
 .preview-history-placeholder { color: #64748b; white-space: nowrap; }
 .preview-context-toggle { display: block; margin-top: 8px; white-space: nowrap; }
@@ -1785,14 +1785,16 @@
 .preview-job-expanded { margin-top: 10px; padding-top: 10px; }
 .preview-grid-scroll { padding-bottom: 7px; }
 .preview-grid-scroll::-webkit-scrollbar { height: 10px; }
-.preview-wgs-grid { min-width: 1190px; table-layout: fixed; }
+.preview-wgs-grid { width: 100%; min-width: 1190px; table-layout: fixed; }
 .preview-wgs-grid th, .preview-wgs-grid td { padding: 5px 3px; }
-.preview-wgs-grid thead th:first-child, .preview-wgs-grid tbody th { position: sticky; left: 0; z-index: 2; width: 155px; }
+.preview-wgs-name-column { width: 155px; }
+.preview-period-column { width: 54px; }
+.preview-total-column { width: 64px; }
+.preview-comment-column { width: auto; }
+.preview-wgs-grid thead th:first-child, .preview-wgs-grid tbody th { position: sticky; left: 0; z-index: 2; }
 .preview-wgs-grid thead th:first-child { z-index: 3; }
-.preview-wgs-grid thead th:not(:first-child) { width: 54px; }
-.preview-wgs-grid thead th:last-child { width: 150px; }
 .preview-wgs-grid input { width: 48px; padding: 6px 3px; text-align: right; }
-.preview-wgs-grid textarea { width: 142px; min-height: 42px; padding: 6px; resize: vertical; }
+.preview-wgs-grid textarea { width: 100%; min-width: 142px; min-height: 42px; padding: 6px; resize: vertical; }
 .preview-wgs-grid tbody th small { margin: 2px 0; max-width: 150px; }
 .preview-wgs-grid tbody th .preview-reasons { display: none; }
 .preview-context-toggle { display: inline-block; margin-top: 4px; padding: 4px 7px; }
