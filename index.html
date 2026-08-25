@@ -461,7 +461,7 @@
         <label class="preview-year-control" for="forecastPreviewYear">Planning FY
           <select id="forecastPreviewYear"></select>
         </label>
-        <button class="group-action-button" type="button" onclick="openForecastEditor()">Current Forecast Builder</button>
+        <button class="group-action-button" type="button" onclick="openProductionForecastBuilderFromPreview()">Current Forecast Builder</button>
         <button class="primary-button" type="button" onclick="closeForecastBuilderPreview()">Back to Dashboard</button>
       </div>
     </div>
@@ -475,6 +475,19 @@
             <button type="button" class="active" data-preview-filter="all">All</button>
             <button type="button" data-preview-filter="not-forecasted">Not Forecasted</button>
             <button type="button" data-preview-filter="forecasted">Forecasted</button>
+          </div>
+          <div class="preview-evidence-upload">
+            <strong>Temporary Work Done evidence</strong>
+            <p>Choose the same Work Done report used by the main-page upload. Only compact forecasting evidence is retained in this Preview session; nothing is uploaded or saved.</p>
+            <label for="forecastPreviewEvidenceYear">Source FY</label>
+            <select id="forecastPreviewEvidenceYear"></select>
+            <label for="forecastPreviewEvidenceHeaderRow">Header row</label>
+            <input id="forecastPreviewEvidenceHeaderRow" type="number" value="2" min="1" step="1">
+            <span>Uses the report’s “Detail” sheet. Usually row 2, matching the main upload.</span>
+            <label for="forecastPreviewEvidenceFile">Work Done file</label>
+            <input id="forecastPreviewEvidenceFile" type="file" accept=".xlsx,.xls">
+            <button type="button" class="group-action-button" id="forecastPreviewClearEvidence" hidden>Clear temporary evidence</button>
+            <span id="forecastPreviewEvidenceStatus" role="status" aria-live="polite">No temporary evidence loaded.</span>
           </div>
         </div>
         <div id="forecastPreviewEngineerList" class="preview-engineer-list" role="region" aria-label="Delivery Unit engineers; scroll horizontally to see more"></div>
@@ -498,7 +511,7 @@
               <button type="button" class="primary-button" id="forecastPreviewAddJob">+ Add Standard Job</button>
             </div>
           </div>
-          <div class="preview-section-label">Standard Jobs — SJN ascending</div>
+          <div class="preview-section-label">Standard Jobs — grouped by catalogue discipline, numeric SJN order</div>
           <div id="forecastPreviewJobList" class="preview-job-list"></div>
         </div>
       </main>
@@ -515,14 +528,24 @@
         </div>
         <button class="close" type="button" onclick="closeForecastPreviewAddJob()" aria-label="Close">×</button>
       </div>
-      <label for="forecastPreviewJobSearch">Standard Job number or description</label>
-      <input id="forecastPreviewJobSearch" type="search" list="forecastPreviewJobOptions" placeholder="Search Standard Jobs…">
-      <datalist id="forecastPreviewJobOptions"></datalist>
-      <p class="forecast-editor-meta" id="forecastPreviewAddJobMessage"></p>
+      <div class="preview-modal-body">
+        <label for="forecastPreviewJobSearch">Standard Job number or description</label>
+        <input id="forecastPreviewJobSearch" type="search" autocomplete="off" aria-controls="forecastPreviewJobOptions" aria-autocomplete="list" placeholder="Search Standard Jobs…">
+        <div id="forecastPreviewJobOptions" class="preview-catalogue-results" role="listbox" aria-label="Matching Standard Jobs"></div>
+        <p class="forecast-editor-meta preview-modal-message" id="forecastPreviewAddJobMessage" role="status"></p>
+      </div>
       <div class="modal-actions">
         <button type="button" class="group-action-button" onclick="closeForecastPreviewAddJob()">Cancel</button>
         <button type="button" class="primary-button" id="forecastPreviewConfirmAddJob">Add to Forecast Builder</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal" id="forecastPreviewAddWgsModal" role="dialog" aria-modal="true" aria-labelledby="forecastPreviewAddWgsTitle">
+    <div class="modal-content preview-add-job-modal">
+      <div class="modal-header"><div><span class="preview-eyebrow">Exceptional planning row</span><h2 id="forecastPreviewAddWgsTitle">Add Work Group Set</h2><p class="helper-text">Search all active Work Group Sets. This does not change ownership.</p></div><button class="close" type="button" id="forecastPreviewCloseWgs" aria-label="Close">×</button></div>
+      <div class="preview-modal-body"><label for="forecastPreviewWgsSearch">Code or description</label><input id="forecastPreviewWgsSearch" type="search" autocomplete="off" aria-controls="forecastPreviewWgsOptions" aria-autocomplete="list"><div id="forecastPreviewWgsOptions" class="preview-catalogue-results" role="listbox" aria-label="Matching Work Group Sets"></div><p class="forecast-editor-meta preview-modal-message" id="forecastPreviewAddWgsMessage" role="status"></p></div>
+      <div class="modal-actions"><button type="button" class="group-action-button" id="forecastPreviewCancelWgs">Cancel</button><button type="button" class="primary-button" id="forecastPreviewConfirmWgs">Add Work Group Set</button></div>
     </div>
   </div>
 

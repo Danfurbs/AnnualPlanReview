@@ -2,7 +2,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
   REASONS, getPlanningHistoryYears, getStandardJobsForEngineer,
-  getWorkGroupSetsForStandardJob, canRemoveManuallyAddedStandardJob
+  getWorkGroupSetsForStandardJob, canRemoveManuallyAddedStandardJob,
+  getPlanningContext, copyPlanningProfile, buildTemporaryWorkDoneEvidence
 } = require('../forecast-builder-data');
 
 const engineers = [
@@ -88,14 +89,14 @@ test('filters Work Group Sets to the selected engineer', () => {
 });
 
 test('manual jobs persist in the queue and start not Forecasted', () => {
-  const planningMetadata = [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '200', workGroup: '', forecasted: false }];
+  const planningMetadata = [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '200', workGroup: '', forecasted: false, manuallyAdded: true }];
   const result = getStandardJobsForEngineer({ ...base, planningMetadata });
   assert.equal(result[0].forecasted, false);
   assert.deepEqual(result[0].reasons, [REASONS.MANUALLY_ADDED]);
 });
 
 test('manual removal is allowed only before V0 data or comments exist', () => {
-  const planningMetadata = [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '200', workGroup: '', forecasted: false }];
+  const planningMetadata = [{ fiscalYear: 'FY28', engineerId: 'track', jobNumber: '200', workGroup: '', forecasted: false, manuallyAdded: true }];
   const options = { ...base, jobNumber: '200', planningMetadata };
   assert.equal(canRemoveManuallyAddedStandardJob(options), true);
   assert.equal(canRemoveManuallyAddedStandardJob({
@@ -109,8 +110,79 @@ test('manual removal is allowed only before V0 data or comments exist', () => {
 test('manual exceptional Work Group Sets survive through isolated metadata', () => {
   const rows = getWorkGroupSetsForStandardJob({
     ...base, jobNumber: '201', planningMetadata: [{
-      fiscalYear: 'FY28', engineerId: 'track', jobNumber: '201', workGroup: 'WG-OLE', forecasted: false
+      fiscalYear: 'FY28', engineerId: 'track', jobNumber: '201', workGroup: 'WG-OLE', forecasted: false, manuallyAdded: true
     }]
   });
   assert.deepEqual(rows, [{ workGroup: 'WG-OLE', reasons: [REASONS.MANUALLY_ADDED] }]);
+});
+
+test('Forecasted metadata does not label an automatically discovered job as manually added', () => {
+  const result = getStandardJobsForEngineer({
+    ...base,
+    effectiveForecastsByYear: { FY27: new Map([['105', job('WG-TRACK', { P1: 1 })]]) },
+    planningMetadata: [{
+      fiscalYear: 'FY28', engineerId: 'track', jobNumber: '105', workGroup: '',
+      forecasted: true, manuallyAdded: false
+    }]
+  });
+  assert.equal(result[0].forecasted, true);
+  assert.deepEqual(result[0].reasons, [REASONS.RECENT_FORECAST]);
+});
+
+test('a manually added job remains manually added after it is marked Forecasted', () => {
+  const result = getStandardJobsForEngineer({
+    ...base,
+    planningMetadata: [{
+      fiscalYear: 'FY28', engineerId: 'track', jobNumber: '200', workGroup: '',
+      forecasted: true, manuallyAdded: true
+    }]
+  });
+  assert.equal(result[0].forecasted, true);
+  assert.deepEqual(result[0].reasons, [REASONS.MANUALLY_ADDED]);
+});
+
+test('planning context distinguishes not uploaded, partial coverage, and real zero', () => {
+  const context = getPlanningContext({
+    selectedYear: 'FY28', historyYears: ['FY27', 'FY26'], jobNumber: '105', workGroup: 'WG-TRACK',
+    effectiveForecastsByYear: { FY27: new Map([['105', job('WG-TRACK', { P1: 8, P2: 9, P3: 10 })]]) },
+    workDoneByYear: {
+      FY27: new Map([['105', job('WG-TRACK', { P1: 0, P2: 4 })]]),
+      FY26: new Map()
+    },
+    workDoneUploadedByYear: { FY27: 'uploaded-at' }
+  });
+  assert.equal(context[0].coverage.label, 'through P2');
+  assert.equal(context[0].workDonePeriods.P1, 0);
+  assert.equal(context[1].coverage.label, 'not uploaded');
+});
+
+test('copy forecast uses effective profile and copy Work Done fills its tail from forecast', () => {
+  const [context] = getPlanningContext({
+    selectedYear: 'FY28', historyYears: ['FY27'], jobNumber: '105', workGroup: 'WG-TRACK',
+    effectiveForecastsByYear: { FY27: new Map([['105', job('WG-TRACK', { P1: 8, P2: 9, P3: 10 })]]) },
+    workDoneByYear: { FY27: new Map([['105', job('WG-TRACK', { P1: 2, P2: 0 })]]) },
+    workDoneUploadedByYear: { FY27: true }
+  });
+  assert.deepEqual(copyPlanningProfile(context, 'forecast'), context.forecastPeriods);
+  const copied = copyPlanningProfile(context, 'work-done');
+  assert.equal(copied.P1, 2);
+  assert.equal(copied.P2, 0);
+  assert.equal(copied.P3, 10);
+});
+
+test('temporary Work Done evidence accepts the main-page report columns and aggregates duplicates', () => {
+  const result = buildTemporaryWorkDoneEvidence([
+    { 'Standard Job Number & Desc': '000105 - Replace rail', 'Work Group Set Description': 'Track team', 'Work Order Closed Period': 'P2', 'Units Complete': 3 },
+    { 'Standard Job No': '000105', 'Work Group Set': 'WG-TRACK', 'Work Order Closed Period': '2', 'Units Complete': 4 },
+    { 'Standard Job No': '000105', 'Work Group Set': 'UNKNOWN', 'Work Order Closed Period': 'P2', 'Units Complete': 9 },
+    { 'Standard Job No': '000105', 'Work Group Set': 'WG-TRACK', 'Work Order Closed Period': 'P14', 'Units Complete': 1 },
+    { 'Standard Job No': '000105', 'Work Group Set': 'WG-TRACK', 'Work Order Closed Period': 'P3', 'Units Complete': -1 }
+  ], {
+    resolveWorkGroupCode: value => value === 'Track team' ? 'WG-TRACK' : value,
+    activeWorkGroups: new Set(['WG-TRACK'])
+  });
+  assert.equal(result.accepted, 2);
+  assert.equal(result.rejected, 3);
+  assert.equal(result.data.get('105').wgs['WG-TRACK'].P2, 7);
+  assert.deepEqual(Object.keys(result.data.get('105')), ['periods', 'wgs', 'comments']);
 });
