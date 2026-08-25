@@ -165,8 +165,50 @@
     return !hasData && !hasComments;
   }
 
+  function getWorkDoneCoverage(source, uploaded) {
+    if (!uploaded) return { lastPeriod: 0, label: 'not uploaded' };
+    let lastPeriod = 0;
+    entries(source).forEach(([, job]) => Object.values(job?.wgs || {}).forEach(periods => {
+      Object.keys(periods || {}).forEach(period => {
+        const match = /^P(\d+)$/.exec(period);
+        if (match) lastPeriod = Math.max(lastPeriod, Number(match[1]));
+      });
+    }));
+    return { lastPeriod, label: lastPeriod >= 13 ? 'full year' : `through P${lastPeriod}` };
+  }
+
+  function getPlanningContext(options) {
+    const years = options.historyYears || getPlanningHistoryYears(options.selectedYear);
+    return years.map(year => {
+      const forecastJob = getJob(options.effectiveForecastsByYear?.[year], options.jobNumber);
+      const forecastPeriods = findWorkGroup(forecastJob, options.workGroup, options.resolveWorkGroupCode) || {};
+      const workDoneJob = getJob(options.workDoneByYear?.[year], options.jobNumber);
+      const workDonePeriods = findWorkGroup(workDoneJob, options.workGroup, options.resolveWorkGroupCode) || {};
+      const coverage = getWorkDoneCoverage(options.workDoneByYear?.[year], options.workDoneUploadedByYear?.[year]);
+      return {
+        year,
+        forecastPeriods: Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`P${i + 1}`, Number(forecastPeriods[`P${i + 1}`]) || 0])),
+        workDonePeriods: Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`P${i + 1}`, Number(workDonePeriods[`P${i + 1}`]) || 0])),
+        forecastTotal: Object.values(forecastPeriods).reduce((sum, value) => sum + (Number(value) || 0), 0),
+        workDoneTotal: Object.values(workDonePeriods).reduce((sum, value) => sum + (Number(value) || 0), 0),
+        coverage
+      };
+    });
+  }
+
+  function copyPlanningProfile(context, source) {
+    if (!context) return null;
+    if (source === 'forecast') return { ...context.forecastPeriods };
+    if (source !== 'work-done') return null;
+    return Object.fromEntries(Array.from({ length: 13 }, (_, i) => {
+      const period = `P${i + 1}`;
+      return [period, i < context.coverage.lastPeriod ? context.workDonePeriods[period] : context.forecastPeriods[period]];
+    }));
+  }
+
   return {
     REASONS, getPlanningHistoryYears, getStandardJobsForEngineer,
-    getWorkGroupSetsForStandardJob, canRemoveManuallyAddedStandardJob, normalizeJobNumber
+    getWorkGroupSetsForStandardJob, canRemoveManuallyAddedStandardJob, normalizeJobNumber,
+    getWorkDoneCoverage, getPlanningContext, copyPlanningProfile
   };
 });

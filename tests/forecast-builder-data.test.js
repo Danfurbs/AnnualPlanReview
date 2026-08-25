@@ -2,7 +2,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
   REASONS, getPlanningHistoryYears, getStandardJobsForEngineer,
-  getWorkGroupSetsForStandardJob, canRemoveManuallyAddedStandardJob
+  getWorkGroupSetsForStandardJob, canRemoveManuallyAddedStandardJob,
+  getPlanningContext, copyPlanningProfile
 } = require('../forecast-builder-data');
 
 const engineers = [
@@ -138,4 +139,33 @@ test('a manually added job remains manually added after it is marked Forecasted'
   });
   assert.equal(result[0].forecasted, true);
   assert.deepEqual(result[0].reasons, [REASONS.MANUALLY_ADDED]);
+});
+
+test('planning context distinguishes not uploaded, partial coverage, and real zero', () => {
+  const context = getPlanningContext({
+    selectedYear: 'FY28', historyYears: ['FY27', 'FY26'], jobNumber: '105', workGroup: 'WG-TRACK',
+    effectiveForecastsByYear: { FY27: new Map([['105', job('WG-TRACK', { P1: 8, P2: 9, P3: 10 })]]) },
+    workDoneByYear: {
+      FY27: new Map([['105', job('WG-TRACK', { P1: 0, P2: 4 })]]),
+      FY26: new Map()
+    },
+    workDoneUploadedByYear: { FY27: 'uploaded-at' }
+  });
+  assert.equal(context[0].coverage.label, 'through P2');
+  assert.equal(context[0].workDonePeriods.P1, 0);
+  assert.equal(context[1].coverage.label, 'not uploaded');
+});
+
+test('copy forecast uses effective profile and copy Work Done fills its tail from forecast', () => {
+  const [context] = getPlanningContext({
+    selectedYear: 'FY28', historyYears: ['FY27'], jobNumber: '105', workGroup: 'WG-TRACK',
+    effectiveForecastsByYear: { FY27: new Map([['105', job('WG-TRACK', { P1: 8, P2: 9, P3: 10 })]]) },
+    workDoneByYear: { FY27: new Map([['105', job('WG-TRACK', { P1: 2, P2: 0 })]]) },
+    workDoneUploadedByYear: { FY27: true }
+  });
+  assert.deepEqual(copyPlanningProfile(context, 'forecast'), context.forecastPeriods);
+  const copied = copyPlanningProfile(context, 'work-done');
+  assert.equal(copied.P1, 2);
+  assert.equal(copied.P2, 0);
+  assert.equal(copied.P3, 10);
 });

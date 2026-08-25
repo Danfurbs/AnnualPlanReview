@@ -63,15 +63,27 @@ Repo: `Danfurbs/AnnualPlanReview`.
     changes. Incremental metadata/save updates rebuild only the active
     engineer's cached queue, and ordinary cell blur no longer rerenders the
     complete grouped card list.
--   **Phases 4--5 --- not started.** The Planning Context cell is deliberately
-    only a placeholder: historical context/copy-forward and profile charts are
-    not implemented.
+-   **Phase 4 --- implemented in the parallel preview.** Each Work Group Set has
+    an accessible Planning Context expander showing FY-relative final effective
+    forecast, corrected Work Done, explicit Work Done coverage, current-scope
+    historical comments, and Copy Forecast / Copy Work Done actions. Older
+    configured FYs load only when Planning Context is first opened, one FY at a
+    time with stale-response protection. Copy actions update the unsaved
+    current-year Work Group Set row and source comment only; they never save
+    automatically or change queue membership.
+-   **Phase 5 --- implemented in the parallel preview.** Every expanded Standard
+    Job has a responsive P1--P13 line chart combining its displayed Work Group
+    Sets. The selected FY V0 line updates directly from the unsaved draft. The
+    immediately preceding FY is shown by default using corrected Work Done
+    through its coverage point and final effective forecast thereafter, with a
+    labelled transition and dashed forecast tail. Show all history lazily loads
+    and overlays every older configured FY without resetting current edits.
 -   **Phase 6 --- not authorised.** The current Forecast Builder remains the
     production workflow alongside the clearly labelled preview and must not be
     retired without the product owner's explicit confirmation.
 
 At this break, the dashboard has a new **Forecast Builder Preview** action.
-Opening it shows the Phase 3 planning workspace; the current Forecast Builder
+Opening it shows the completed Phase 3--5 planning workspace; the current Forecast Builder
 remains available from both the dashboard and the preview header. Automated
 coverage includes Phase 1 discovery, Phase 2 Delivery Unit scoping/responsive
 engineer-strip behaviour, discipline grouping/numeric ordering, responsive

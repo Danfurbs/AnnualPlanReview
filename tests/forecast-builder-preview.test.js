@@ -124,3 +124,42 @@ test('metadata updates rebuild only the active engineer queue and cell blur does
   assert.match(source, /async function addStandardJob[\s\S]*?manuallyAdded: true[\s\S]*?rebuildEngineerJobCache\(\)/);
   assert.doesNotMatch(source, /addEventListener\('change',\s*\(\)\s*=>\s*renderJobList/);
 });
+
+test('Phase 4 Planning Context is per WGS, lazy in the UI, and copy actions only dirty the draft', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  assert.match(source, /function renderPlanningContext/);
+  assert.match(source, /data-context-wgs=/);
+  assert.match(source, /state\.contextExpanded\.has/);
+  assert.match(source, /function copyHistoricalProfile/);
+  assert.match(source, /row\.comment = button\.dataset\.copyContext === 'forecast'/);
+  assert.match(source, /draft\.dirty = true; renderJobList\(\)/);
+  assert.doesNotMatch(source, /function copyHistoricalProfile[\s\S]*?saveForecastJobToStorageAsync/);
+});
+
+test('Phase 4 context labels Work Done coverage and historical comment scope/source', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  assert.match(source, /Coverage: \$\{escapeHtml\(context\.coverage\.label\)\}/);
+  assert.match(source, /Work Group Set · final forecast/);
+  assert.match(source, /comment\.filteredEngineerId/);
+  assert.match(source, /commentMatchesOrganisationScope/);
+});
+
+test('older Planning Context loads lazily one FY at a time with stale-response protection', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  assert.match(source, /async function ensurePlanningHistoryLoaded/);
+  assert.match(source, /for \(const year of olderYears\)/);
+  assert.match(source, /Promise\.all\(\[\s*window\.getForecastSnapshotAsync\(year, 'v0'\), window\.getForecastSnapshotAsync\(year, 'v1'\), loadWorkDone\(year\)/s);
+  assert.match(source, /if \(!requestIsCurrent\(requestId, requestedYear\)\) return false/);
+});
+
+test('Phase 5 profile uses live draft V0, blended history, transitions, and show-all history', () => {
+  const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
+  assert.match(source, /function profileSeries/);
+  assert.match(source, /V0 \(current draft\)/);
+  assert.match(source, /window\.copyPlanningProfile\(context, 'work-done'\)/);
+  assert.match(source, /Work Done ends after P\$\{item\.coverage\.lastPeriod\} → forecast begins/);
+  assert.match(source, /segment: \{ borderDash:/);
+  assert.match(source, /function updateCurrentProfileChart/);
+  assert.match(source, /updateCurrentProfileChart\(e\.target\.dataset\.gridJob\)/);
+  assert.match(source, /function toggleAllHistory/);
+});

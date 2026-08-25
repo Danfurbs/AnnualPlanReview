@@ -1,5 +1,9 @@
 # Continuation Prompt: Forecast Builder Preview Phase 4
 
+> **Completion note:** Phase 4 and the subsequent Phase 5 profile chart are now
+> implemented in the Preview. This file is retained as the delivery contract
+> and regression checklist, not as an instruction to repeat the phase.
+
 Continue work in `/workspace/AnnualPlanReview` from the completed Phase 3
 Forecast Builder Preview.
 
