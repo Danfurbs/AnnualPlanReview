@@ -73,7 +73,10 @@
       engineerId: item.engineerId || item.engineer_id,
       jobNumber: normalizeJobNumber(item.jobNumber || item.job_number || ''),
       workGroup: item.workGroup || item.work_group || '',
-      forecasted: Boolean(item.forecasted)
+      forecasted: Boolean(item.forecasted),
+      // Legacy Phase 2 metadata had no discriminator. Forecasted=false records
+      // were created only by manual addition, so retain those queue entries.
+      manuallyAdded: Boolean(item.manuallyAdded ?? item.manually_added ?? !item.forecasted)
     }));
   }
 
@@ -125,7 +128,7 @@
     if (!engineer) return [];
     const metadata = normalizeMetadata(options.planningMetadata);
     const manualRows = metadata.filter(item => item.fiscalYear === options.selectedYear &&
-      item.engineerId === options.engineerId && item.jobNumber === String(options.jobNumber) && item.workGroup);
+      item.engineerId === options.engineerId && item.jobNumber === String(options.jobNumber) && item.workGroup && item.manuallyAdded);
     const workGroups = new Set([...(engineer.workGroupSets || []), ...manualRows.map(item => item.workGroup)]);
 
     return Array.from(workGroups).map(workGroup => {
@@ -139,7 +142,7 @@
   function getStandardJobsForEngineer(options) {
     const metadata = normalizeMetadata(options.planningMetadata);
     const manualJobs = metadata.filter(item => item.fiscalYear === options.selectedYear &&
-      item.engineerId === options.engineerId && !item.workGroup);
+      item.engineerId === options.engineerId && !item.workGroup && item.manuallyAdded);
     return Array.from(candidateJobNumbers(options)).map(jobNumber => {
       const rows = getWorkGroupSetsForStandardJob({ ...options, jobNumber });
       const reasons = new Set(rows.flatMap(row => row.reasons));
@@ -154,7 +157,7 @@
   function canRemoveManuallyAddedStandardJob(options) {
     const metadata = normalizeMetadata(options.planningMetadata);
     const manual = metadata.some(item => item.fiscalYear === options.selectedYear &&
-      item.engineerId === options.engineerId && item.jobNumber === String(options.jobNumber) && !item.workGroup);
+      item.engineerId === options.engineerId && item.jobNumber === String(options.jobNumber) && !item.workGroup && item.manuallyAdded);
     if (!manual) return false;
     const job = getJob(options.v0ForecastsByYear?.[options.selectedYear], String(options.jobNumber));
     const hasData = Object.values(job?.wgs || {}).some(hasVolume);
