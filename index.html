@@ -506,6 +506,7 @@
               </div>
             </div>
             <div class="preview-engineer-actions">
+              <button type="button" class="group-action-button" id="forecastPreviewFutureWork">Upload Future Work report</button>
               <button type="button" class="group-action-button" id="forecastPreviewPrevious">← Previous Engineer</button>
               <button type="button" class="group-action-button" id="forecastPreviewNext">Next Engineer →</button>
               <button type="button" class="primary-button" id="forecastPreviewAddJob">+ Add Standard Job</button>
@@ -515,6 +516,17 @@
           <div id="forecastPreviewJobList" class="preview-job-list"></div>
         </div>
       </main>
+    </div>
+  </div>
+
+  <div class="modal" id="forecastPreviewFutureWorkModal" role="dialog" aria-modal="true" aria-labelledby="forecastPreviewFutureWorkTitle">
+    <div class="modal-content preview-future-work-modal">
+      <div class="modal-header"><div><span class="preview-eyebrow">Future Work import</span><h2 id="forecastPreviewFutureWorkTitle">Review Future Work report</h2><p class="helper-text"><strong>Only matching reported periods will be replaced.</strong> Unreported periods, jobs, and Work Group Sets remain unchanged.</p></div><button class="close" type="button" id="forecastPreviewFutureWorkClose" aria-label="Close">×</button></div>
+      <div class="preview-modal-body">
+        <label for="forecastPreviewFutureWorkFile">Future Work report (.xlsx or .xls)</label><input id="forecastPreviewFutureWorkFile" type="file" accept=".xlsx,.xls">
+        <div id="forecastPreviewFutureWorkReview" class="future-work-review" role="status" aria-live="polite">Choose a report to parse and review locally. Nothing is saved until you confirm.</div>
+      </div>
+      <div class="modal-actions"><button type="button" class="group-action-button" id="forecastPreviewFutureWorkCancel">Cancel</button><button type="button" class="primary-button" id="forecastPreviewFutureWorkConfirm" disabled>Confirm import</button></div>
     </div>
   </div>
 
@@ -1124,6 +1136,7 @@
   <script src="forecast-storage.js"></script>
   <script src="forecast-state.js"></script>
   <script src="forecast-builder-data.js"></script>
+  <script src="future-work-import.js"></script>
   <script src="forecast-builder-preview.js"></script>
   <script src="forecast-editor.js"></script>
   <script src="baseline-storage.js"></script>

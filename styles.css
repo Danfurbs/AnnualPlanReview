@@ -1620,6 +1620,15 @@
 @media (prefers-reduced-motion: reduce) { .upload-status-spinner { animation: none !important; } }
 
 /* Forecast Builder preview */
+.preview-future-work-modal { max-width: 760px; }
+.future-work-review { margin-top: 14px; padding: 14px; border: 1px solid #dbe3ef; border-radius: 10px; background: #f8fafc; color: #334155; }
+.future-work-review dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin: 0 0 12px; }
+.future-work-review dl div { padding: 9px; border-radius: 7px; background: white; }
+.future-work-review dt { color: #64748b; font-size: 11px; font-weight: 700; }
+.future-work-review dd { margin: 3px 0 0; font-weight: 750; overflow-wrap: anywhere; }
+.future-work-warnings, .future-work-errors { margin-top: 10px; padding: 10px; border-radius: 7px; background: #fffbeb; color: #92400e; }
+.future-work-errors { background: #fef2f2; color: #991b1b; }
+.future-work-review ul { max-height: 150px; overflow: auto; margin-bottom: 0; padding-left: 20px; }
 .preview-button { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
 .preview-page-header { border-top: 3px solid #2563eb; }
 .preview-eyebrow { color: #2563eb; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
