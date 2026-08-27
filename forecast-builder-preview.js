@@ -10,7 +10,8 @@
     loading: false, requestSerial: 0, jobsByEngineer: new Map(), expanded: new Set(), contextExpanded: new Set(), showAllHistory: new Set(), profileWorkGroup: new Map(), profileYear: new Map(), charts: new Map(), drafts: new Map(),
     workDoneUploadedByYear: {}, jobComments: {},
     historyLoadedForYear: '', temporaryEvidenceByYear: new Map(), evidenceParseSerial: 0,
-    selectedCatalogueJob: '', selectedWgs: '', addWgsJob: '', lastAddJobTrigger: null
+    selectedCatalogueJob: '', selectedWgs: '', addWgsJob: '', lastAddJobTrigger: null,
+    futureWorkReview: null, futureWorkFileName: ''
   };
   const byId = id => document.getElementById(id);
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
@@ -362,6 +363,62 @@
   function openWgsModal(job) { state.addWgsJob = job; state.selectedWgs = ''; byId('forecastPreviewWgsSearch').value = ''; byId('forecastPreviewAddWgsMessage').textContent = ''; renderWgsResults(); byId('forecastPreviewAddWgsModal').classList.add('open'); byId('forecastPreviewWgsSearch').focus(); }
   function closeWgsModal() { byId('forecastPreviewAddWgsModal').classList.remove('open'); }
   async function addWgs() { if (!state.selectedWgs) return byId('forecastPreviewAddWgsMessage').textContent = 'Select a Work Group Set.'; const item = { fiscalYear: state.selectedYear, engineerId: state.selectedEngineerId, jobNumber: normalizeJob(state.addWgsJob), workGroup: state.selectedWgs, forecasted: false, manuallyAdded: true }, saved = await persistMetadata(item); state.metadata = [...state.metadata.filter(x => metadataKey(x) !== metadataKey(saved)), saved]; state.drafts.delete(draftKey(state.addWgsJob)); rebuildEngineerJobCache(); closeWgsModal(); renderAll(); }
+  function closeFutureWorkModal() { byId('forecastPreviewFutureWorkModal')?.classList.remove('open'); state.futureWorkReview = null; state.futureWorkFileName = ''; if (byId('forecastPreviewFutureWorkFile')) byId('forecastPreviewFutureWorkFile').value = ''; }
+  function openFutureWorkModal() { state.futureWorkReview = null; byId('forecastPreviewFutureWorkReview').textContent = 'Choose a report to parse and review locally. Nothing is saved until you confirm.'; byId('forecastPreviewFutureWorkConfirm').disabled = true; byId('forecastPreviewFutureWorkModal').classList.add('open'); }
+  function renderFutureWorkReview(result) {
+    const total = Object.values(result.totals).reduce((sum, value) => sum + value, 0);
+    const list = (heading, items, kind) => items.length ? `<section class="future-work-${kind}"><strong>${escapeHtml(heading)}</strong><ul>${items.map(item => `<li>${escapeHtml(typeof item === 'string' ? item : `Row ${item.row}: ${item.reasons.join(', ')} (${item.job} / ${item.workGroup})`)}</li>`).join('')}</ul></section>` : '';
+    byId('forecastPreviewFutureWorkReview').innerHTML = `<dl><div><dt>Filename</dt><dd>${escapeHtml(state.futureWorkFileName)}</dd></div><div><dt>Target FY</dt><dd>${escapeHtml(state.selectedYear)}</dd></div><div><dt>Periods detected</dt><dd>${escapeHtml(result.periods.join(', ') || 'None')}</dd></div><div><dt>Total units</dt><dd>${total.toLocaleString()}</dd></div><div><dt>Recognised rows</dt><dd>${result.recognisedRows}</dd></div><div><dt>Ignored rows</dt><dd>${result.ignoredRows}</dd></div></dl><p><strong>Only matching reported periods will be replaced.</strong> Blank and dash cells cause no replacement.</p>${list('Warnings', [...result.warnings, ...result.exceptions], 'warnings')}${list('Blocking errors', result.errors, 'errors')}`;
+    byId('forecastPreviewFutureWorkConfirm').disabled = Boolean(result.errors.length || !result.values.length);
+  }
+  async function reviewFutureWorkFile(file) {
+    if (!file) return;
+    state.futureWorkFileName = file.name;
+    byId('forecastPreviewFutureWorkReview').textContent = `Reading ${file.name} in memory…`;
+    try {
+      const workbook = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      state.futureWorkReview = window.FutureWorkImport.parseFutureWorkWorkbook(workbook, { XLSX: window.XLSX, fileName: file.name, resolveWorkGroupCode: window.resolveWorkGroupCode, activeJobs: catalogue().map(job => job.storedJobNumber), activeWorkGroups: window.workGroupSets?.keys() || [] });
+      renderFutureWorkReview(state.futureWorkReview);
+    } catch (error) {
+      state.futureWorkReview = null; byId('forecastPreviewFutureWorkReview').innerHTML = `<section class="future-work-errors"><strong>File could not be reviewed</strong><p>${escapeHtml(error.message)}</p></section>`; byId('forecastPreviewFutureWorkConfirm').disabled = true;
+    }
+  }
+  function overlappingDraftKeys(values) {
+    const affected = new Set(values.map(item => `${item.jobNumber}|${item.workGroup}`));
+    return Array.from(state.drafts).filter(([key, draft]) => draft.dirty && Object.keys(draft.rows).some(workGroup => affected.has(`${normalizeJob(key.split('|').pop()).padStart(6, '0')}|${workGroup}`))).map(([key]) => key);
+  }
+  async function confirmFutureWorkImport() {
+    const result = state.futureWorkReview;
+    if (!result || result.errors.length) return;
+    const overlaps = overlappingDraftKeys(result.values);
+    if (overlaps.length) {
+      if (!window.confirm(`${overlaps.length} unsaved Forecast Builder draft(s) overlap this report. Confirmation is blocked unless you explicitly discard them. Discard those drafts now?`)) return;
+      overlaps.forEach(key => state.drafts.delete(key));
+    }
+    const original = state.v0ForecastsByYear[state.selectedYear] || new Map();
+    const patched = window.FutureWorkImport.patchForecastSnapshot(original, result.values);
+    const missingMetadata = [];
+    patched.affected.forEach(key => {
+      const [jobNumber, workGroup] = key.split('|');
+      const owner = window.getEngineerForWorkGroup?.(workGroup);
+      if (!owner?.id) throw new Error(`No current engineer owner is configured for Work Group Set ${workGroup}.`);
+      const item = { fiscalYear: state.selectedYear, engineerId: owner.id, jobNumber: normalizeJob(jobNumber), workGroup, forecasted: false, manuallyAdded: true };
+      if (!state.metadata.some(existing => metadataKey(existing) === metadataKey(item))) missingMetadata.push(item);
+    });
+    const button = byId('forecastPreviewFutureWorkConfirm'); button.disabled = true; button.textContent = 'Importing…';
+    const savedMetadata = [];
+    try {
+      for (const item of missingMetadata) savedMetadata.push(await persistMetadata(item));
+      const saved = await window.saveForecastToStorageAsync(patched.data, patched.data.size, state.selectedYear, 'v0');
+      if (!saved) throw new Error('Forecast storage did not confirm the V0 snapshot save.');
+      state.metadata = [...state.metadata.filter(existing => !savedMetadata.some(item => metadataKey(item) === metadataKey(existing))), ...savedMetadata];
+      patched.affected.forEach(key => { const job = key.split('|')[0]; Array.from(state.drafts.keys()).filter(draft => normalizeJob(draft.split('|').pop()).padStart(6, '0') === job).forEach(draft => state.drafts.delete(draft)); });
+      closeFutureWorkModal(); await refreshPreview(); window.Toast?.success(`Imported ${result.values.length} Future Work period value(s) across ${patched.affected.size} Standard Job / Work Group Set row(s).`);
+    } catch (error) {
+      for (const item of savedMetadata.reverse()) { try { await removeMetadata(item); } catch { /* best-effort rollback of visibility only */ } }
+      renderFutureWorkReview({ ...result, errors: [...result.errors, `Import not saved: ${error.message}`] }); window.Toast?.error(`Future Work import failed: ${error.message}`);
+    } finally { button.textContent = 'Confirm import'; button.disabled = Boolean(state.futureWorkReview?.errors.length || !state.futureWorkReview?.values.length); }
+  }
   window.forecastBuilderPreviewContext = Object.freeze({ getScopedEngineers, groupJobs, compareJobs, hasDirtyChanges: hasDirty });
   window.openForecastBuilderPreview = openForecastBuilderPreview; window.closeForecastBuilderPreview = closeForecastBuilderPreview; window.openForecastPreviewAddJob = openForecastPreviewAddJob; window.closeForecastPreviewAddJob = closeForecastPreviewAddJob;
   window.openProductionForecastBuilderFromPreview = function openProductionForecastBuilderFromPreview() {
@@ -381,6 +438,7 @@
     byId('forecastPreviewWgsSearch')?.addEventListener('input', renderWgsResults); byId('forecastPreviewWgsOptions')?.addEventListener('click', e => { const b = e.target.closest('[data-catalogue-wgs]'); if (b && !b.disabled) { state.selectedWgs = b.dataset.catalogueWgs; renderWgsResults(); } });
     byId('forecastPreviewWgsOptions')?.addEventListener('keydown', event => handleListboxKeyboard(event, '[data-catalogue-wgs]', button => { state.selectedWgs = button.dataset.catalogueWgs; renderWgsResults(); }));
     byId('forecastPreviewCloseWgs')?.addEventListener('click', closeWgsModal); byId('forecastPreviewCancelWgs')?.addEventListener('click', closeWgsModal); byId('forecastPreviewConfirmWgs')?.addEventListener('click', addWgs);
+    byId('forecastPreviewFutureWork')?.addEventListener('click', openFutureWorkModal); byId('forecastPreviewFutureWorkClose')?.addEventListener('click', closeFutureWorkModal); byId('forecastPreviewFutureWorkCancel')?.addEventListener('click', closeFutureWorkModal); byId('forecastPreviewFutureWorkFile')?.addEventListener('change', event => reviewFutureWorkFile(event.target.files?.[0])); byId('forecastPreviewFutureWorkConfirm')?.addEventListener('click', () => confirmFutureWorkImport().catch(error => { window.Toast?.error(error.message); byId('forecastPreviewFutureWorkConfirm').disabled = false; }));
     byId('forecastPreviewEngineerList')?.addEventListener('click', e => { const b = e.target.closest('[data-engineer-id]'); if (b && b.dataset.engineerId !== state.selectedEngineerId && confirmDiscard()) { state.drafts.clear(); state.expanded.clear(); state.selectedEngineerId = b.dataset.engineerId; renderAll(); } });
     byId('forecastPreviewJobList')?.addEventListener('click', async e => { const expand = e.target.closest('[data-expand-job]'), status = e.target.closest('[data-job-number]'), save = e.target.closest('[data-save-job]'), add = e.target.closest('[data-add-wgs]'), clear = e.target.closest('[data-clear-wgs]'), remove = e.target.closest('[data-remove-wgs]'), removeJob = e.target.closest('[data-remove-job]'), context = e.target.closest('[data-context-job]'), copy = e.target.closest('[data-copy-context]'), history = e.target.closest('[data-show-history]'), profileStep = e.target.closest('[data-profile-step]'), copyProfile = e.target.closest('[data-copy-profile]'), card = e.target.closest('[data-expand-card]'); if (expand) toggleExpandedJob(expand.dataset.expandJob); else if (status) await toggleForecasted(status); else if (save) await saveJob(save.dataset.saveJob); else if (add) openWgsModal(add.dataset.addWgs); else if (clear) clearWorkGroupForecast(clear.dataset.job, clear.dataset.clearWgs); else if (removeJob) await removeStandardJob(removeJob.dataset.removeJob); else if (context) await togglePlanningContext(context.dataset.contextJob, context.dataset.contextWgs); else if (copy) copyHistoricalProfile(copy); else if (history) await toggleAllHistory(history.dataset.showHistory); else if (copyProfile) copySelectedProfile(copyProfile.dataset.copyProfile); else if (profileStep) switchProfileWorkGroup(profileStep.dataset.profileJob, Number(profileStep.dataset.profileStep)); else if (remove) { const draft = getDraft(remove.dataset.job), row = draft.rows[remove.dataset.removeWgs]; if (PERIODS.some(p => row.periods[p]) || row.comment.trim()) return window.Toast?.error('This row has V0 data or a comment and cannot be removed.'); const item = { fiscalYear: state.selectedYear, engineerId: state.selectedEngineerId, jobNumber: normalizeJob(remove.dataset.job), workGroup: remove.dataset.removeWgs }; await removeMetadata(item); state.metadata = state.metadata.filter(x => metadataKey(x) !== metadataKey(item)); state.drafts.delete(draftKey(remove.dataset.job)); rebuildEngineerJobCache(); renderAll(); } else if (card && !e.target.closest('button, input, textarea, select, a, .preview-job-expanded')) toggleExpandedJob(card.dataset.expandCard); });
     byId('forecastPreviewJobList')?.addEventListener('input', e => { if (e.target.dataset.gridJob) { const draft = getDraft(e.target.dataset.gridJob), value = e.target.value === '' ? 0 : Number(e.target.value); draft.rows[e.target.dataset.gridWgs].periods[e.target.dataset.period] = value; draft.dirty = true; e.target.closest('tr').querySelector('.preview-row-total').textContent = PERIODS.reduce((n, p) => n + (Number(draft.rows[e.target.dataset.gridWgs].periods[p]) || 0), 0).toLocaleString(); showDirtyDraft(e.target, e.target.dataset.gridJob); updateCurrentProfileChart(e.target.dataset.gridJob); } else if (e.target.dataset.commentJob) { const draft = getDraft(e.target.dataset.commentJob); draft.rows[e.target.dataset.commentWgs].comment = e.target.value; draft.dirty = true; showDirtyDraft(e.target, e.target.dataset.commentJob); } });
