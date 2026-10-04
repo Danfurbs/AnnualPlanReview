@@ -40,10 +40,9 @@
 
     // Group management (not in modules)
     const GROUP_STORAGE_KEY = 'aprGroupStoreV1';
-    const WORK_DONE_STORAGE_KEY = 'aprWorkDoneByYearV1';
+    let workDoneUploadSerial = 0;
     let workDoneUploadedAt = null;
     let workDoneUploadInProgress = false;
-    let lastWorkDoneUploadKey = null;
 
     // Breakdown plan version preference
     const BREAKDOWN_PLAN_VERSION_KEY = 'aprBreakdownPlanVersionV1';
@@ -627,19 +626,6 @@
       }
     }
 
-    function serializeWorkDoneMap(workDoneMap) {
-      if (!(workDoneMap instanceof Map)) return {};
-      return Object.fromEntries(workDoneMap.entries());
-    }
-
-    function hydrateWorkDoneMap(rawData) {
-      const map = new Map();
-      for (const [jobNumber, payload] of Object.entries(rawData || {})) {
-        map.set(jobNumber, payload || { periods: {}, wgs: {}, workOrders: [] });
-      }
-      return map;
-    }
-
     async function runInChunks(items, handler, chunkSize = 300, onProgress = null) {
       for (let i = 0; i < items.length; i += chunkSize) {
         const chunk = items.slice(i, i + chunkSize);
@@ -650,55 +636,11 @@
       }
     }
 
-    function loadWorkDoneFromLocal(year) {
-      try {
-        const raw = localStorage.getItem(WORK_DONE_STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : {};
-        const entry = parsed?.[year];
-        if (!entry) return null;
-        return {
-          data: hydrateWorkDoneMap(entry.data || {}),
-          uploadedAt: entry.uploadedAt || null
-        };
-      } catch (err) {
-        console.warn('Failed to load local work done store:', err);
-        return null;
-      }
-    }
-
-    function saveWorkDoneToLocal(year, mapData, uploadedAt) {
-      try {
-        const raw = localStorage.getItem(WORK_DONE_STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : {};
-        parsed[year] = {
-          uploadedAt: uploadedAt || new Date().toISOString(),
-          data: serializeWorkDoneMap(mapData)
-        };
-        localStorage.setItem(WORK_DONE_STORAGE_KEY, JSON.stringify(parsed));
-      } catch (err) {
-        console.warn('Failed to save local work done store:', err);
-      }
-    }
-
     async function loadWorkDoneStoreAsync(year) {
-      if (!year) return;
-      const local = loadWorkDoneFromLocal(year);
-      if (local) {
-        window.wData = local.data;
-        workDoneUploadedAt = local.uploadedAt;
-      }
-      if (window.isApiEnabled && window.isApiEnabled() && window.loadWorkDoneFromApi) {
-        try {
-          const apiPayload = await window.loadWorkDoneFromApi(year);
-          if (apiPayload?.data && Object.keys(apiPayload.data).length > 0) {
-            window.wData = hydrateWorkDoneMap(apiPayload.data);
-            workDoneUploadedAt = apiPayload.uploadedAt || workDoneUploadedAt;
-            saveWorkDoneToLocal(year, window.wData, workDoneUploadedAt);
-          }
-        } catch (err) {
-          console.warn('Failed to load work done from API:', err);
-        }
-      }
+      const entry = window.WorkDoneSession.get(year);
+      window.wData = entry?.data || null;
+      currentWorkOrders = [];
+      workDoneUploadedAt = entry?.uploadedAt || null;
     }
 
     function getSelectedWorkDoneYear() {
@@ -721,53 +663,24 @@
       }
     }
 
-    function removeWorkDoneFromLocal(year) {
-      try {
-        const raw = localStorage.getItem(WORK_DONE_STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : {};
-        delete parsed[year];
-        localStorage.setItem(WORK_DONE_STORAGE_KEY, JSON.stringify(parsed));
-      } catch (err) {
-        console.warn('Failed to remove local work done snapshot:', err);
-      }
-    }
-
-    function clearAllWorkDoneFromLocal() {
-      localStorage.setItem(WORK_DONE_STORAGE_KEY, JSON.stringify({}));
-    }
-
     async function clearWorkDoneForSelectedFy() {
       const year = getSelectedWorkDoneYear();
-      if (!year) {
-        alert('Please select a financial year.');
-        return;
-      }
-      if (!confirm(`Clear work done snapshot for ${year}?`)) return;
-      removeWorkDoneFromLocal(year);
-      if (window.isApiEnabled && window.isApiEnabled() && window.deleteWorkDoneForYearFromApi) {
-        await window.deleteWorkDoneForYearFromApi(year);
-      }
-      if (year === currentFinancialYear) {
-        window.wData = null;
-        workDoneUploadedAt = null;
-        render();
-      }
-      alert(`Work done cleared for ${year}.`);
+      if (!year || !confirm(`Clear this session's Work Done for ${year}?`)) return;
+      workDoneUploadSerial += 1;
+      window.WorkDoneSession.clear(year);
+      await loadWorkDoneStoreAsync(currentFinancialYear);
+      render();
     }
     window.clearWorkDoneForSelectedFy = clearWorkDoneForSelectedFy;
 
-    async function clearAllWorkDoneSnapshots() {
-      if (!confirm('Clear ALL work done snapshots from local cache and server?')) return;
-      clearAllWorkDoneFromLocal();
-      if (window.isApiEnabled && window.isApiEnabled() && window.clearAllWorkDoneFromApi) {
-        await window.clearAllWorkDoneFromApi();
-      }
-      window.wData = null;
-      workDoneUploadedAt = null;
+    async function clearAllWorkDoneSession() {
+      if (!confirm('Clear Work Done for all FYs in this session?')) return;
+      workDoneUploadSerial += 1;
+      window.WorkDoneSession.clear();
+      await loadWorkDoneStoreAsync(currentFinancialYear);
       render();
-      alert('All work done snapshots cleared.');
     }
-    window.clearAllWorkDoneSnapshots = clearAllWorkDoneSnapshots;
+    window.clearAllWorkDoneSession = clearAllWorkDoneSession;
 
     function getGroupName(group) {
       const name = group.name ? String(group.name).trim() : '';
@@ -1254,6 +1167,7 @@
       await loadWorkOrderAmendmentsAsync();
       await loadGroupStoreAsync();
       refreshWorkDoneYearSelector();
+      document.getElementById('workDoneFySelect')?.addEventListener('change', () => { workDoneUploadSerial += 1; });
       loadBreakdownPlanVersion();
     try { disciplineCollapseState = JSON.parse(localStorage.getItem('aprDisciplineCollapseStateV1') || '{}'); } catch { disciplineCollapseState = {}; }
     initForecastCutoffTimeline();
@@ -2053,6 +1967,7 @@
     }
 
     function handleWorkDoneFileSelection() {
+      workDoneUploadSerial += 1;
       const file = document.getElementById('wFile')?.files?.[0];
       if (!file) {
         setWorkDoneUploadState('idle', '');
@@ -2065,6 +1980,7 @@
     async function loadWorkDone(file) {
       if (!file || workDoneUploadInProgress) return;
       workDoneUploadInProgress = true;
+      const uploadSerial = ++workDoneUploadSerial;
       setWorkDoneUploadState('working', 'Reading workbook…', 'Large reports can take a minute. Please keep this window open.');
       try {
         const selectedYear = getSelectedWorkDoneYear();
@@ -2073,16 +1989,11 @@
         }
         const headerRow = parseInt(document.getElementById('wRow').value, 10);
         if (!Number.isInteger(headerRow) || headerRow < 1) throw new Error('Header row must be 1 or greater.');
-        const uploadKey = `${selectedYear}:${file.name}:${file.size}:${file.lastModified}:${headerRow}`;
-        if (uploadKey === lastWorkDoneUploadKey) {
-          throw new Error('This report was already uploaded in this session. Choose it again only after refreshing if you intend to replace the snapshot.');
-        }
-
         const ab = await file.arrayBuffer();
-        setWorkDoneUploadState('working', 'Checking report…', 'Validating the Detail sheet before changing any saved data.');
+        setWorkDoneUploadState('working', 'Checking report…', 'Validating the Detail sheet before replacing this session’s data.');
         const wb = XLSX.read(ab);
         if (!wb.Sheets['Detail']) {
-          throw new Error('The workbook must contain a sheet named “Detail”. No saved data was changed.');
+          throw new Error('The workbook must contain a sheet named “Detail”. The current session data was not changed.');
         }
         const row = headerRow - 1;
         const rows = XLSX.utils.sheet_to_json(wb.Sheets['Detail'], {range:row});
@@ -2129,7 +2040,8 @@
           // If no standard jobs loaded, accept all jobs
           if (window.stdJobs.size > 0 && !window.stdJobs.has(jn)) return;
           
-          if (!per.match(/^P\d+$/i)) return;
+          if (!/^P([1-9]|1[0-3])$/.test(per)) return;
+          if (!Number.isFinite(Number(units)) || Number(units) < 0) throw new Error('Work Done units must be finite and non-negative.');
           matched++;
           if (!nextWorkDoneData.has(jn)) nextWorkDoneData.set(jn, {periods:{}, wgs:{}});
           const job = nextWorkDoneData.get(jn);
@@ -2181,33 +2093,20 @@
           setWorkDoneUploadState('working', 'Processing rows…', `${processed.toLocaleString()} of ${total.toLocaleString()} rows processed`);
         });
 
-        if (!matched) throw new Error('No valid Work Done rows matched the loaded standard jobs and period format. No saved data was changed.');
-        setWorkDoneUploadState('working', 'Saving snapshot…', `${matched.toLocaleString()} valid rows processed. Saving ${selectedYear} safely.`);
-        window.wData = nextWorkDoneData;
-        workDoneUploadedAt = new Date().toISOString();
-        saveWorkDoneToLocal(selectedYear, nextWorkDoneData, workDoneUploadedAt);
-        if (window.isApiEnabled && window.isApiEnabled() && window.saveWorkDoneToApi && selectedYear) {
-          const uploadedAt = await window.saveWorkDoneToApi(selectedYear, serializeWorkDoneMap(nextWorkDoneData));
-          if (uploadedAt) {
-            workDoneUploadedAt = uploadedAt;
-            saveWorkDoneToLocal(selectedYear, window.wData, workDoneUploadedAt);
-          }
+        if (!matched) throw new Error('No valid Work Done rows matched the loaded standard jobs and period format. The current session data was not changed.');
+        if (uploadSerial !== workDoneUploadSerial || selectedYear !== getSelectedWorkDoneYear()) {
+          throw new Error('Upload cancelled because its financial-year context changed. Please upload again.');
         }
-
-        if (selectedYear !== currentFinancialYear) {
-          await loadWorkDoneStoreAsync(currentFinancialYear);
-          alert(`Work Done uploaded for ${selectedYear}. Current dashboard remains on ${currentFinancialYear}.`);
-        }
-        
-        lastWorkDoneUploadKey = uploadKey;
+        window.WorkDoneSession.replace(selectedYear, nextWorkDoneData);
+        await loadWorkDoneStoreAsync(currentFinancialYear);
         updateWorkGroupFilterOptions();
         render();
-        setWorkDoneUploadState('success', 'Upload complete', `${matched.toLocaleString()} valid rows saved for ${selectedYear}.`);
+        setWorkDoneUploadState('success', 'Upload complete', `${matched.toLocaleString()} valid rows loaded for ${selectedYear}, for this session only.`);
         const input = document.getElementById('wFile');
         if (input) input.value = '';
       } catch(err) {
         console.error(err);
-        setWorkDoneUploadState('error', 'Upload not completed', err?.message || 'The report could not be loaded. No validated replacement was saved.');
+        setWorkDoneUploadState('error', 'Upload not completed', err?.message || 'The report could not be loaded. The current session data was not replaced.');
       } finally {
         workDoneUploadInProgress = false;
         const button = document.getElementById('uploadWorkDoneButton');
@@ -2755,6 +2654,7 @@
     }
 
     function getMainPageActual(forecastValue, workDonePeriods, period, cutoffPeriod) {
+      if (!window.wData) return Number(forecastValue) || 0;
       return getActualOrForecastForCutoff(
         forecastValue,
         workDonePeriods,
@@ -2944,6 +2844,10 @@
     }
 
     function render() {
+      const evidenceStatus = document.getElementById('workDoneSessionStatus');
+      if (evidenceStatus) evidenceStatus.textContent = workDoneUploadedAt
+        ? 'Work Done loaded for this session only. Reloading clears it.'
+        : 'Work Done not uploaded. Upload a report for this FY; displayed outlook uses forecast until Work Done is loaded.';
       if (requiresContextSelection) {
         openStageModal();
         return;
@@ -3276,7 +3180,7 @@
               </div>
               <div class="discipline-rollup-metric">
                 <span>Work Done</span>
-                <strong>${disciplineSummary.wd.toFixed(1)}</strong>
+                <strong>${workDoneUploadedAt ? disciplineSummary.wd.toFixed(1) : 'Not uploaded'}</strong>
               </div>
               <div class="discipline-rollup-metric">
                 <span>Variance</span>
@@ -3435,12 +3339,12 @@
                         <div class="job-variance-value">${pd.f.toFixed(1)}</div>
                       </div>
                       <div class="job-variance-item">
-                        <div class="job-variance-label">Actual</div>
+                        <div class="job-variance-label">${workDoneUploadedAt ? 'Actual' : 'Outlook (forecast only)'}</div>
                         <div class="job-variance-value">${pd.a.toFixed(1)}</div>
                       </div>
                       <div class="job-variance-item">
                         <div class="job-variance-label">Current Work Done</div>
-                        <div class="job-variance-value">${currentWorkDoneValue.toFixed(1)}</div>
+                        <div class="job-variance-value">${workDoneUploadedAt ? currentWorkDoneValue.toFixed(1) : 'Not uploaded'}</div>
                       </div>
                       <div class="job-variance-item">
                         <div class="job-variance-label">Variance</div>
@@ -3520,7 +3424,7 @@
     function updateModalModeNotes(maxWorkDonePeriod, cutoffValue) {
       const cutoffLabel = cutoffValue === 'auto' ? 'Auto' : 'Selected';
       const periodLabel = maxWorkDonePeriod > 0 ? `Period ${maxWorkDonePeriod}` : 'Period N/A';
-      const uploadedLabel = workDoneUploadedAt ? ` Work Done uploaded: ${new Date(workDoneUploadedAt).toLocaleString()}.` : '';
+      const uploadedLabel = workDoneUploadedAt ? ` Work Done loaded for this session: ${new Date(workDoneUploadedAt).toLocaleString()}.` : ' Work Done not uploaded.';
       const message = `Units derived from Work Done up to ${periodLabel} (${cutoffLabel}) then Forecast for remaining. Plan v1 can be updated below or in Forecast Builder.${uploadedLabel}`;
       const uploadNote = document.getElementById('uploadModeNote');
       const breakdownNote = document.getElementById('breakdownModeNote');

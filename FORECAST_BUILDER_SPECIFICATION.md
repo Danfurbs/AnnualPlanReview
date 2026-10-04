@@ -2,95 +2,24 @@
 
 Repo: `Danfurbs/AnnualPlanReview`.
 
-## Implementation status
+## Implementation status — 4 October 2026
 
-**Status date: 25 August 2026**
+RF6 is complete. Phases 1–5 are implemented in the parallel Preview. Local browser checks cover editing, cross-Engineer row preservation, undo/redo, exceptional Work Group Set addition, historical context, all-history chart data, explicit-zero copying, scoped clear operations and responsive widths. These checks do not prove production deployment or PostgreSQL cleanup.
 
--   **Phase 1 --- implemented and regression-tested on the preview branch,
-    awaiting deployment safety gate.** The FY-relative, current-ownership
-    discovery layer and isolated planning metadata persistence are implemented
-    with frontend and PostgreSQL service coverage. The additive database table
-    is created by the existing idempotent schema initialisation; it does not
-    migrate forecast records.
--   **Phase 2 --- implemented and corrected on the preview branch.** A separately labelled,
-    read-only Forecast Builder Preview now shows the selected planning FY,
-    engineer queue, explicit All / Not Forecasted / Forecasted filters,
-    progress, Standard Job cards, manual Standard Job addition, and the manual
-    Forecasted workflow. Planning status persists independently from RF
-    Reviewed and does not write forecast values.
-    The engineer queue is now scoped exclusively through the organisation
-    hierarchy to the dashboard's selected Delivery Unit; a concrete Delivery
-    Unit is required, and stale engineer selection, navigation, search,
-    filters, discovery caches, and metadata actions all use that same scoped
-    set. Changing Delivery Unit changes presentation context only and does not
-    rewrite or remove forecast or planning metadata. At widths up to 900px the
-    engineer buttons remain one keyboard-accessible, horizontally scrollable
-    row contained within the preview rather than widening the document.
-    Evidence loading is also implemented one FY at a time, with V0, V1, and
-    Work Done loaded concurrently within that FY, stale-request protection,
-    compact per-year evidence maps, cached engineer queues, and visible
-    spinner, FY progress, progress bar, and read-only reassurance.
--   **Phase 3 --- implemented in the parallel preview.** Jobs are presented
-    under the canonical catalogue discipline (alphabetical headings, with
-    `Other / Unclassified` as the stable fallback) and Standard Job numbers
-    are ordered numerically within each group. Padded/unpadded identities are
-    normalised for comparison only; stored identities are not rewritten.
-    Cards expand to a contained P1--P13 V0 Work Group Set grid with current-year
-    Work Group Set comments, reason badges, a non-functional Phase 4 history
-    placeholder, and one explicit atomic **Save Standard Job** action. Blank
-    period inputs save as V0 zero; negative values are rejected in the browser
-    and backend. Saving never marks Forecasted and Forecasted never saves a
-    draft.
-    The Add Standard Job dialog now uses a padded, responsive, keyboard-focusable
-    searchable list grouped by catalogue discipline, identifies jobs already in
-    the engineer queue, and returns focus to its trigger. The exceptional Add
-    Work Group Set failsafe searches the full active catalogue and persists only
-    FY + Engineer + Standard Job + Work Group Set visibility metadata without
-    changing ownership or creating forecast data. Untouched exceptional rows
-    can be removed; rows with V0/comment content are protected.
-    Dirty drafts survive card/filter rerenders and prompt before FY/engineer/page
-    changes that would discard them; failed saves retain all browser values for
-    retry. Standard Job cards remain within the Preview width and non-interactive
-    card space can be clicked to expand/collapse; interactive controls retain
-    their own actions. The P1--P13 grid has an explicit contained horizontal
-    scrollbar, and current-year comments remain individual Work Group Set
-    comments saved with the Standard Job. Backend revision checks run before the
-    job-scoped transaction deletes and replaces that selected FY/V0/Standard Job
-    only.
-    Manual queue membership is stored separately from Forecasted status, so
-    marking an automatically discovered job Forecasted never adds a `manually
-    added` reason, while a genuinely manual job remains manual after its status
-    changes. Incremental metadata/save updates rebuild only the active
-    engineer's cached queue, and ordinary cell blur no longer rerenders the
-    complete grouped card list.
--   **Phase 4 --- implemented in the parallel preview.** Each Work Group Set has
-    an accessible Planning Context expander showing FY-relative final effective
-    forecast, corrected Work Done, explicit Work Done coverage, current-scope
-    historical comments, and Copy Forecast / Copy Work Done actions. Older
-    configured FYs load only when Planning Context is first opened, one FY at a
-    time with stale-response protection. Copy actions update the unsaved
-    current-year Work Group Set row and source comment only; they never save
-    automatically or change queue membership.
--   **Phase 5 --- implemented in the parallel preview.** Every expanded Standard
-    Job has a responsive P1--P13 line chart below the forecast-input grid. The
-    chart shows one Work Group Set at a time, with accessible previous/next WGS
-    controls. The selected FY V0 line updates directly from the unsaved draft. The
-    immediately preceding FY is shown by default using corrected Work Done
-    through its coverage point and final effective forecast thereafter, with a
-    labelled transition and dashed forecast tail. Show all history lazily loads
-    and overlays every older configured FY without resetting current edits.
--   **Phase 6 --- not authorised.** The current Forecast Builder remains the
-    production workflow alongside the clearly labelled preview and must not be
-    retired without the product owner's explicit confirmation.
+- Phases 1–3: current-ownership discovery, scoped Engineer queues, manual Forecasted metadata, V0 grid, current comments and explicit per-Standard-Job save. Saves retain every other Engineer's rows in the same job and check for changed job data before writing. Failed saves retain drafts.
+- Phase 4: per-Work-Group-Set Planning Context is reachable outside the scrolling grid. It exposes forecast totals, session Work Done coverage, both V0/V1 forecast comments and scoped RF commentary. Copy Forecast / Copy Work Done changes the draft and source comment only. Older configured FYs load lazily and never seed automatic discovery.
+- Phase 5: default aggregate profile for all Work Group Sets shown in the job, with previous/next controls for individual sets. Current V0 updates live; historical profiles blend available session Work Done with effective forecast and label transitions. Show all history overlays older years. Copy to forecast is enabled only for an individual Work Group Set.
+- Future Work import patches only reported cells and adds its source comment. It blocks import while an affected Standard Job is dirty, retains unrelated drafts and uses one forecast transaction; no separate planning-metadata writes are needed for discovery. Failed imports retain drafts and are retryable.
+- V0 maintenance: Undo / Redo / Discard edits per job; scoped CSV/JSON exports; whole-FY V0 replacement from CSV/Excel/JSON; Clear All for the selected DU, Clear selected Engineer and Clear selected Work Group Set. Typed confirmation identifies the FY and target. Clear actions remove V0 volumes and forecast comments only, retaining V1, other FYs, RF comments/statuses and planning flags. Current ownership defines scope; exceptional display associations never reassign ownership.
+- Phase 6: explicitly deferred by the user. Keep the legacy builder accessible until the user reviews and accepts the replacement. Do not infer retirement permission from completed tests.
 
-At this break, the dashboard has a new **Forecast Builder Preview** action.
-Opening it shows the completed Phase 3--5 planning workspace; the current Forecast Builder
-remains available from both the dashboard and the preview header. Automated
-coverage includes Phase 1 discovery, Phase 2 Delivery Unit scoping/responsive
-engineer-strip behaviour, discipline grouping/numeric ordering, responsive
-modal/grid CSS, non-negative validation, revision conflicts, and transactional
-job-level rollback. Browser screenshots were not captured in the repository's
-Node-only test environment.
+See FORECAST_IMPLEMENTATION_PLAN_UPDATED.md for the remaining post-RF6 business-rule backlog.
+
+## Session-only Work Done policy
+
+Work Done is never persisted in browser storage or the backend. Historical and current-year evidence must be uploaded in the current page session. Preview may read dashboard session uploads; its optional compact evidence remains temporary and is cleared on Preview exit or planning-FY change. Closing/reloading the page discards all Work Done. Saved Work Order corrections remain separate and persistent, applied to matching fresh dashboard uploads. A compact Preview report lacks correction identifiers and is not itself a persisted corrected snapshot.
+
+No upload is distinct from a real uploaded zero. Show “not uploaded” and use historical effective forecast where the profile calls for a forecast fallback. Explicit copy to V0 and subsequent Save Standard Job remain intentional forecast writes. Legacy Work Done snapshot purging is authorised; other data-preservation requirements remain unchanged.
 
 ## Temporary lightweight Work Done evidence upload
 
@@ -99,9 +28,7 @@ Node-only test environment.
 Large operational Work Done files contain substantially more detail than the
 Forecast Builder needs for planning discovery. A separately authorised
 follow-up provides a **Preview-only temporary Work Done evidence upload**. This
-must be an optional input to the planning workspace, not a replacement for the
-existing authoritative Work Done upload, correction, storage, dashboard, or
-reporting paths.
+is an optional planning input alongside the session-only dashboard upload and persistent correction workflow.
 
 The user must select the financial year represented by the file. The source-FY
 control offers the selected current planning FY and its three preceding
@@ -152,14 +79,13 @@ compact map is built.
 
 -   Do not upload or persist the original file.
 -   Do not write the compact evidence to PostgreSQL, local storage, forecast
-    records, forecast comments, planning metadata, or the existing Work Done
-    snapshot store.
+    records, forecast comments, planning metadata, or the session Work Done store.
 -   Keep it in memory for the active Preview session only.
 -   Clearly label the evidence as temporary and not saved.
 -   Display the selected source FY, accepted/rejected row counts, and any
     validation errors.
 -   Replacing or clearing temporary evidence must not delete or change the
-    application's authoritative Work Done snapshot for that FY.
+    dashboard's in-memory Work Done for that FY.
 -   Switching the planning FY must discard or explicitly reselect mismatched
     temporary evidence; stale parsing responses must not populate another FY.
 -   Temporary evidence may participate in Phase 1 queue discovery for its
@@ -688,11 +614,10 @@ is untouched, and no other Standard Job is modified.
 
 # Phase 4: Historical planning context + copy-forward
 
-Use `FORECAST_PHASE_4_CONTINUATION_PROMPT.md` as the implementation hand-off
+Use the current implementation plan and this specification as the implementation hand-off
 for this phase. It carries forward the Phase 3 card-width, card-wide expansion,
 contained horizontal-scroll, per-Work-Group-Set comment, dirty-state, and
-data-preservation requirements. The profile graph is not expected in Phase 4;
-it remains the separate Phase 5 deliverable below.
+data-preservation requirements. The profile graph is delivered alongside this context under Phase 5 below.
 
 Each Work Group Set row gets an expandable **Planning Context** area.
 
@@ -836,7 +761,7 @@ actions populate V0 and leave an automatic source comment.
 # Phase 5: Standard Job profile chart
 
 Provide one chart per Standard Job card, combining the Work Group Sets
-currently shown in that engineer's Standard Job.
+currently shown in that engineer's Standard Job by default. Previous/next controls allow individual Work Group Set inspection and copying.
 
 Use a **line chart**.
 

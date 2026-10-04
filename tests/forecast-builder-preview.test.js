@@ -87,7 +87,7 @@ test('Phase 3 CSS contains padded modal and contained grid scrolling', () => {
 test('Phase 3 retains stored job identity and wires manual job removal', () => {
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
   assert.match(source, /storageJobNumber:\s*storedEntry\.key/);
-  assert.match(source, /saveForecastJobToStorageAsync\?\.\(storageJobNumber/);
+  assert.match(source, /saveForecastJobToStorageAsync\(draft\.storageJobNumber/);
   assert.match(source, /removeJob\s*=\s*e\.target\.closest\('\[data-remove-job\]'\)/);
   assert.match(source, /else if \(removeJob\) await removeStandardJob/);
 });
@@ -120,7 +120,7 @@ test('each Work Group Set can be queued for clearing and omitted when the job is
   assert.match(source, /data-clear-wgs=/);
   assert.match(source, /function clearWorkGroupForecast/);
   assert.match(source, /draft\.clearedWorkGroups\.add\(workGroup\)/);
-  assert.match(source, /if \(draft\.clearedWorkGroups\.has\(code\)\) continue/);
+  assert.match(source, /ForecastBuilderActions\.mergeDraft/);
   assert.match(source, /The change will take effect when you select Save job/);
   assert.match(css, /\.preview-clear-wgs\s*\{/);
   assert.match(css, /\.preview-wgs-grid tr\.is-pending-clear/);
@@ -130,7 +130,7 @@ test('non-interactive card space expands while controls and grid interactions re
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
   assert.match(source, /data-expand-card=/);
   assert.match(source, /function toggleExpandedJob/);
-  assert.match(source, /!e\.target\.closest\('button, input, textarea, select, a, \.preview-job-expanded'\)/);
+  assert.match(source, /!e\.target\.closest\('button, input, textarea, select, a, summary, details, \.preview-job-expanded, \.preview-history-controls, \.preview-profile'\)/);
 });
 
 test('metadata updates rebuild only the active engineer queue and cell blur does not rerender every job', () => {
@@ -141,9 +141,9 @@ test('metadata updates rebuild only the active engineer queue and cell blur does
   assert.doesNotMatch(source, /addEventListener\('change',\s*\(\)\s*=>\s*renderJobList/);
 });
 
-test('profile comparison replaces per-row History controls with an FY dropdown and copy action', () => {
+test('profile comparison retains FY dropdown and restores per-WGS Planning Context', () => {
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
-  assert.doesNotMatch(source, /data-context-wgs=/);
+  assert.match(source, /data-context-wgs=/);
   assert.match(source, /data-profile-year=/);
   assert.match(source, /data-copy-profile=/);
   assert.match(source, />Copy to forecast</);
@@ -156,7 +156,8 @@ test('persistent navigation and condensed engineer header avoid losing the top j
   const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(html, /id="forecastPreviewEngineerSentinel"/);
-  assert.match(source, /IntersectionObserver/);
+  assert.match(source, /top < 0/);
+  assert.match(source, /top > 80/);
   assert.match(source, /function scrollActiveEngineerIntoView/);
   assert.doesNotMatch(source, /querySelector\('\.active'\)\?\.scrollIntoView/);
   assert.match(css, /\.preview-builder-layout \{ overflow: visible;/);
@@ -186,11 +187,11 @@ test('Phase 5 profile uses live draft V0, blended history, transitions, and show
 
 test('profile renders below inputs and switches left or right between Work Group Sets', () => {
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
-  assert.match(source, /\$\{renderGrid\(job\)\}\$\{renderProfile\(job\.jobNumber\)\}/);
+  assert.match(source, /\$\{renderGrid\(job\)\}\$\{renderHistoryControls\(job\.jobNumber\)\}\$\{renderProfile\(job\.jobNumber\)\}/);
   assert.match(source, /data-profile-step="-1"/);
   assert.match(source, /data-profile-step="1"/);
   assert.match(source, /function switchProfileWorkGroup/);
-  assert.match(source, /const current = Object\.fromEntries\(PERIODS\.map\(period => \[period, Number\(row\?\.periods\[period\]\) \|\| 0\]\)\)/);
+  assert.match(source, /groups\.reduce\(\(sum, code\) => sum \+ \(Number\(draft\.rows\[code\]\?\.periods\[period\]\)/);
 });
 
 test('temporary lightweight Work Done import remains in memory and never calls persistence APIs', () => {

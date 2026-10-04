@@ -1,3 +1,15 @@
+# Forecast business rules
+
+## Current decision — 4 October 2026
+
+RF6 is complete for development planning. Work Done must be uploaded afresh after every page reload or new session. It is held only in browser memory, by FY, and may be reused while navigating within the open page. Neither raw reports nor aggregated Work Done are saved locally or on Render. Missing evidence is “Work Done not uploaded”, not confirmed zero delivery.
+
+Saved Work Order corrections remain persistent and are reapplied to matching orders after a fresh upload. Explicitly copying Work Done into a V0 draft and saving that forecast is still allowed. Historical Work Done is available only when uploaded in the current session; historical forecasts and comments remain persistent.
+
+Legacy browser/database Work Done snapshots must be purged. This is an explicitly authorised exception to older snapshot-preservation wording. All other forecast, comment, review, planning and correction preservation requirements remain in force. External backups are outside this cleanup.
+
+The following business definitions remain authoritative. Historical references to the original review explain decisions only; they do not reinstate the retired governance recommendations.
+
 Response to Forecast Governance Review
 
 Thanks for the review. The assessment is useful, but a number of the
@@ -221,10 +233,7 @@ Work Done can change retrospectively if an error is discovered.
 Closed/reviewed historical periods should therefore not be treated as
 immutable actual snapshots in this tool.
 
-The full raw Work Done dataset is no longer retained by the application
-because of its size, so recommendations around persistent Work Done
-source-file metadata and provenance should be reconsidered against the
-current implementation.
+Work Done is now session-only, including raw rows and aggregates. Source files are read locally; fresh uploads are required after reload. Saved Work Order corrections are retained separately.
 
 8.  Performance dashboard
 
@@ -453,7 +462,7 @@ Each FY has its own:
 
 -   V0;
 -   V1 amendments;
--   Work Done;
+-   session-only Work Done;
 -   comments;
 -   RF reviews.
 
@@ -595,8 +604,8 @@ a result of this specification must retain all currently stored forecast
 data, including V0, V1 amendments, comments, RF review status and
 corrected Work Order records. Existing data must remain readable and
 editable following implementation. Database/schema changes must be
-backwards-safe and migratory rather than destructive. No existing
-records should be deleted, reset or silently reinterpreted as part of
+backwards-safe and migratory rather than destructive. Except for the expressly authorised legacy Work Done snapshot purge, existing
+records must not be deleted, reset or silently reinterpreted as part of
 implementation. Where a proposed implementation would require changing
 the meaning of existing persisted data, stop and flag this before
 proceeding.

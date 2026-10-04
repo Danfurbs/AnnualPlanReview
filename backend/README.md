@@ -14,7 +14,7 @@ This backend server provides persistent storage for forecasts, baselines, and co
 
 ## Prerequisites
 
-- Node.js (v14 or higher)
+- Node.js 24 or higher (tests use node:test and node:sqlite)
 - npm (comes with Node.js)
 
 ## Quick Start
@@ -269,3 +269,11 @@ backend/
 ## License
 
 MIT
+
+## Current APIs and session-only Work Done
+
+The server also mounts `/api/groups`, `/api/reviews`, `/api/work-order-amendments` and `/api/forecast-planning`. Forecast replacement and per-job writes require expected revisions. There is no Work Done API: old `/api/work-done` requests return 404 and no database methods save or reload Work Done.
+
+Work Done exists only in the current browser page, by FY. Saved Work Order amendments remain persistent and reapply to matching freshly uploaded orders. See the root deployment guide for the separate `purge-work-done` PostgreSQL/SQLite cleanup command and post-deploy ordering. Fresh schemas do not create a snapshot table; existing empty tables are retained.
+
+Run `npm test` here and `npm test` at the repository root. Cleanup tests use real in-memory SQLite; PostgreSQL integration requires a disposable TEST_DATABASE_URL and otherwise reports an explicit skip. Never point test cleanup at production.

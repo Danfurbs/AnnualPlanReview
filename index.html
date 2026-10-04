@@ -135,6 +135,7 @@
       </div>
       <div class="control-group">
         <label>Reporting Period</label>
+        <p id="workDoneSessionStatus" role="status">Work Done not uploaded.</p>
         <div id="forecastCutoffTimeline" class="cutoff-timeline" role="radiogroup" aria-label="Forecast cutoff timeline">
           <button type="button" class="cutoff-chip active" data-value="auto">Auto</button>
           <button type="button" class="cutoff-chip" data-value="P1">P1</button>
@@ -245,7 +246,7 @@
           <label for="workDoneFySelect">Financial Year:</label>
           <select id="workDoneFySelect"></select>
         </div>
-        <div class="upload-replace-note"><strong>Safe replacement:</strong> a successful upload replaces the selected FY snapshot. It will not be added to the existing report.</div>
+        <div class="upload-replace-note"><strong>Safe replacement:</strong> a successful upload replaces the selected FY’s in-memory data. It will not be added to the existing report.</div>
         <div class="upload-file-picker">
           <input type="file" id="wFile" accept=".xlsx,.xls" onchange="handleWorkDoneFileSelection()">
           <span class="helper-text">Choose the report, check the settings, then start the upload.</span>
@@ -262,10 +263,10 @@
         <button id="uploadWorkDoneButton" type="button" class="primary-button upload-workdone-button" onclick="uploadSelectedWorkDoneFile()" disabled>Upload Work Done report</button>
         <details class="upload-danger-zone">
           <summary>Remove existing Work Done data</summary>
-          <p class="helper-text">These actions cannot be undone. Uploading with “clear existing” selected normally means you do not need them.</p>
+          <p class="helper-text">Work Done is never saved. Reloading or closing this page clears it. Saved Work Order corrections are retained.</p>
           <div class="upload-danger-actions">
             <button type="button" class="secondary" onclick="clearWorkDoneForSelectedFy()">Clear selected FY</button>
-            <button type="button" class="danger-button" onclick="clearAllWorkDoneSnapshots()">Clear all FYs (server + local)</button>
+            <button type="button" class="danger-button" onclick="clearAllWorkDoneSession()">Clear all FYs in this session</button>
           </div>
         </details>
       </div>
@@ -512,6 +513,18 @@
               <button type="button" class="primary-button" id="forecastPreviewAddJob">+ Add Standard Job</button>
             </div>
           </div>
+          <details class="forecast-card preview-bulk-actions"><summary>V0 import, export and Clear All</summary>
+            <p>Exports use the scope below. Clear All applies only to the selected Delivery Unit. Full V0 import replaces the entire selected FY. Save or discard drafts first.</p>
+            <label for="forecastPreviewActionScope">Scope</label><select id="forecastPreviewActionScope"><option value="du">Selected Delivery Unit</option><option value="engineer">Selected Engineer (currently owned Work Group Sets)</option><option value="year">Entire financial year (all Delivery Units)</option></select>
+            <button type="button" class="group-action-button" id="forecastPreviewExportCsv">Export V0 CSV</button>
+            <button type="button" class="group-action-button" id="forecastPreviewExportJson">Export V0 JSON</button>
+            <button type="button" class="group-action-button" id="forecastPreviewFullImport">Import full V0 CSV / Excel / JSON</button>
+            <input type="file" id="forecastPreviewFullFile" accept=".csv,.xlsx,.xls,.json" hidden>
+            <div class="preview-clear-actions"><button type="button" class="danger-button" id="forecastPreviewClearAll">Clear All in Delivery Unit…</button>
+            <button type="button" class="danger-button" id="forecastPreviewClearEngineer">Clear selected Engineer…</button>
+            <label for="forecastPreviewClearWgsSelect">Work Group Set in this Delivery Unit</label><select id="forecastPreviewClearWgsSelect"></select>
+            <button type="button" class="danger-button" id="forecastPreviewClearWgs">Clear selected Work Group Set…</button></div>
+          </details>
           <div class="preview-section-label">Standard Jobs <span>Grouped by discipline · Select a row to edit</span></div>
           <div id="forecastPreviewJobList" class="preview-job-list"></div>
         </div>
@@ -1137,6 +1150,8 @@
   <script src="forecast-state.js"></script>
   <script src="forecast-builder-data.js"></script>
   <script src="future-work-import.js"></script>
+  <script src="work-done-session.js"></script>
+  <script src="forecast-builder-actions.js"></script>
   <script src="forecast-builder-preview.js"></script>
   <script src="forecast-editor.js"></script>
   <script src="baseline-storage.js"></script>

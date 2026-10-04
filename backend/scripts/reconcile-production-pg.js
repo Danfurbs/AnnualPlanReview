@@ -36,8 +36,6 @@ async function reconcile() {
       v1Overrides: `
         SELECT fiscal_year, COUNT(*)::integer AS rows
         FROM v1_overrides GROUP BY fiscal_year ORDER BY fiscal_year`,
-      workDoneSnapshots: `
-        SELECT fiscal_year, uploaded_at FROM work_done_snapshots ORDER BY fiscal_year`,
       workOrderAmendments: `
         SELECT COUNT(*)::integer AS documents,
           COALESCE(SUM(jsonb_object_length(data_json)), 0)::integer AS amendments

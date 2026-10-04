@@ -160,15 +160,6 @@ async function initializeDatabase() {
       `);
       console.log('✓ Created public_groups table');
 
-      await pool.query(`
-      CREATE TABLE IF NOT EXISTS work_done_snapshots (
-        fiscal_year VARCHAR(10) PRIMARY KEY,
-        data_json JSONB NOT NULL,
-        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-      `);
-      console.log('✓ Created work_done_snapshots table');
-
       console.log('\n✅ Database initialization complete!');
       console.log('All tables created successfully.\n');
       await pool.end();

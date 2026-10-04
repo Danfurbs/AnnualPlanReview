@@ -99,12 +99,6 @@ db.exec(`
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
-  -- Work done snapshots by fiscal year
-  CREATE TABLE IF NOT EXISTS work_done_snapshots (
-    fiscal_year TEXT PRIMARY KEY,
-    data_json TEXT NOT NULL,
-    uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
 
   CREATE TABLE IF NOT EXISTS review_statuses (
     job_number TEXT NOT NULL,

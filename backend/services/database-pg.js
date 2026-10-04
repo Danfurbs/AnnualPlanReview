@@ -161,13 +161,6 @@ class DatabaseServicePG {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS work_done_snapshots (
-        fiscal_year VARCHAR(10) PRIMARY KEY,
-        data_json JSONB NOT NULL,
-        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
     await this.pool.query(`CREATE TABLE IF NOT EXISTS revisions (scope VARCHAR(50) NOT NULL, data_key VARCHAR(100) NOT NULL, revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(scope, data_key))`);
   }
 
@@ -766,46 +759,6 @@ class DatabaseServicePG {
   async deletePublicGroup(groupId) {
     await this.ready;
     await this.pool.query('DELETE FROM public_groups WHERE id = $1', [groupId]);
-  }
-
-  async saveWorkDoneData(fiscalYear, data) {
-    await this.ready;
-    const result = await this.pool.query(
-      `INSERT INTO work_done_snapshots (fiscal_year, data_json, uploaded_at)
-       VALUES ($1, $2::jsonb, CURRENT_TIMESTAMP)
-       ON CONFLICT (fiscal_year) DO UPDATE SET
-         data_json = EXCLUDED.data_json,
-         uploaded_at = CURRENT_TIMESTAMP
-       RETURNING uploaded_at`,
-      [fiscalYear, JSON.stringify(data || {})]
-    );
-    return result.rows[0]?.uploaded_at || new Date().toISOString();
-  }
-
-  async getWorkDoneData(fiscalYear) {
-    await this.ready;
-    const result = await this.pool.query(
-      'SELECT data_json, uploaded_at FROM work_done_snapshots WHERE fiscal_year = $1',
-      [fiscalYear]
-    );
-    if (!result.rows.length) return null;
-    return {
-      data: result.rows[0].data_json || {},
-      uploadedAt: result.rows[0].uploaded_at
-    };
-  }
-
-  async deleteWorkDoneData(fiscalYear) {
-    await this.ready;
-    await this.pool.query(
-      'DELETE FROM work_done_snapshots WHERE fiscal_year = $1',
-      [fiscalYear]
-    );
-  }
-
-  async clearAllWorkDoneData() {
-    await this.ready;
-    await this.pool.query('DELETE FROM work_done_snapshots');
   }
 
   // ========== Utility ==========

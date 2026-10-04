@@ -1847,3 +1847,13 @@
   .preview-profile-footer { align-items: stretch; flex-direction: column; }
   .preview-profile-footer .primary-button { align-self: flex-end; }
 }
+
+/* Planning actions stay outside the period scroller. */
+.preview-history-controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; min-width: 0; }
+.preview-history-controls .preview-planning-context { flex-basis: 100%; min-width: 0; }
+.preview-bulk-actions { margin-bottom: 16px; min-width: 0; }
+.preview-bulk-actions > summary { cursor: pointer; font-weight: 700; }
+.preview-bulk-actions select { max-width: 100%; }
+.preview-clear-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.preview-clear-actions select { min-width: 0; flex: 1 1 180px; }
+.preview-clear-actions label { flex-basis: 100%; }

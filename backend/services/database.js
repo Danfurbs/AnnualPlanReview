@@ -169,11 +169,6 @@ class DatabaseService {
         job_numbers_json TEXT NOT NULL,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
-      CREATE TABLE IF NOT EXISTS work_done_snapshots (
-        fiscal_year TEXT PRIMARY KEY,
-        data_json TEXT NOT NULL,
-        uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
     `);
 
     // Forecast statements
@@ -297,24 +292,6 @@ class DatabaseService {
 
       deletePublicGroup: this.db.prepare(`
         DELETE FROM public_groups WHERE id = ?
-      `),
-
-      upsertWorkDoneSnapshot: this.db.prepare(`
-        INSERT OR REPLACE INTO work_done_snapshots
-        (fiscal_year, data_json, uploaded_at)
-        VALUES (?, ?, CURRENT_TIMESTAMP)
-      `),
-
-      getWorkDoneSnapshot: this.db.prepare(`
-        SELECT * FROM work_done_snapshots WHERE fiscal_year = ?
-      `),
-
-      deleteWorkDoneSnapshot: this.db.prepare(`
-        DELETE FROM work_done_snapshots WHERE fiscal_year = ?
-      `),
-
-      clearAllWorkDoneSnapshots: this.db.prepare(`
-        DELETE FROM work_done_snapshots
       `),
 
       upsertReviewStatus: this.db.prepare(`
@@ -755,31 +732,6 @@ class DatabaseService {
   deletePublicGroup(groupId) {
     this.stmts.deletePublicGroup.run(groupId);
   }
-
-  saveWorkDoneData(fiscalYear, data) {
-    this.stmts.upsertWorkDoneSnapshot.run(fiscalYear, JSON.stringify(data || {}));
-    const row = this.stmts.getWorkDoneSnapshot.get(fiscalYear);
-    return row?.uploaded_at || new Date().toISOString();
-  }
-
-  getWorkDoneData(fiscalYear) {
-    const row = this.stmts.getWorkDoneSnapshot.get(fiscalYear);
-    if (!row) return null;
-    return {
-      data: JSON.parse(row.data_json || '{}'),
-      uploadedAt: row.uploaded_at
-    };
-  }
-
-  deleteWorkDoneData(fiscalYear) {
-    this.stmts.deleteWorkDoneSnapshot.run(fiscalYear);
-  }
-
-  clearAllWorkDoneData() {
-    this.stmts.clearAllWorkDoneSnapshots.run();
-  }
-
-  
 
   saveAllReviewStatuses(reviewStore, expectedRevision) {
     const tx = this.db.transaction((store) => {

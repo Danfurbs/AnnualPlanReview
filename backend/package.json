@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "init-db": "node scripts/init-db.js",
     "init-db-pg": "node scripts/init-db-pg.js",
+    "purge-work-done": "node scripts/purge-work-done.js",
     "reconcile-pg": "node scripts/reconcile-production-pg.js",
     "verify-backup-pg": "bash scripts/verify-backup-restore.sh"
   },
