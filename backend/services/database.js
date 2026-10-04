@@ -107,9 +107,20 @@ class DatabaseService {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(job_number, fiscal_year)
       );
+      CREATE TABLE IF NOT EXISTS forecast_planning_metadata (
+        fiscal_year TEXT NOT NULL,
+        engineer_id TEXT NOT NULL,
+        job_number TEXT NOT NULL,
+        work_group TEXT NOT NULL DEFAULT '',
+        forecasted INTEGER NOT NULL DEFAULT 0,
+        manually_added INTEGER,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(fiscal_year, engineer_id, job_number, work_group)
+      );
     `);
 
     this.ensureColumn('job_comments', 'root_cause', 'TEXT');
+    this.ensureColumn('forecast_planning_metadata', 'manually_added', 'INTEGER');
     this.ensureColumn('job_comments', 'corrective_action', 'TEXT');
     this.ensureColumn('job_comments', 'owner', 'TEXT');
     this.ensureColumn('job_comments', 'due_date', 'TEXT');
@@ -143,7 +154,9 @@ class DatabaseService {
     const exists = columns.some(column => column.name === columnName);
     if (!exists) {
       this.db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`);
+      return true;
     }
+    return false;
   }
 
   prepareStatements() {
@@ -327,9 +340,13 @@ class DatabaseService {
    * @param {string} planVersion
    * @param {Object} forecastData - { periods: {...}, wgs: {...}, comments: {...} }
    */
-  saveForecast(jobNumber, fiscalYear, planVersion, forecastData) {
+  saveForecast(jobNumber, fiscalYear, planVersion, forecastData, expectedRevision) {
     const saveTransaction = this.db.transaction((data) => {
       const { wgs, comments } = data;
+
+      const key = `${fiscalYear}:${planVersion}`;
+      const current = this.getRevision('forecast', key);
+      if (current !== expectedRevision) throw revisionConflict();
 
       // Delete existing forecast data for this job
       this.stmts.deleteForecastsByJob.run(jobNumber, fiscalYear, planVersion);
@@ -350,8 +367,7 @@ class DatabaseService {
           );
         }
       }
-      const key = `${fiscalYear}:${planVersion}`;
-      const revision = this.getRevision('forecast', key) + 1;
+      const revision = current + 1;
       this.stmts.setRevision.run('forecast', key, revision);
       return revision;
     });
@@ -798,6 +814,44 @@ class DatabaseService {
 
   getRevision(scope, dataKey) {
     return this.stmts.getRevision.get(scope, dataKey)?.revision || 0;
+  }
+
+  getForecastPlanningMetadata(fiscalYear) {
+    return this.db.prepare(`SELECT fiscal_year AS fiscalYear, engineer_id AS engineerId,
+      job_number AS jobNumber, work_group AS workGroup, forecasted, manually_added AS manuallyAdded
+      FROM forecast_planning_metadata WHERE fiscal_year = ? ORDER BY engineer_id, job_number, work_group`)
+      .all(fiscalYear).map(row => ({
+        ...row,
+        forecasted: Boolean(row.forecasted),
+        manuallyAdded: row.manuallyAdded == null ? null : Boolean(row.manuallyAdded)
+      }));
+  }
+
+  saveForecastPlanningMetadata(item) {
+    this.db.prepare(`INSERT INTO forecast_planning_metadata
+      (fiscal_year, engineer_id, job_number, work_group, forecasted, manually_added, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(fiscal_year, engineer_id, job_number, work_group)
+      DO UPDATE SET forecasted = excluded.forecasted, manually_added = excluded.manually_added, updated_at = CURRENT_TIMESTAMP`)
+      .run(item.fiscalYear, item.engineerId, item.jobNumber, item.workGroup || '', item.forecasted ? 1 : 0, item.manuallyAdded ? 1 : 0);
+    return { ...item, workGroup: item.workGroup || '', forecasted: Boolean(item.forecasted), manuallyAdded: Boolean(item.manuallyAdded) };
+  }
+
+  deleteForecastPlanningMetadata(item) {
+    const workGroup = item.workGroup || '';
+    const forecast = this.db.prepare(`SELECT 1 FROM forecasts WHERE fiscal_year = ? AND plan_version = 'v0'
+      AND job_number = ? AND (? = '' OR work_group = ?) LIMIT 1`).get(item.fiscalYear, item.jobNumber, workGroup, workGroup);
+    const comment = this.db.prepare(`SELECT 1 FROM forecast_comments WHERE fiscal_year = ? AND plan_version = 'v0'
+      AND job_number = ? AND (? = '' OR work_group = ?) AND TRIM(COALESCE(comment, '')) <> '' LIMIT 1`)
+      .get(item.fiscalYear, item.jobNumber, workGroup, workGroup);
+    if (forecast || comment) {
+      const error = new Error('Planning metadata has V0 data');
+      error.code = 'PLANNING_METADATA_HAS_FORECAST_DATA';
+      throw error;
+    }
+    this.db.prepare(`DELETE FROM forecast_planning_metadata
+      WHERE fiscal_year = ? AND engineer_id = ? AND job_number = ? AND work_group = ?`)
+      .run(item.fiscalYear, item.engineerId, item.jobNumber, item.workGroup || '');
   }
 
 

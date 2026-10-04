@@ -63,6 +63,11 @@ function validateForecastEntry(jobNumber, forecastData) {
   if (forecastData.comments !== undefined && !isPlainObject(forecastData.comments)) {
     return `Job ${jobNumber}: 'comments' must be an object when provided`;
   }
+  for (const [workGroup, comment] of Object.entries(forecastData.comments || {})) {
+    if (!workGroup.trim() || workGroup.length > 50 || typeof comment !== 'string' || comment.length > 10000) {
+      return `Job ${jobNumber}: comments must use valid Work Group Set keys and text up to 10000 characters`;
+    }
+  }
 
   return null;
 }
@@ -218,13 +223,18 @@ function createForecastRoutes(db) {
         });
       }
 
-      const revision = await db.saveForecast(jobNumber, fiscalYear, planVersion, forecastData);
+      if (!isNonNegativeInteger(forecastData.expectedRevision)) {
+        return res.status(400).json({ success: false, error: 'expectedRevision must be a non-negative integer' });
+      }
+
+      const revision = await db.saveForecast(jobNumber, fiscalYear, planVersion, forecastData, forecastData.expectedRevision);
 
       res.json({
         success: true,
         message: 'Forecast saved successfully', revision
       });
     } catch (error) {
+      if (error.code === 'REVISION_CONFLICT') return res.status(409).json({ success: false, error: 'Forecast changed since it was loaded. Reload before saving.' });
       console.error('Error saving forecast:', error);
       res.status(500).json({
         success: false,

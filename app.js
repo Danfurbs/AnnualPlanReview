@@ -55,6 +55,9 @@
     let currentDeliveryUnit = window.getDeliveryUnitById?.(storedDeliveryUnit)
       ? storedDeliveryUnit
       : '';
+    // Read-only application context for isolated preview screens. The dashboard
+    // remains the single owner of the selected Delivery Unit.
+    window.getCurrentDeliveryUnitId = () => currentDeliveryUnit;
 
     function loadBreakdownPlanVersion() {
       const saved = localStorage.getItem(BREAKDOWN_PLAN_VERSION_KEY);
@@ -2969,7 +2972,13 @@
       const baseJobs = [];
       all.forEach(jn => {
         // Get metadata from standard jobs if available
-        const meta = window.stdJobs.get(jn);
+        // Forecast Builder and file imports use six-digit Standard Job keys.
+        // Normalizing here also restores metadata for forecasts saved by older
+        // builder versions with an unpadded numeric key (for example, 9030).
+        const normalizedJobNumber = /^\d{1,6}$/.test(String(jn).trim())
+          ? String(jn).trim().padStart(6, '0')
+          : jn;
+        const meta = window.stdJobs.get(normalizedJobNumber);
         const f = forecastDataToUse?.get(jn);
         const a = window.wData?.get(jn);
         

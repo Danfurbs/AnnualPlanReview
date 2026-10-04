@@ -849,8 +849,22 @@ Delivery phases:
 3.  V0 Work Group Set editing and Standard Job save.
 4.  Historical Planning Context and copy-forward.
 5.  Standard Job profile chart.
-6.  Retire the old Work-Group-Set-first Forecast Builder UI only after
-    the new workflow is verified.
+6.  Optionally retire the old Work-Group-Set-first Forecast Builder UI in
+    a separate release, only after the new workflow is verified and the
+    product owner explicitly approves retirement.
+
+During phases 1--5, expose the new workflow through a clearly labelled
+**Forecast Builder Preview** route/navigation entry and keep the current
+builder available and operational. The two UIs must use the same canonical
+forecast persistence rather than separate or copied forecast datasets. The
+preview should be isolated sufficiently that it can be disabled or rolled
+back without removing the current workflow.
+
+The supplied mock-up is a directional hierarchy and layout reference, not
+a pixel-perfect UI contract. Retain the application's established theme and
+prefer the most usable implementation that satisfies the detailed Forecast
+Builder rules. Written business terminology and behaviour take precedence
+over illustrative mock-up labels.
 
 Do not combine this workstream with unrelated dashboard,
 reporting-period, authentication, review-pack, or schema-governance
