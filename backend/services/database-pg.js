@@ -27,6 +27,7 @@ class DatabaseServicePG {
   }
 
   async ensureSchema() {
+    await this.pool.query('CREATE TABLE IF NOT EXISTS work_order_amendment_revisions (order_id TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0)');
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS forecasts (
         id SERIAL PRIMARY KEY,
@@ -277,9 +278,8 @@ class DatabaseServicePG {
 
     // Add comments
     comments.forEach(row => {
-      if (data[row.job_number]) {
-        data[row.job_number].comments[row.work_group] = row.comment;
-      }
+      data[row.job_number] ||= { periods: {}, wgs: {}, comments: {} };
+      data[row.job_number].comments[row.work_group] = row.comment;
     });
 
     // Calculate period totals for each job
@@ -764,6 +764,46 @@ class DatabaseServicePG {
   // ========== Utility ==========
 
 
+
+  async updateWorkOrderAmendment(orderId, value, expectedRevision) {
+    await this.ready;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("INSERT INTO work_order_amendments (id, data_json) VALUES (1, '{}'::jsonb) ON CONFLICT (id) DO NOTHING");
+      const stored = await client.query('SELECT data_json FROM work_order_amendments WHERE id = 1 FOR UPDATE');
+      const revisions = await client.query('SELECT revision FROM work_order_amendment_revisions WHERE order_id = $1', [orderId]);
+      const revision = Number(revisions.rows[0]?.revision || 0);
+      if (revision !== expectedRevision) throw revisionConflict();
+      const data = { ...stored.rows[0].data_json };
+      if (value === null) delete data[orderId]; else data[orderId] = value;
+      await client.query('UPDATE work_order_amendments SET data_json = $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = 1', [JSON.stringify(data)]);
+      await client.query('INSERT INTO work_order_amendment_revisions (order_id, revision) VALUES ($1, $2) ON CONFLICT (order_id) DO UPDATE SET revision = EXCLUDED.revision', [orderId, revision + 1]);
+      await client.query('COMMIT');
+      return revision + 1;
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); }
+  }
+
+  async getWorkOrderAmendmentSnapshot() {
+    await this.ready;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("INSERT INTO work_order_amendments (id, data_json) VALUES (1, '{}'::jsonb) ON CONFLICT (id) DO NOTHING");
+      const data = await client.query('SELECT data_json FROM work_order_amendments WHERE id = 1 FOR SHARE');
+      const revisions = await client.query('SELECT order_id, revision FROM work_order_amendment_revisions');
+      await client.query('COMMIT');
+      return { data: data.rows[0].data_json, revisions: Object.fromEntries(revisions.rows.map(row => [row.order_id, Number(row.revision)])) };
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); }
+  }
+
+  async getWorkOrderAmendmentRevisions() {
+    await this.ready;
+    const result = await this.pool.query('SELECT order_id, revision FROM work_order_amendment_revisions');
+    return Object.fromEntries(result.rows.map(row => [row.order_id, Number(row.revision)]));
+  }
 
   async saveWorkOrderAmendments(data) {
     await this.ready;

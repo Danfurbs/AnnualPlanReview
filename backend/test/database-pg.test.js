@@ -10,6 +10,16 @@ Module._load = function mockPg(request, parent, isMain) {
 const DatabaseServicePG = require('../services/database-pg');
 Module._load = originalLoad;
 
+test('comment-only forecast jobs survive a full snapshot reload after override reset', async () => {
+  const service = Object.create(DatabaseServicePG.prototype);
+  service.ready = Promise.resolve();
+  service.pool = { query: async sql => ({ rows: sql.includes('FROM forecast_comments')
+    ? [{ job_number: '000123', work_group: 'WG', comment: 'Keep after reset' }]
+    : [] }) };
+  const data = await service.getForecastData('FY27', 'v1');
+  assert.deepEqual(data['000123'], { periods: {}, wgs: {}, comments: { WG: 'Keep after reset' } });
+});
+
 function serviceWithClient(handler) {
   const calls = [];
   let released = false;

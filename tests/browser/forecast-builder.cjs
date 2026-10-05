@@ -158,7 +158,7 @@ const server = http.createServer((req, res) => {
       await page.setViewportSize({ width, height: 900 });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `overflow at ${width}`);
     }
-    assert.ok(await page.locator('#forecastPage').count());
-    console.log('PASS: per-job preservation, undo/redo, exceptional WGS draft retention, historical comments and explicit zero copy, all-history charts, WGS/Engineer/DU clear isolation, cancellation, V1/history preservation, Future Work draft blocking and atomic zero import, CSV/JSON exports, full JSON import, failed-clear retention, responsive widths, legacy retained');
+    assert.equal(await page.locator('#forecastPage').count(), 0);
+    console.log('PASS: per-job preservation, undo/redo, exceptional WGS draft retention, historical comments and explicit zero copy, all-history charts, WGS/Engineer/DU clear isolation, cancellation, V1/history preservation, Future Work draft blocking and atomic zero import, CSV/JSON exports, full JSON import, failed-clear retention, responsive widths, legacy retired; V0 Builder retained');
   } finally { await browser?.close(); server.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

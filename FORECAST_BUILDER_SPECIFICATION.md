@@ -2,7 +2,7 @@
 
 Repo: `Danfurbs/AnnualPlanReview`.
 
-## Implementation status — 4 October 2026
+## Implementation status — 5 October 2026
 
 RF6 is complete. Phases 1–5 are implemented in the parallel Preview. Local browser checks cover editing, cross-Engineer row preservation, undo/redo, exceptional Work Group Set addition, historical context, all-history chart data, explicit-zero copying, scoped clear operations and responsive widths. These checks do not prove production deployment or PostgreSQL cleanup.
 
@@ -11,7 +11,7 @@ RF6 is complete. Phases 1–5 are implemented in the parallel Preview. Local bro
 - Phase 5: default aggregate profile for all Work Group Sets shown in the job, with previous/next controls for individual sets. Current V0 updates live; historical profiles blend available session Work Done with effective forecast and label transitions. Show all history overlays older years. Copy to forecast is enabled only for an individual Work Group Set.
 - Future Work import patches only reported cells and adds its source comment. It blocks import while an affected Standard Job is dirty, retains unrelated drafts and uses one forecast transaction; no separate planning-metadata writes are needed for discovery. Failed imports retain drafts and are retryable.
 - V0 maintenance: Undo / Redo / Discard edits per job; scoped CSV/JSON exports; whole-FY V0 replacement from CSV/Excel/JSON; Clear All for the selected DU, Clear selected Engineer and Clear selected Work Group Set. Typed confirmation identifies the FY and target. Clear actions remove V0 volumes and forecast comments only, retaining V1, other FYs, RF comments/statuses and planning flags. Current ownership defines scope; exceptional display associations never reassign ownership.
-- Phase 6: explicitly deferred by the user. Keep the legacy builder accessible until the user reviews and accepts the replacement. Do not infer retirement permission from completed tests.
+- Phase 6: explicitly authorised by the user on 5 October 2026. The legacy Builder and bulk V1 workflow are removed. The new Builder manages V0; V1 changes are made individually during Standard Job review.
 
 See FORECAST_IMPLEMENTATION_PLAN_UPDATED.md for the remaining post-RF6 business-rule backlog.
 

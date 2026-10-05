@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Annual Plan Review</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -12,24 +13,103 @@
         <div class="top-bar-title">
           <div class="top-bar-icon">APR</div>
           <div>
-            <h1>Annual Plan Review - Enhanced</h1>
+            <h1>Annual Plan Review</h1>
             <p class="subtitle">Comprehensive variance analysis and commentary tool</p>
           </div>
         </div>
         <div class="top-bar-actions">
           <button class="group-action-button" onclick="openBaselinePage()">Baseline Management</button>
-          <button class="group-action-button" onclick="openForecastEditor()">Forecast Builder</button>
-          <button class="group-action-button preview-button" onclick="openForecastBuilderPreview()">Forecast Builder Preview</button>
+          <button class="group-action-button preview-button" onclick="openForecastBuilderPreview()">Forecast Builder</button>
           <button class="primary-button" onclick="openModal()">Upload Files</button>
           <button class="settings-button" onclick="openSettings()" title="Settings">⚙️</button>
         </div>
       </div>
     </header>
 
+    <p id="saveStateIndicator" role="status">No saves this session</p>
+    <button id="retryCorrections" type="button" class="group-action-button" hidden onclick="retryWorkOrderCorrections()">Retry corrections</button>
+    <p id="reportingContext" class="reporting-context" role="status"></p>
+    <div class="controls">
+      <div class="control-group">
+        <label>Review stage</label>
+        <button type="button" class="group-action-button" id="reviewStageButton" onclick="openStageModal()">Select review stage</button>
+        <span class="helper-text" id="reviewStageHelper"></span>
+      </div>
+      <div class="control-group">
+        <label for="dashboardPlanVersion">Plan version</label>
+        <select id="dashboardPlanVersion" onchange="handleDashboardPlanVersionChange()">
+          <option value="v0">V0 — Original Approved Plan</option>
+          <option value="v1">V1 / Reforecast</option>
+        </select>
+        <span class="helper-text">V1 amendments override V0; unchanged values continue to inherit V0.</span>
+      </div>
+      <div class="control-group">
+        <label>Reporting Period</label>
+        <p id="workDoneSessionStatus" role="status">Work Done not uploaded.</p>
+        <label for="reportingPeriodSelect">Completed reporting period</label>
+        <select id="reportingPeriodSelect"><option value="">Select reporting period…</option><option value="P0">P0 — no completed periods</option><option value="P1">P1</option><option value="P2">P2</option><option value="P3">P3</option><option value="P4">P4</option><option value="P5">P5</option><option value="P6">P6</option><option value="P7">P7</option><option value="P8">P8</option><option value="P9">P9</option><option value="P10">P10</option><option value="P11">P11</option><option value="P12">P12</option><option value="P13">P13</option></select>
+        <span class="helper-text">Periods through this completed-period cutoff use corrected Work Done; later periods use the latest effective forecast.</span>
+      </div>
+      <div class="control-group">
+        <label for="wgFilter">Work group set</label>
+        <select id="wgFilter" onchange="render()">
+          <option value="all">All Work Group Sets</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="engineerFilter">Engineer</label>
+        <select id="engineerFilter" onchange="onEngineerFilterChange()">
+          <option value="all">All Engineers</option>
+        </select>
+      </div>
+      <div class="control-group" id="groupFilterContainer" style="display: none;">
+        <label for="groupFilter">Group filter</label>
+        <select id="groupFilter" onchange="render()">
+          <option value="all">All Standard Jobs</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="reviewStatusFilter">Review status</label>
+        <select id="reviewStatusFilter" onchange="render()">
+          <option value="all">All Review Statuses</option>
+          <option value="needsreview">Needs Review</option>
+          <option value="reviewed">Reviewed</option>
+        </select>
+        <span class="helper-text">Filters against the selected review stage</span>
+      </div>
+      <div class="control-group">
+        <label for="varianceFilter">Variance filter</label>
+        <select id="varianceFilter" onchange="render()">
+          <option value="all">Show All</option>
+          <option value="good">Show On Track (Green)</option>
+          <option value="warning">Show Minor Variance (Amber)</option>
+          <option value="bad">Show Critical (Red)</option>
+          <option value="over">Show Over Delivery</option>
+          <option value="under">Show Under Delivery</option>
+          <option value="variance">Show Any Variances</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="hideZeroVolume">
+          <input type="checkbox" id="hideZeroVolume" onchange="render()" style="margin-right: 8px; width: auto;">
+          Hide zero volume cards
+        </label>
+        <span class="helper-text">Hide jobs with 0 forecast AND 0 work done</span>
+      </div>
+      <div class="control-group">
+        <label for="search">Search</label>
+        <input type="search" id="search" placeholder="Search..." oninput="render()">
+      </div>
+      <div class="control-group">
+        <label>&nbsp;</label>
+        <button type="button" class="group-action-button" onclick="openGroupModal()">Manage Groups</button>
+      </div>
+    </div>
+    <div id="performanceSummary" class="performance-summary" aria-live="polite"></div>
     <div class="forecast-health">
       <div class="health-header">
         <h3>Forecast Health</h3>
-        <p class="health-explainer">RAG status is derived from the absolute variance ratio vs forecast: &gt;50% is red, &gt;10% is amber, otherwise green.</p>
+        <p class="health-explainer">RAG status is derived from the absolute variance ratio vs forecast: &ge;50% is red, &ge;10% and &lt;50% is amber, otherwise green.</p>
       </div>
       <div class="health-content">
         <div class="health-main">
@@ -119,96 +199,7 @@
       </div>
     </div>
 
-    <div class="controls">
-      <div class="control-group">
-        <label>Review stage</label>
-        <button type="button" class="group-action-button" id="reviewStageButton" onclick="openStageModal()">Select review stage</button>
-        <span class="helper-text" id="reviewStageHelper"></span>
-      </div>
-      <div class="control-group">
-        <label for="dashboardPlanVersion">Plan version</label>
-        <select id="dashboardPlanVersion" onchange="handleDashboardPlanVersionChange()">
-          <option value="v0">V0 — Original Approved Plan</option>
-          <option value="v1">V1 / Reforecast</option>
-        </select>
-        <span class="helper-text">V1 amendments override V0; unchanged values continue to inherit V0.</span>
-      </div>
-      <div class="control-group">
-        <label>Reporting Period</label>
-        <p id="workDoneSessionStatus" role="status">Work Done not uploaded.</p>
-        <div id="forecastCutoffTimeline" class="cutoff-timeline" role="radiogroup" aria-label="Forecast cutoff timeline">
-          <button type="button" class="cutoff-chip active" data-value="auto">Auto</button>
-          <button type="button" class="cutoff-chip" data-value="P1">P1</button>
-          <button type="button" class="cutoff-chip" data-value="P2">P2</button>
-          <button type="button" class="cutoff-chip" data-value="P3">P3</button>
-          <button type="button" class="cutoff-chip" data-value="P4">P4</button>
-          <button type="button" class="cutoff-chip" data-value="P5">P5</button>
-          <button type="button" class="cutoff-chip" data-value="P6">P6</button>
-          <button type="button" class="cutoff-chip" data-value="P7">P7</button>
-          <button type="button" class="cutoff-chip" data-value="P8">P8</button>
-          <button type="button" class="cutoff-chip" data-value="P9">P9</button>
-          <button type="button" class="cutoff-chip" data-value="P10">P10</button>
-          <button type="button" class="cutoff-chip" data-value="P11">P11</button>
-          <button type="button" class="cutoff-chip" data-value="P12">P12</button>
-          <button type="button" class="cutoff-chip" data-value="P13">P13</button>
-        </div>
-        <span class="helper-text">Periods through this completed-period cutoff use corrected Work Done; later periods use the latest effective forecast.</span>
-      </div>
-      <div class="control-group">
-        <label for="wgFilter">Work group set</label>
-        <select id="wgFilter" onchange="render()">
-          <option value="all">All Work Group Sets</option>
-        </select>
-      </div>
-      <div class="control-group">
-        <label for="engineerFilter">Engineer</label>
-        <select id="engineerFilter" onchange="onEngineerFilterChange()">
-          <option value="all">All Engineers</option>
-        </select>
-      </div>
-      <div class="control-group" id="groupFilterContainer" style="display: none;">
-        <label for="groupFilter">Group filter</label>
-        <select id="groupFilter" onchange="render()">
-          <option value="all">All Standard Jobs</option>
-        </select>
-      </div>
-      <div class="control-group">
-        <label for="reviewStatusFilter">Review status</label>
-        <select id="reviewStatusFilter" onchange="render()">
-          <option value="all">All Review Statuses</option>
-          <option value="needsreview">Needs Review</option>
-          <option value="reviewed">Reviewed</option>
-        </select>
-        <span class="helper-text">Filters against the selected review stage</span>
-      </div>
-      <div class="control-group">
-        <label for="varianceFilter">Variance filter</label>
-        <select id="varianceFilter" onchange="render()">
-          <option value="all">Show All</option>
-          <option value="good">Show On Track (Green)</option>
-          <option value="warning">Show Minor Variance (Amber)</option>
-          <option value="bad">Show Critical (Red)</option>
-          <option value="over">Show Over Delivery</option>
-          <option value="under">Show Under Delivery</option>
-          <option value="variance">Show Any Variances</option>
-        </select>
-      </div>
-      <div class="control-group">
-        <label for="hideZeroVolume">
-          <input type="checkbox" id="hideZeroVolume" onchange="render()" style="margin-right: 8px; width: auto;">
-          Hide zero volume cards
-        </label>
-        <span class="helper-text">Hide jobs with 0 forecast AND 0 work done</span>
-      </div>
-      <div class="control-group">
-        <label for="search">Search</label>
-        <input type="search" id="search" placeholder="Search..." oninput="render()">
-      </div>
-      <div class="control-group">
-        <label>&nbsp;</label>
-        <button type="button" class="group-action-button" onclick="openGroupModal()">Manage Groups</button>
-      </div>
-    </div>
+
 
     <div id="jobs"></div>
   </div>
@@ -280,6 +271,7 @@
         <p class="helper-text">Required columns: Standard Job Number, Comment Type, Comment</p>
         <div class="upload-export-actions">
           <button type="button" onclick="exportComments()">Export Comments</button>
+          <label for="summaryExportYears">Summary export financial years (select one or more)</label><select id="summaryExportYears" multiple size="4"></select>
           <button type="button" onclick="exportWorkGroupJobSummary()">Export Work Group Job Summary</button>
           <button type="button" onclick="exportForecastSummary()">Export Forecast Summary</button>
         </div>
@@ -335,134 +327,23 @@
 
   </div>
 
-  <div class="container page is-hidden" id="forecastPage">
-    <div class="forecast-page-header">
-      <div class="forecast-page-title">
-        <div class="forecast-page-icon">FB</div>
-        <div>
-          <h1>Forecast Builder</h1>
-          <p class="subtitle">Build the FY-wide forecast (v0 initial or v1 updated) used across all RF stages.</p>
-        </div>
-      </div>
-      <div class="forecast-page-actions">
-        <button class="group-action-button" onclick="closeForecastEditor()">Back to Dashboard</button>
-        <button class="primary-button" type="button" onclick="submitForecastEditorForm()">Save All Changes</button>
-      </div>
-    </div>
-    <div class="forecast-page-layout">
-      <aside class="forecast-sidebar">
-        <div class="forecast-card">
-          <h4>Forecast context</h4>
-          <div class="control-row">
-            <div class="control-group control-group--half">
-              <label for="forecastEditorYear">Year</label>
-              <select id="forecastEditorYear"></select>
-            </div>
-            <div class="control-group control-group--half">
-              <label for="forecastEditorPlan">Plan</label>
-              <select id="forecastEditorPlan"></select>
-            </div>
-          </div>
-        </div>
 
-        <div class="forecast-card">
-          <h4>Current Work Group</h4>
-          <div class="current-wg-display" id="currentWorkGroupDisplay">
-            <span class="current-wg-none">No work group selected</span>
-          </div>
-          <div class="wg-stats">
-            <div class="wg-stat">
-              <span class="wg-stat-value" id="forecastEditorJobCount">0</span>
-              <span class="wg-stat-label">Jobs</span>
-            </div>
-            <div class="wg-stat">
-              <span class="wg-stat-value" id="forecastEditorTotalVolume">0</span>
-              <span class="wg-stat-label">Volume</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="forecast-card forecast-card--workgroups-large">
-          <div class="wg-selector-header">
-            <h4>Work Groups</h4>
-            <div class="wg-filter-tabs">
-              <button type="button" class="wg-filter-tab active" data-filter="all">All</button>
-              <button type="button" class="wg-filter-tab" data-filter="without-data">Todo</button>
-              <button type="button" class="wg-filter-tab" data-filter="with-data">Done</button>
-            </div>
-          </div>
-          <input type="search" id="workGroupSearch" class="wg-search" placeholder="Search work groups...">
-          <div class="wg-selector-list" id="workGroupSelectorList">
-            <!-- Populated by JS -->
-          </div>
-        </div>
-
-        <div class="forecast-card">
-          <h4>Actions</h4>
-          <div class="forecast-action-list">
-            <button type="button" class="primary-button" onclick="openCopyWorkGroupsToV1Modal()" title="Review and select the work group sets to copy from Plan v0 into Plan v1">Select workgroups to copy to V1</button>
-            <button type="button" onclick="addForecastEditorRow()">+ Add Row</button>
-            <button type="button" class="group-action-button" onclick="openCopyActualsModal()" id="copyActualsBtn">Copy from Work Done</button>
-            <button type="button" class="group-action-button" onclick="initializeV1FromV0Explicit()" id="initV1Btn" title="Reset only the selected work group from Plan v0">Reset current work group from v0</button>
-            <button type="button" class="group-action-button" onclick="downloadTotalForecastExport()" title="Export every populated work group and standard job">Export All Work Groups</button>
-            <button type="button" class="group-action-button" onclick="triggerFullForecastUpload()" title="Replace Plan v0 or v1 using an Export All Work Groups file">Upload Full Forecast</button>
-            <input type="file" id="fullForecastFileInput" accept=".csv,.xlsx,.xls,text/csv" class="is-hidden" onchange="prepareFullForecastUpload(event)">
-            <button type="button" class="group-action-button" onclick="clearForecastEditorTable()">Clear</button>
-          </div>
-        </div>
-      </aside>
-      <main class="forecast-main">
-        <div class="forecast-main-header">
-          <div>
-            <h3>Forecast Entries <span class="badge" id="forecastEditorLoadedBadge">0 jobs loaded</span></h3>
-            <p class="forecast-editor-meta" id="forecastEditorSummary"></p>
-          </div>
-          <div class="forecast-toolbar">
-            <div class="forecast-toolbar-left">
-              <button type="button" id="undoButton" class="icon-button" title="Undo (Ctrl+Z)" disabled>
-                <span>↶</span> Undo
-              </button>
-              <button type="button" id="redoButton" class="icon-button" title="Redo (Ctrl+Y)" disabled>
-                <span>↷</span> Redo
-              </button>
-            </div>
-            <input type="search" id="forecastEditorSearch" placeholder="Search job number...">
-          </div>
-        </div>
-        <form id="forecastEditorForm" class="forecast-editor-form">
-          <div class="forecast-editor-table">
-            <label>Standard job forecast table</label>
-            <p class="helper-text">Copy rows from Excel (job numbers + P1–P13 values) and paste directly into the table. Click on the first cell where you want to paste, then paste. Rows are auto-created and totals update automatically.</p>
-            <div class="forecast-editor-table-wrapper">
-              <table class="forecast-table" id="forecastEditorTable"></table>
-            </div>
-            <datalist id="forecastEditorJobOptions"></datalist>
-          </div>
-          <div class="forecast-editor-actions">
-            <button type="submit">Save Forecast Entries</button>
-          </div>
-          <p class="forecast-editor-meta" id="forecastEditorStatus"></p>
-        </form>
-      </main>
-    </div>
-  </div>
 
   <div class="container page is-hidden" id="forecastBuilderPreviewPage">
     <div class="forecast-page-header preview-page-header">
       <div class="forecast-page-title">
         <div class="forecast-page-icon">FB</div>
         <div>
-          <div class="preview-eyebrow">Preview workflow</div>
+          <div class="preview-eyebrow">V0 planning</div>
           <h1>Forecast Builder</h1>
           <p class="subtitle">Build V0 by Engineer → Standard Job → Work Group Set</p>
         </div>
       </div>
       <div class="forecast-page-actions">
-        <span class="preview-save-state" id="forecastPreviewState" role="status" aria-live="polite">Read-only planning view</span>
+        <span class="preview-save-state" id="forecastPreviewState" role="status" aria-live="polite">Select an Engineer to plan V0</span>
         <label class="preview-year-control" for="forecastPreviewYear">Planning FY
           <select id="forecastPreviewYear"></select>
         </label>
-        <button class="group-action-button" type="button" onclick="openProductionForecastBuilderFromPreview()">Current Forecast Builder</button>
         <button class="primary-button" type="button" onclick="closeForecastBuilderPreview()">Back to Dashboard</button>
       </div>
     </div>
@@ -653,139 +534,13 @@
     </div>
   </div>
 
-  <div id="fullForecastUploadModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <div>
-          <h2>Upload full forecast</h2>
-          <p class="helper-text" id="fullForecastUploadFileName"></p>
-        </div>
-        <button type="button" class="close" onclick="closeFullForecastUploadModal()" aria-label="Close">&times;</button>
-      </div>
-      <div class="control-group">
-        <label for="fullForecastUploadPlan">Plan to replace</label>
-        <select id="fullForecastUploadPlan">
-          <option value="v0">Plan v0 (Original)</option>
-        </select>
-        <p class="helper-text">This upload replaces the initial annual plan (v0) for the Forecast Builder year. Make Plan v1 changes through the job breakdown or bulk work-group editor in the app.</p>
-        <label class="forecast-upload-checkbox"><input id="fullForecastIncludeComments" type="checkbox" checked> Include comments from the upload</label>
-        <p class="helper-text">Uncheck to ignore uploaded comments and clear every existing workgroup comment in the replaced plan.</p>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="group-action-button" onclick="closeFullForecastUploadModal()">Cancel</button>
-        <button type="button" class="primary-button" onclick="confirmFullForecastUpload()">Review and replace plan</button>
-      </div>
-    </div>
-  </div>
 
-  <div id="copyWorkGroupsToV1Modal" class="modal">
-    <div class="modal-content modal-content--wide">
-      <div class="modal-header">
-        <div>
-          <h2>Select workgroups to copy to V1</h2>
-          <p class="helper-text">Review existing V1 values before replacing selected workgroup sets with their V0 forecast.</p>
-        </div>
-        <button class="close" onclick="closeCopyWorkGroupsToV1Modal()" aria-label="Close">&times;</button>
-      </div>
-      <div class="copy-wg-toolbar">
-        <input type="search" id="copyWorkGroupsSearch" placeholder="Search workgroups..." aria-label="Search workgroups">
-        <select id="copyWorkGroupsStatusFilter" aria-label="Filter by V1 status">
-          <option value="all">All statuses</option>
-          <option value="amended">Amended in V1</option>
-          <option value="same">Matches V0</option>
-          <option value="empty">Not in V1</option>
-        </select>
-        <button type="button" class="group-action-button" onclick="setAllCopyWorkGroups(true)">Select all shown</button>
-        <button type="button" class="group-action-button" onclick="clearCopyWorkGroupSelection()">Clear selection</button>
-        <strong id="copyWorkGroupsSelectionCount">0 selected</strong>
-      </div>
-      <div class="copy-wg-warning">Selecting a row replaces that entire workgroup in V1, including removing V1-only jobs. Rows marked <strong>Amended</strong> already differ from V0.</div>
-      <div class="copy-wg-impact" id="copyWorkGroupsImpact" aria-live="polite"></div>
-      <div class="copy-wg-table-wrap">
-        <table class="copy-wg-table">
-          <thead><tr><th>Select</th><th>Workgroup set</th><th>V0 jobs</th><th>V1 jobs</th><th>Changed jobs</th><th>V0 volume</th><th>V1 volume</th><th>Variation</th><th>Status</th></tr></thead>
-          <tbody id="copyWorkGroupsTableBody"></tbody>
-        </table>
-      </div>
-      <div class="comment-actions copy-wg-actions">
-        <button type="button" class="group-action-button" onclick="closeCopyWorkGroupsToV1Modal()">Cancel</button>
-        <button type="button" class="primary-button" id="copySelectedWorkGroupsButton" onclick="copySelectedWorkGroupsToV1()" disabled>Copy selected workgroups to V1</button>
-      </div>
-    </div>
-  </div>
 
-  <div id="copyActualsModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Copy from Work Done</h2>
-        <button class="close" onclick="closeCopyActualsModal()">&times;</button>
-      </div>
-      <p class="helper-text">Copy actual work done values into the forecast. This will replace forecast values with actuals for the selected jobs and periods.</p>
 
-      <form id="copyActualsForm" onsubmit="handleCopyActuals(event)">
-        <div class="control-group">
-          <label for="copyActualsPeriod">Copy actuals through period</label>
-          <select id="copyActualsPeriod" required>
-            <option value="">Select period...</option>
-            <option value="P1">P1</option>
-            <option value="P2">P2</option>
-            <option value="P3">P3</option>
-            <option value="P4">P4</option>
-            <option value="P5">P5</option>
-            <option value="P6">P6</option>
-            <option value="P7">P7</option>
-            <option value="P8">P8</option>
-            <option value="P9">P9</option>
-            <option value="P10">P10</option>
-            <option value="P11">P11</option>
-            <option value="P12">P12</option>
-            <option value="P13">P13</option>
-          </select>
-          <span class="helper-text">Periods after this will keep forecast values</span>
-        </div>
 
-        <div class="control-group">
-          <label for="copyActualsJobSelection">Apply to jobs</label>
-          <select id="copyActualsJobSelection" required onchange="updateCopyActualsJobList()">
-            <option value="all">All jobs with work done in this work group</option>
-            <option value="current">Only jobs currently in forecast table</option>
-            <option value="select">Select specific jobs...</option>
-          </select>
-        </div>
 
-        <div class="control-group is-hidden" id="copyActualsJobListGroup">
-          <label>Select jobs to update</label>
-          <div id="copyActualsJobList" class="checkbox-list"></div>
-        </div>
 
-        <div class="control-group">
-          <p class="helper-text" id="copyActualsPreview" style="background: #f0f9ff; padding: 12px; border-radius: 4px; margin-top: 12px;"></p>
-        </div>
 
-        <div class="comment-actions">
-          <button type="submit" class="primary-button">Copy Actuals</button>
-          <button type="button" class="group-action-button" onclick="closeCopyActualsModal()">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div id="importConflictsModal" class="modal">
-    <div class="modal-content modal-content--wide">
-      <div class="modal-header">
-        <h2>Import Forecast - Resolve Conflicts</h2>
-        <button class="close" onclick="closeImportConflictsModal()">&times;</button>
-      </div>
-      <p class="helper-text">The uploaded forecast has conflicts with your current data. Choose which values to keep.</p>
-
-      <div id="importConflictsList" class="import-conflicts-list"></div>
-
-      <div class="comment-actions" style="margin-top: 20px;">
-        <button type="button" class="primary-button" onclick="applyImportConflictResolution()">Apply Selected Values</button>
-        <button type="button" class="group-action-button" onclick="closeImportConflictsModal()">Cancel Import</button>
-      </div>
-    </div>
-  </div>
 
   <div id="breakdown" class="modal">
     <div class="modal-content modal-content--wide">
@@ -931,9 +686,10 @@
         </div>
         <button type="button" class="close" onclick="closeWorkGroupPlanEditor()" aria-label="Close">&times;</button>
       </div>
+      <p class="helper-text">Blank inherits V0; enter 0 to explicitly forecast zero. Using V0 retains your forecast comments.</p>
       <div id="workGroupPlanEditGrid" class="wg-plan-edit-grid"></div>
       <div class="modal-actions">
-        <button type="button" class="danger-button" id="resetWorkGroupPlanEdit" onclick="resetBreakdownPlanV1()" hidden>Reset to Plan v0</button>
+        <button type="button" class="danger-button" id="resetWorkGroupPlanEdit" onclick="resetBreakdownPlanV1()" hidden>Use V0 for all periods</button>
         <button type="button" class="group-action-button" onclick="closeWorkGroupPlanEditor()">Cancel</button>
         <button type="button" class="primary-button" id="saveWorkGroupPlanEdit" onclick="saveBreakdownPlanV1()">Save Plan v1 override</button>
       </div>
@@ -1135,7 +891,6 @@
   <!-- Utilities -->
   <script src="utils.js"></script>
   <script src="ui-feedback.js"></script>
-  <script src="undo-redo.js"></script>
   <!-- Data -->
   <script src="work-group-utils.js"></script>
   <script src="organisation-data.js"></script>
@@ -1146,6 +901,7 @@
   <script src="data-migration.js"></script>
   <!-- Forecast modules (must load before app.js) -->
   <script src="forecast-globals.js"></script>
+  <script src="forecast-model.js"></script>
   <script src="forecast-storage.js"></script>
   <script src="forecast-state.js"></script>
   <script src="forecast-builder-data.js"></script>
@@ -1153,7 +909,6 @@
   <script src="work-done-session.js"></script>
   <script src="forecast-builder-actions.js"></script>
   <script src="forecast-builder-preview.js"></script>
-  <script src="forecast-editor.js"></script>
   <script src="baseline-storage.js"></script>
   <script src="baseline-page.js"></script>
   <script src="app.js"></script>

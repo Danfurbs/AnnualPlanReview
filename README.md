@@ -44,7 +44,7 @@ For long-term safety, take periodic external PostgreSQL backups (`pg_dump "$DATA
 
 ## Current development state
 
-As of 4 October 2026, RF6 is complete for development planning. Read these files in order:
+As of 5 October 2026, RF6 is complete for development planning. The legacy Builder has been retired with user approval; V1 changes are made individually in the Standard Job review screen. Read these files in order:
 
 1. This README for architecture and setup.
 2. [Business rules](FORECAST_BUSINESS_RULES_UPDATED.md) for authoritative semantics.
@@ -70,8 +70,16 @@ Tests include in-memory SQLite cleanup integration and mocked PostgreSQL checks.
 
 API status polling is a connectivity check, not live cross-device synchronisation. Refresh to load saved business data from another device; this also clears session Work Done. There is no authentication yet. Enabling API mode does not automatically migrate local forecasts; migration utilities are explicit operations.
 
-## Forecast Builder Preview
+## Forecast Builder
 
 The new Engineer → Standard Job → Work Group Set Builder now includes historical Planning Context, individual/aggregate profile charts, Show all history, Undo/Redo/Discard, Future Work import, V0 CSV/JSON export and full V0 CSV/Excel/JSON replacement. Its maintenance controls clear all V0 in the selected DU, one selected Engineer or one selected Work Group Set, after typed confirmation. Other DUs, V1, historical FYs and review/planning flags are retained. Exceptional rows follow current ownership for scope; adding them to a workspace does not transfer ownership.
 
-Keep the legacy Builder available until explicit user acceptance. Use tests/browser/forecast-builder.cjs and tests/browser/work-done.cjs for browser acceptance with Playwright installed. Set PLAYWRIGHT_MODULE and BROWSER_EXECUTABLE where the module/browser are not on default paths. These scripts use an isolated local server and browser data; workbook/chart decoding is stubbed, so real Excel parsing and Chart.js rendering still need validation with operational files.
+The Engineer → Standard Job Builder is now the V0 planning interface. Bulk V1 editing/copying/import controls have been removed. Review a Standard Job and edit individual Work Group periods for V1; blank means inherit V0, zero means an explicit override. Resetting V1 keeps forecast comments, including comment-only records on database reload.
+
+Reporting Period is a manual P0–P13 selection saved per browser/FY, independent of RF stage. Missing Work Done or an unselected period makes delivery performance unavailable. Compatible-unit selections show period-to-date performance, full-year Actual and V0-to-Reforecast movement. Work Done remains memory-only.
+
+Server connectivity and save status are separate. Failed API saves keep drafts and do not fall back to a misleading local success. Forecast conflicts fetch server values and merge unrelated edits; overlapping edits require an explicit choice. Work Order corrections use revision-checked per-order updates, with a Retry corrections action for pending drafts.
+
+The backend serves only an explicit frontend asset allowlist. Startup adds the work_order_amendment_revisions table without changing existing corrections. Older clients attempting whole-store correction writes receive HTTP 409 and must reload the application; reload clears session Work Done. Authentication remains outside this release.
+
+Use tests/browser/forecast-builder.cjs, tests/browser/work-done.cjs and tests/browser/review-fixes.cjs for browser acceptance. Set PLAYWRIGHT_MODULE and BROWSER_EXECUTABLE where necessary. The first two suites stub external workbook/chart libraries; set REAL_BROWSER_LIBRARIES=true for review-fixes.cjs to exercise the pinned real XLSX and Chart.js libraries with synthetic workbooks. Browser checks use an isolated local server and browser data. Operational-file and production PostgreSQL acceptance are still required before deployment.

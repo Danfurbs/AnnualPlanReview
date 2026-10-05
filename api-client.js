@@ -90,7 +90,23 @@ loadApiConfig();
  */
 const inFlightRequests = new Map();
 const forecastRevisions = new Map();
+const forecastBases = new Map();
 let reviewRevision = 0;
+let amendmentRevisions = {};
+let amendmentQueue = Promise.resolve();
+const failedWrites = new Map();
+let activeWrites = 0;
+let lastConfirmedSave = null;
+function updateSaveStatus() {
+  const text = activeWrites ? 'Saving…' : failedWrites.size ? 'Not saved — retry the affected action' : lastConfirmedSave ? 'Saved ' + lastConfirmedSave.toLocaleTimeString() : 'No saves this session';
+  const target = typeof document !== 'undefined' && document.getElementById('saveStateIndicator');
+  if (target) target.textContent = text;
+}
+window.updateSaveStatus = updateSaveStatus;
+window.recordLocalSave = () => {
+  const target = typeof document !== 'undefined' && document.getElementById('saveStateIndicator');
+  if (target) target.textContent = 'Saved locally ' + new Date().toLocaleTimeString();
+};
 // Review writes replace the complete server-side snapshot and use an optimistic
 // revision. Keep them in order so rapid status changes cannot all leave with the
 // same expected revision and cause avoidable 409 responses.
@@ -179,6 +195,8 @@ async function apiRequest(endpoint, options = {}) {
     return existingRequest;
   }
 
+  const isWrite = method !== 'GET' && method !== 'HEAD';
+  if (isWrite) { activeWrites++; updateSaveStatus(); }
   // Create the request promise and track it
   const requestPromise = (async () => {
     let lastError;
@@ -204,7 +222,12 @@ async function apiRequest(endpoint, options = {}) {
           throw err;
         }
 
-        return await response.json();
+        const result = await response.json();
+        if (isWrite) {
+          if (result.success === false) throw new Error(result.error || 'Save was not confirmed');
+          failedWrites.delete(method + ':' + endpoint); lastConfirmedSave = new Date();
+        }
+        return result;
       } catch (err) {
         lastError = err;
         lastStatus = typeof err.status === 'number' ? err.status : null;
@@ -243,9 +266,11 @@ async function apiRequest(endpoint, options = {}) {
     finalError.method = method;
     finalError.status = lastStatus;
 
+    if (isWrite) failedWrites.set(method + ':' + endpoint, finalError.message);
     throw finalError;
   })();
 
+  if (isWrite) requestPromise.then(() => { activeWrites--; updateSaveStatus(); }, () => { activeWrites--; updateSaveStatus(); });
   // Track the in-flight request
   inFlightRequests.set(cacheKey, requestPromise);
 
@@ -367,6 +392,7 @@ async function loadForecastFromApi(year, planVersion) {
 
     if (response.success && response.data) {
       forecastRevisions.set(`${year}:${planVersion}`, response.revision || 0);
+      forecastBases.set(`${year}:${planVersion}`, structuredClone(response.data));
       const hydrated = window.hydrateForecastData(response.data);
       return {
         data: hydrated,
@@ -390,7 +416,7 @@ async function loadForecastFromApi(year, planVersion) {
  * @param {string} planVersion - Plan version
  * @returns {Promise<boolean>} - Success status
  */
-async function saveForecastToApi(forecastData, rowCount, year, planVersion) {
+async function saveForecastToApi(forecastData, rowCount, year, planVersion, canMerge = true) {
   if (!isApiEnabled()) return false;
 
   const endpoint = `/forecasts/${year}/${planVersion}`;
@@ -416,17 +442,38 @@ async function saveForecastToApi(forecastData, rowCount, year, planVersion) {
       method: 'POST',
       body: { data: serialized, expectedRevision: forecastRevisions.get(`${year}:${planVersion}`) ?? 0 }
     });
-    if (response.success) forecastRevisions.set(`${year}:${planVersion}`, response.revision);
+    if (response.success) {
+      forecastRevisions.set(`${year}:${planVersion}`, response.revision);
+      forecastBases.set(`${year}:${planVersion}`, structuredClone(serialized));
+    }
     return response.success === true;
   } catch (err) {
-    if (err.status === 409) window.Toast?.error('This forecast changed in another session. Reload before saving again.');
+    if (err.status === 409 && canMerge) {
+      const key = year + ':' + planVersion, base = forecastBases.get(key), revision = forecastRevisions.get(key);
+      const latest = await loadForecastFromApi(year, planVersion);
+      if (latest && base && window.ForecastModel) {
+        const merged = window.ForecastModel.mergeChanges(base, window.serializeForecastData(forecastData), window.serializeForecastData(latest.data));
+        // Aggregate periods are derived, never independent editing intent.
+        merged.conflicts = merged.conflicts.filter(path => !/^[^.]+\.periods\./.test(path));
+        if (!merged.conflicts.length || window.confirm('The server changed these fields: ' + merged.conflicts.slice(0, 8).join(', ') + '. Keep your draft values for these conflicts? Other server changes will be preserved.')) {
+          Object.values(merged.value).forEach(job => job.periods = window.recalculatePeriodsFromWgs(job.wgs));
+          const map = window.hydrateForecastData(merged.value);
+          const ok = await saveForecastToApi(map, map.size, year, planVersion, false);
+          if (ok) { forecastData.clear(); map.forEach((value, key) => forecastData.set(key, value)); }
+          if (!ok) { forecastBases.set(key, base); forecastRevisions.set(key, revision); }
+          return ok;
+        }
+      }
+      forecastBases.set(key, base); forecastRevisions.set(key, revision);
+      window.Toast?.error('Not saved. Latest forecast fetched; your draft and Work Done upload are retained.');
+    }
     console.error(`Failed to save forecast to API (POST ${endpoint}):`, err);
     return false;
   }
 }
 
 /** Save one edited job without replacing the entire financial-year snapshot. */
-async function saveForecastJobToApi(jobNumber, forecastData, year, planVersion) {
+async function saveForecastJobToApi(jobNumber, forecastData, year, planVersion, canMerge = true) {
   if (!isApiEnabled()) return false;
   const endpoint = `/forecasts/${year}/${planVersion}/job/${encodeURIComponent(jobNumber)}`;
   const validation = validateSerializedForecastData({ [jobNumber]: forecastData });
@@ -439,9 +486,30 @@ async function saveForecastJobToApi(jobNumber, forecastData, year, planVersion) 
       method: 'POST',
       body: { ...forecastData, expectedRevision: forecastRevisions.get(`${year}:${planVersion}`) ?? 0 }
     });
-    if (response.success) forecastRevisions.set(`${year}:${planVersion}`, response.revision);
+    if (response.success) {
+      forecastRevisions.set(`${year}:${planVersion}`, response.revision);
+      const base = forecastBases.get(`${year}:${planVersion}`) || {};
+      base[jobNumber] = structuredClone(forecastData);
+      forecastBases.set(`${year}:${planVersion}`, base);
+    }
     return response.success === true;
   } catch (err) {
+    if (err.status === 409 && canMerge) {
+      const key = year + ':' + planVersion, originalBase = forecastBases.get(key), base = originalBase?.[jobNumber], revision = forecastRevisions.get(key);
+      const latest = await loadForecastFromApi(year, planVersion);
+      if (latest && window.ForecastModel) {
+        const merged = window.ForecastModel.mergeChanges(base, forecastData, latest.data.get(jobNumber));
+        merged.conflicts = merged.conflicts.filter(path => !path.startsWith('periods.'));
+        if (merged.value && (!merged.conflicts.length || window.confirm('This job changed in another session: ' + merged.conflicts.join(', ') + '. Keep your draft values for these conflicts?'))) {
+          merged.value.periods = window.recalculatePeriodsFromWgs(merged.value.wgs);
+          const ok = await saveForecastJobToApi(jobNumber, merged.value, year, planVersion, false);
+          if (ok) { Object.keys(forecastData).forEach(key => delete forecastData[key]); Object.assign(forecastData, merged.value); }
+          if (!ok) { forecastBases.set(key, originalBase); forecastRevisions.set(key, revision); }
+          return ok;
+        }
+      }
+      forecastBases.set(key, originalBase); forecastRevisions.set(key, revision);
+    }
     console.error(`Failed to save forecast job to API (POST ${endpoint}):`, err);
     return false;
   }
@@ -739,6 +807,7 @@ async function loadWorkOrderAmendmentsFromApi() {
   if (!isApiEnabled()) return null;
   try {
     const response = await apiRequest('/work-order-amendments');
+    if (response.success) amendmentRevisions = response.revisions || {};
     return response.success && response.data ? response.data : {};
   } catch (err) {
     console.warn('Failed to load work order amendments from API:', err);
@@ -746,19 +815,37 @@ async function loadWorkOrderAmendmentsFromApi() {
   }
 }
 
-async function saveWorkOrderAmendmentsToApi(data) {
-  if (!isApiEnabled()) return false;
-  try {
-    const response = await apiRequest('/work-order-amendments', {
-      method: 'POST',
-      body: { data: data || {} }
-    });
-    return response.success === true;
-  } catch (err) {
-    console.error('Failed to save work order amendments to API:', err);
-    return false;
-  }
+function saveWorkOrderAmendmentToApi(orderId, value) {
+  const snapshot = value === null ? null : { ...value };
+  const operation = amendmentQueue.then(async () => {
+    try {
+      const response = await apiRequest('/work-order-amendments/' + encodeURIComponent(orderId), {
+        method: 'PUT', body: { value: snapshot, expectedRevision: amendmentRevisions[orderId] || 0 }
+      });
+      if (response.success) amendmentRevisions[orderId] = response.revision;
+      return response.success === true;
+    } catch (error) {
+      if (error.status === 409) {
+        const latest = await apiRequest('/work-order-amendments');
+        const current = latest.data?.[orderId];
+        const message = 'This Work Order changed in another session. Server value: ' + (current ? current.units : 'original source value') + '. Your draft is retained. Apply your correction instead?';
+        if (window.confirm(message)) {
+          amendmentRevisions[orderId] = latest.revisions?.[orderId] || 0;
+          const retried = await apiRequest('/work-order-amendments/' + encodeURIComponent(orderId), {
+            method: 'PUT', body: { value: snapshot, expectedRevision: amendmentRevisions[orderId] }
+          });
+          if (retried.success) amendmentRevisions[orderId] = retried.revision;
+          return retried.success === true;
+        }
+      }
+      window.Toast?.error('Work Order correction not saved. Draft retained; retry the correction.');
+      return false;
+    }
+  });
+  amendmentQueue = operation.catch(() => undefined);
+  return operation;
 }
+window.saveWorkOrderAmendmentToApi = saveWorkOrderAmendmentToApi;
 
 async function loadPublicGroupsFromApi() {
   if (!isApiEnabled()) return [];
@@ -914,4 +1001,3 @@ window.loadReviewsFromApi = loadReviewsFromApi;
 window.saveReviewsToApi = saveReviewsToApi;
 
 window.loadWorkOrderAmendmentsFromApi = loadWorkOrderAmendmentsFromApi;
-window.saveWorkOrderAmendmentsToApi = saveWorkOrderAmendmentsToApi;

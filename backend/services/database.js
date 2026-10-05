@@ -95,6 +95,7 @@ class DatabaseService {
         scope TEXT NOT NULL, data_key TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(scope, data_key)
       );
+      CREATE TABLE IF NOT EXISTS work_order_amendment_revisions (order_id TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS work_order_amendments (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         data_json TEXT NOT NULL,
@@ -383,9 +384,8 @@ class DatabaseService {
 
     // Add comments
     comments.forEach(row => {
-      if (data[row.job_number]) {
-        data[row.job_number].comments[row.work_group] = row.comment;
-      }
+      data[row.job_number] ||= { periods: {}, wgs: {}, comments: {} };
+      data[row.job_number].comments[row.work_group] = row.comment;
     });
 
     // Calculate period totals for each job
@@ -806,6 +806,27 @@ class DatabaseService {
       .run(item.fiscalYear, item.engineerId, item.jobNumber, item.workGroup || '');
   }
 
+
+  updateWorkOrderAmendment(orderId, value, expectedRevision) {
+    return this.db.transaction(() => {
+      const current = this.db.prepare('SELECT revision FROM work_order_amendment_revisions WHERE order_id = ?').get(orderId);
+      const revision = Number(current?.revision || 0);
+      if (revision !== expectedRevision) { const error = new Error('Revision conflict'); error.code = 'REVISION_CONFLICT'; throw error; }
+      const data = this.getWorkOrderAmendments();
+      if (value === null) delete data[orderId]; else data[orderId] = value;
+      this.saveWorkOrderAmendments(data);
+      this.db.prepare('INSERT INTO work_order_amendment_revisions (order_id, revision) VALUES (?, ?) ON CONFLICT(order_id) DO UPDATE SET revision = excluded.revision').run(orderId, revision + 1);
+      return revision + 1;
+    })();
+  }
+
+  getWorkOrderAmendmentSnapshot() {
+    return this.db.transaction(() => ({ data: this.getWorkOrderAmendments(), revisions: this.getWorkOrderAmendmentRevisions() }))();
+  }
+
+  getWorkOrderAmendmentRevisions() {
+    return Object.fromEntries(this.db.prepare('SELECT order_id, revision FROM work_order_amendment_revisions').all().map(row => [row.order_id, row.revision]));
+  }
 
   saveWorkOrderAmendments(data) {
     this.stmts.upsertWorkOrderAmendments.run(JSON.stringify(data || {}));

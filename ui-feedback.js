@@ -392,3 +392,55 @@ document.addEventListener('DOMContentLoaded', () => {
   MessageModal.init();
   Toast.init();
 });
+
+// Shared keyboard behaviour for the existing modal surfaces, including nested dialogs.
+document.addEventListener('DOMContentLoaded', () => {
+  const opened = new Map();
+  const returnFocus = new WeakMap();
+  let lastOutsideFocus = document.activeElement;
+  const focusable = modal => [...modal.querySelectorAll('button, input, select, textarea, a[href]')]
+    .filter(element => !element.disabled && !element.hidden && element.getClientRects().length);
+  document.addEventListener('focusin', event => {
+    const modal = event.target.closest('.modal.open');
+    if (!modal) lastOutsideFocus = event.target;
+    else if (!opened.has(modal) && event.relatedTarget) returnFocus.set(modal, event.relatedTarget);
+  });
+  const sync = () => {
+    for (const modal of document.querySelectorAll('.modal')) {
+      const visible = modal.classList.contains('open');
+      if (visible && !opened.has(modal)) {
+        opened.set(modal, returnFocus.get(modal) || lastOutsideFocus);
+        returnFocus.delete(modal);
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        if (!modal.hasAttribute('aria-labelledby') && !modal.hasAttribute('aria-label')) {
+          modal.setAttribute('aria-label', modal.querySelector('h2,h3')?.textContent || 'Dialog');
+        }
+        modal.querySelectorAll('.close').forEach(button => button.setAttribute('aria-label', 'Close dialog'));
+        if (!modal.contains(document.activeElement)) focusable(modal)[0]?.focus();
+      } else if (!visible && opened.has(modal)) {
+        const trigger = opened.get(modal);
+        opened.delete(modal);
+        if (trigger?.isConnected) trigger.focus();
+      }
+    }
+  };
+  new MutationObserver(sync).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  document.addEventListener('keydown', event => {
+    const modals = [...opened.keys()];
+    const modal = modals.at(-1);
+    if (!modal) return;
+    if (event.key === 'Escape') {
+      const close = modal.querySelector('.close:not(:disabled)');
+      if (close) { event.preventDefault(); event.stopPropagation(); close.click(); }
+    }
+    if (event.key === 'Tab') {
+      const controls = focusable(modal);
+      if (!controls.length) return;
+      const index = controls.indexOf(document.activeElement);
+      if (event.shiftKey && index <= 0) { event.preventDefault(); controls.at(-1).focus(); }
+      else if (!event.shiftKey && (index < 0 || index === controls.length - 1)) { event.preventDefault(); controls[0].focus(); }
+    }
+  });
+  sync();
+});

@@ -231,7 +231,7 @@ function addApiSyncIndicator() {
   const indicator = document.createElement('div');
   indicator.id = 'apiSyncIndicator';
   indicator.className = 'api-sync-indicator';
-  indicator.title = 'API Sync Status';
+  indicator.title = 'Server connectivity';
 
   topBar.appendChild(indicator);
 
@@ -259,9 +259,9 @@ async function updateApiSyncIndicator() {
   try {
     const healthy = await checkApiHealth();
     if (healthy) {
-      indicator.textContent = '☁️ Synced';
+      indicator.textContent = '☁️ Server connected';
       indicator.className = 'api-sync-indicator indicator-synced';
-      indicator.title = 'Connected to backend API (synced across devices)';
+      indicator.title = 'Server reachable. This does not confirm saves or load changes from other devices.';
     } else {
       indicator.textContent = '⚠️ Offline';
       indicator.className = 'api-sync-indicator indicator-offline';

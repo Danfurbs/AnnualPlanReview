@@ -280,7 +280,7 @@ async function loadV1OverridesAsync(year) {
   if (window.isApiEnabled && window.isApiEnabled() && window.loadV1OverridesFromApi) {
     try {
       const apiData = await window.loadV1OverridesFromApi(year);
-      if (apiData && apiData.size > 0) {
+      if (apiData instanceof Set) {
         // Cache in localStorage
         saveV1Overrides(year, apiData);
         return apiData;
@@ -439,16 +439,14 @@ async function saveForecastToStorageAsync(forecastData, rowCount, year, planVers
       return saved;
     } catch (err) {
       console.warn('Failed to save forecast to API:', err);
-      if (window.API_CONFIG?.forceServerPersistence) {
-        alert('Server save failed. Persistence to the Render database did not complete.');
-        return false;
-      }
+      window.Toast?.error('Server save failed. Your draft is retained.');
+      return false;
     }
   }
 
   // localStorage remains the persistence mechanism for explicitly offline use.
   const saved = saveForecastToStorage(forecastData, rowCount, year, planVersion, false);
-  if (saved) rememberForecastSnapshot(forecastData, rowCount, year, planVersion);
+  if (saved) { rememberForecastSnapshot(forecastData, rowCount, year, planVersion); window.recordLocalSave?.(); }
   return saved;
 }
 
@@ -472,11 +470,11 @@ async function saveForecastJobToStorageAsync(jobNumber, forecastJob, snapshot, y
 
     // Render is configured to require durable server persistence. Never report
     // a browser-only fallback as a successful save in that environment.
-    if (window.API_CONFIG?.forceServerPersistence) return false;
+    return false;
   }
 
   const savedLocally = saveForecastToStorage(snapshot.data, snapshot.data.size, year, planVersion, false);
-  if (savedLocally) rememberForecastSnapshot(snapshot.data, snapshot.data.size, year, planVersion);
+  if (savedLocally) { rememberForecastSnapshot(snapshot.data, snapshot.data.size, year, planVersion); window.recordLocalSave?.(); }
   return savedLocally;
 }
 
@@ -500,7 +498,7 @@ async function deleteForecastJobFromStorageAsync(jobNumber, snapshot, year, plan
       return true;
     }
 
-    if (window.API_CONFIG?.forceServerPersistence) {
+    {
       if (forecastJob) snapshot.data.set(jobNumber, forecastJob);
       return false;
     }
@@ -872,9 +870,12 @@ function updateForecastWorkGroup(forecastData, rows, workGroup) {
     // Update work group data
     job.wgs[workGroup] = {};
     window.FORECAST_PERIODS.forEach(period => {
-      const value = Number(row.volumes?.[period] || 0);
-      // Save all values including 0
-      job.wgs[workGroup][period] = value;
+      const raw = row.volumes?.[period];
+      if (raw !== undefined && raw !== null && raw !== '') {
+        const value = Number(raw);
+        if (!Number.isFinite(value) || value < 0) throw new Error('Invalid forecast value');
+        job.wgs[workGroup][period] = value;
+      }
     });
 
     // Save comment for this work group

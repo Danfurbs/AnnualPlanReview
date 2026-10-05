@@ -89,7 +89,7 @@ test('standard-job breakdown edits persist through the per-job API', async () =>
   assert.equal(forecast.forecastMemorySnapshots.get('FY26:v1').data.get('000123').wgs.Track.P1, 7);
 });
 
-test('standard-job breakdown edits fall back to local persistence outside Render', async () => {
+test('failed API saves never masquerade as local success, including outside Render', async () => {
   const forecast = loadForecastStorage(new Map(), {
     isApiEnabled: () => true,
     saveForecastJobToApi: async () => false,
@@ -98,8 +98,9 @@ test('standard-job breakdown edits fall back to local persistence outside Render
   const job = { periods: { P1: 9 }, wgs: { Track: { P1: 9 } }, comments: {} };
   const snapshot = { data: new Map([['000456', job]]) };
 
-  assert.equal(await forecast.saveForecastJobToStorageAsync('000456', job, snapshot, 'FY26', 'v1'), true);
-  assert.equal(forecast.loadForecastFromStorage('FY26', 'v1').data.get('000456').wgs.Track.P1, 9);
+  assert.equal(await forecast.saveForecastJobToStorageAsync('000456', job, snapshot, 'FY26', 'v1'), false);
+  assert.equal(forecast.loadForecastFromStorage('FY26', 'v1'), null);
+  assert.equal(snapshot.data.get('000456').wgs.Track.P1, 9);
 });
 
 test('deleting the last v1 work group removes and persists the sparse job entry', async () => {

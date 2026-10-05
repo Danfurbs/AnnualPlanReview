@@ -57,7 +57,7 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev')); // HTTP request logging
 
 // Serve static files from parent directory (frontend)
-app.use(express.static(path.join(__dirname, '..')));
+app.use(require('./static-assets').servePublicAsset);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -109,7 +109,7 @@ app.use('/api/forecast-planning', forecastPlanningRoutes);
 // Fallback route for SPA - serve index.html for any non-API routes
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api/')) {
-    res.sendFile(path.join(__dirname, '..', 'index.html'));
+    res.sendStatus(404);
   } else {
     res.status(404).json({
       success: false,
