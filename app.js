@@ -164,7 +164,7 @@
 
       // Reload forecast data for new plan version
       fData = null;
-      const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
+      const forecastCache = await loadDashboardForecastAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
         fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : forecastCache.data;
         updateWorkGroupFilterOptions();
@@ -328,7 +328,7 @@
       refreshWorkDoneYearSelector();
       await loadWorkDoneStoreAsync(currentFinancialYear);
       fData = null;
-      const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
+      const forecastCache = await loadDashboardForecastAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
         fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : forecastCache.data;
         updateWorkGroupFilterOptions();
@@ -396,7 +396,7 @@
       refreshWorkDoneYearSelector();
       await loadWorkDoneStoreAsync(currentFinancialYear);
       fData = null;
-      const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
+      const forecastCache = await loadDashboardForecastAsync(currentFinancialYear, currentPlanVersion);
       if (forecastCache) {
         fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : forecastCache.data;
         updateWorkGroupFilterOptions();
@@ -1219,7 +1219,7 @@
         currentPlanVersion = getPreferredPlanVersion(currentFinancialYear);
         refreshWorkDoneYearSelector();
         await loadWorkDoneStoreAsync(currentFinancialYear);
-        const forecastCache = await loadForecastFromStorageAsync(currentFinancialYear, currentPlanVersion);
+        const forecastCache = await loadDashboardForecastAsync(currentFinancialYear, currentPlanVersion);
         if (forecastCache) {
           fData = currentPlanVersion === 'v1' ? getEffectiveForecastSnapshot(currentFinancialYear).data : forecastCache.data;
           updateWorkGroupFilterOptions();
@@ -2532,7 +2532,7 @@
       if (!groupId) return [];
       const group = getAllGroups().find(entry => entry.id === groupId);
       if (!group) return [];
-      return group.jobNumbers.flatMap(jobNumber => window.wData?.get(jobNumber)?.workOrders || []);
+      return [...new Set(group.jobNumbers)].flatMap(jobNumber => window.wData?.get(jobNumber)?.workOrders || []);
     }
 
 
@@ -2776,6 +2776,16 @@
     }
 
     function render() {
+      const forecastStatus = document.getElementById('forecastLoadStatus');
+      if (forecastStatus) {
+        forecastStatus.hidden = !window.forecastLoadError;
+        forecastStatus.textContent = window.forecastLoadError || '';
+      }
+      for (const selector of ['#performanceSummary', '.forecast-health', '.top-summary', '#jobs']) {
+        const section = document.querySelector(selector);
+        if (section) section.hidden = Boolean(window.forecastLoadError);
+      }
+      if (window.forecastLoadError) return;
       const evidenceStatus = document.getElementById('workDoneSessionStatus');
       const evidence = window.WorkDoneSession.get(currentFinancialYear);
       if (evidenceStatus) evidenceStatus.textContent = evidence
@@ -2833,9 +2843,10 @@
           tot:{f:0,a:0,wd:0,v:0},
           wgs: {}
         };
+        const storedPeriods = getAggregateForecastPeriods(f);
         for(let i=1; i<=13; i++) {
           const p = `P${i}`;
-          const fv = f?.periods[p]||0;
+          const fv = Number(storedPeriods[p]) || 0;
           const avRaw = a?.periods[p]||0;
           // The selected cutoff is authoritative: later periods use forecast even
           // when the work-done upload already contains values for those periods.
@@ -3436,7 +3447,7 @@
         ? normalizeWorkGroupSet(wgFilter)
         : null;
 
-      jobNumbers.forEach(jobNumber => {
+      [...new Set(jobNumbers)].forEach(jobNumber => {
         const jobData = snapshot.data.get(jobNumber);
         if (!jobData) return;
 
@@ -3489,7 +3500,7 @@
     function getWorkDonePeriodsForScope(job, workGroups) {
       const periods = {};
       const sourceJobs = job.isGroupRollup
-        ? (getAllGroups().find(group => group.id === job.groupId)?.jobNumbers || [])
+        ? [...new Set(getAllGroups().find(group => group.id === job.groupId)?.jobNumbers || [])]
             .map(jobNumber => window.wData?.get(jobNumber))
             .filter(Boolean)
         : [window.wData?.get(job.jn)].filter(Boolean);
@@ -3937,7 +3948,7 @@
       if (modalContent) {
         const pd = period === 'all' ? displayData.tot : displayData.periods[period];
         const { status } = getVarianceStatus(pd);
-        modalContent.classList.remove('rag-good', 'rag-warning', 'rag-bad');
+        modalContent.classList.remove('rag-good', 'rag-warning', 'rag-bad', 'rag-unavailable');
         modalContent.classList.add(`rag-${status}`);
       }
       const compareButton = document.getElementById('compareForecastButton');

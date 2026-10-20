@@ -5,7 +5,7 @@
     .performance-value { font-size: 24px; font-weight: 700; overflow-wrap: anywhere; }
     .reporting-context { font-weight: 600; margin: 12px 0; overflow-wrap: anywhere; }
     #saveStateIndicator { color: #475569; margin: 8px 0; }
-    .rag-unavailable, .summary-unavailable .discipline-rollup-dot { background: #94a3b8 !important; }
+    .rag-unavailable:not(.modal-content), .summary-unavailable .discipline-rollup-dot { background: #94a3b8 !important; }
     .summary-unavailable { border-color: #94a3b8; }
     .wg-plan-edit-period small { display: block; }
     @media (max-width: 600px) {
@@ -1882,4 +1882,23 @@
   .health-main { min-width: 0; }
   .discipline-header { grid-template-columns: minmax(0, 1fr); }
   .discipline-rollup-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Keep reporting context aligned and separate from the narrower job filters. */
+#dashboardPage > .controls { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px 16px; }
+#dashboardPage > .controls > .control-group { grid-column: span 3; min-width: 0; }
+#dashboardPage > .controls > .control-group:nth-child(-n+3) { grid-column: span 4; }
+#dashboardPage > .controls select, #dashboardPage > .controls input[type="search"] { width: 100%; min-width: 0; background: white; }
+#dashboardPage > .controls .helper-text { line-height: 1.5; }
+#workDoneSessionStatus { font-size: 12px; line-height: 1.5; color: #64748b; order: 2; }
+#dashboardPage .top-bar-actions { align-items: center; }
+#saveStateIndicator { font-size: 12px; }
+#breakdown .modal-content { background: white; }
+#breakdown .modal-content.rag-unavailable { border-color: #94a3b8; }
+#forecastLoadStatus { padding: 14px 18px; margin-bottom: 16px; border: 1px solid #f59e0b; border-radius: 8px; background: #fffbeb; color: #78350f; }
+@media (max-width: 1000px) {
+  #dashboardPage > .controls > .control-group, #dashboardPage > .controls > .control-group:nth-child(-n+3) { grid-column: span 6; }
+}
+@media (max-width: 600px) {
+  #dashboardPage > .controls > .control-group, #dashboardPage > .controls > .control-group:nth-child(-n+3) { grid-column: 1 / -1; }
 }

@@ -187,6 +187,7 @@ function saveForecastToServerAsync(payload, year, planVersion) {
  * Returns: { data: Map, rowCount: number, savedAt: string } or null
  */
 function loadForecastFromStorage(year, planVersion) {
+  if (window.isApiEnabled?.()) return window.forecastMemorySnapshots?.get(year + ':' + planVersion) || null;
   try {
     const raw = localStorage.getItem(getForecastStorageKey(year, planVersion));
     if (!raw) {
@@ -227,22 +228,15 @@ function loadForecastFromStorage(year, planVersion) {
  * Returns: { data: Map, rowCount: number, savedAt: string } or null
  */
 async function loadForecastFromStorageAsync(year, planVersion) {
-  // Try API first if enabled
-  if (window.isApiEnabled && window.isApiEnabled() && window.loadForecastFromApi) {
+  if (window.isApiEnabled?.()) {
     try {
-      const apiData = await window.loadForecastFromApi(year, planVersion);
-      if (apiData) {
-        // The server is authoritative in API mode. Large FY snapshots regularly
-        // exceed localStorage's quota, so do not duplicate them in browser
-        // storage merely to warm an optional cache.
-        // Synchronous consumers (most notably the breakdown chart) read the
-        // in-memory snapshot. Keep it in step with the authoritative API data
-        // so a server-only V1 amendment is visible immediately.
-        rememberForecastSnapshot(apiData.data, apiData.rowCount, year, planVersion);
-        return window.forecastMemorySnapshots.get(`${year}:${planVersion}`);
-      }
-    } catch (err) {
-      console.warn('Failed to load from API, falling back to localStorage:', err);
+      const snapshot = await window.loadForecastFromApi(year, planVersion);
+      if (!snapshot) throw new Error('Server forecast could not be loaded');
+      rememberForecastSnapshot(snapshot.data, snapshot.rowCount, year, planVersion);
+      return window.forecastMemorySnapshots.get(year + ':' + planVersion);
+    } catch (error) {
+      window.forecastMemorySnapshots?.delete(year + ':' + planVersion);
+      throw new Error('Unable to load stored forecast for ' + year + ' ' + planVersion + '. Please retry.');
     }
   }
 
@@ -524,6 +518,7 @@ function rememberForecastSnapshot(forecastData, rowCount, year, planVersion) {
  * Note: Library structure is FY > planVersion (no stage nesting)
  */
 function loadForecastFromLibrary(year, planVersion) {
+  if (window.isApiEnabled?.()) return null;
   try {
     if (!year || !planVersion) return null;
     if (typeof FORECAST_LIBRARY === 'undefined' || !FORECAST_LIBRARY) return null;
@@ -612,6 +607,7 @@ async function loadForecastFromGitHub(year, planVersion) {
  * Tries GitHub first, then falls back to FORECAST_LIBRARY global
  */
 async function loadForecastFromLibraryAsync(year, planVersion) {
+  if (window.isApiEnabled?.()) return null;
   // Try GitHub first if configured
   const githubData = await loadForecastFromGitHub(year, planVersion);
   if (githubData) return githubData;
@@ -628,6 +624,8 @@ function getForecastSnapshot(year, planVersion) {
 
   const memorySnapshot = window.forecastMemorySnapshots?.get(`${year}:${planVersion}`);
   if (memorySnapshot) return memorySnapshot;
+
+  if (window.isApiEnabled?.()) return null;
 
   // Try localStorage first
   const cached = loadForecastFromStorage(year, planVersion);
@@ -1107,3 +1105,28 @@ window.removeFromV1OverridesAsync = removeFromV1OverridesAsync;
 window.checkV0ConflictsWithV1 = checkV0ConflictsWithV1;
 window.clearAllForecastDataForYear = clearAllForecastDataForYear;
 window.__verifyForecastDeepClone = __verifyForecastDeepClone; // DEV ONLY sanity check
+
+/** Load both plan inputs before any dashboard, chart or rollup reads them. */
+async function loadDashboardForecastAsync(year, planVersion) {
+  try {
+    if (window.isApiEnabled?.()) {
+      const snapshots = await Promise.all(['v0', 'v1'].map(version => window.loadForecastFromApi(year, version)));
+      if (snapshots.some(snapshot => !snapshot)) throw new Error('Incomplete server response');
+      snapshots.forEach((snapshot, index) => rememberForecastSnapshot(snapshot.data, snapshot.rowCount, year, ['v0', 'v1'][index]));
+    } else {
+      for (const version of ['v0', 'v1']) {
+        const snapshot = await getForecastSnapshotAsync(year, version);
+        if (snapshot) rememberForecastSnapshot(snapshot.data, snapshot.rowCount, year, version);
+      }
+    }
+    window.forecastLoadError = null;
+    return planVersion === 'v1' ? getEffectiveForecastSnapshot(year) : getForecastSnapshot(year, 'v0');
+  } catch (error) {
+    window.forecastMemorySnapshots?.delete(year + ':v0');
+    window.forecastMemorySnapshots?.delete(year + ':v1');
+    window.fData = null;
+    window.forecastLoadError = 'Stored forecasts could not be loaded for ' + year + '. Reporting is paused to avoid showing stale or incomplete totals. Reload the page to retry.';
+    return null;
+  }
+}
+window.loadDashboardForecastAsync = loadDashboardForecastAsync;

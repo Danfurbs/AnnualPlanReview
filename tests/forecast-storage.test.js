@@ -138,3 +138,49 @@ test('deleting a sparse forecast job persists locally when the API is disabled',
   assert.equal(restored.has('000123'), false);
   assert.equal(restored.get('000456').wgs.Track.P1, 4);
 });
+
+
+test('connected dashboard ignores different browser caches and loads both stored plans', async () => {
+  for (const localValue of [999, 12345]) {
+    const calls = [];
+    const forecast = loadForecastStorage(new Map(), {
+      isApiEnabled: () => true,
+      loadForecastFromApi: async (year, version) => {
+        calls.push(version);
+        return { data: new Map([['000123', { wgs: { Track: version === 'v0' ? { P1: 10, P2: 20 } : { P2: 0 } } }]]) };
+      }
+    });
+    forecast.localStorage.setItem(forecast.getForecastStorageKey('FY27', 'v0'), JSON.stringify({ data: { '000123': { wgs: { Track: { P1: localValue } } } } }));
+    assert.equal(forecast.getForecastSnapshot('FY27', 'v0'), null);
+    const result = await forecast.loadDashboardForecastAsync('FY27', 'v1');
+    assert.deepEqual(calls, ['v0', 'v1']);
+    assert.equal(result.data.get('000123').periods.P1, 10);
+    assert.equal(result.data.get('000123').periods.P2, 0);
+    assert.equal(forecast.forecastLoadError, null);
+  }
+});
+
+test('a failed server refresh clears both old snapshots and blocks local fallback', async () => {
+  let failed = false;
+  const forecast = loadForecastStorage(new Map(), {
+    isApiEnabled: () => true,
+    loadForecastFromApi: async (year, version) => failed && version === 'v1' ? null : { data: new Map([['000123', { wgs: { Track: { P1: 10 } } }]]) }
+  });
+  await forecast.loadDashboardForecastAsync('FY27', 'v0');
+  failed = true;
+  assert.equal(await forecast.loadDashboardForecastAsync('FY27', 'v0'), null);
+  assert.match(forecast.forecastLoadError, /Reporting is paused/);
+  assert.equal(forecast.getForecastSnapshot('FY27', 'v0'), null);
+  assert.equal(forecast.getForecastSnapshot('FY27', 'v1'), null);
+  await assert.rejects(forecast.getForecastSnapshotAsync('FY27', 'v1'), /Unable to load stored forecast/);
+});
+
+test('an empty stored V1 inherits V0 without resurrecting old local amendments', async () => {
+  const forecast = loadForecastStorage(new Map(), {
+    isApiEnabled: () => true,
+    loadForecastFromApi: async (year, version) => ({ data: version === 'v1' ? new Map() : new Map([['000123', { wgs: { Track: { P1: 7 } } }]]) })
+  });
+  const result = await forecast.loadDashboardForecastAsync('FY27', 'v1');
+  assert.equal(result.data.get('000123').periods.P1, 7);
+  assert.equal(forecast.getForecastSnapshot('FY27', 'v1').data.size, 0);
+});

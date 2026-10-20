@@ -44,7 +44,7 @@
         <span class="helper-text">V1 amendments override V0; unchanged values continue to inherit V0.</span>
       </div>
       <div class="control-group">
-        <label>Reporting Period</label>
+
         <p id="workDoneSessionStatus" role="status">Work Done not uploaded.</p>
         <label for="reportingPeriodSelect">Completed reporting period</label>
         <select id="reportingPeriodSelect"><option value="">Select reporting period…</option><option value="P0">P0 — no completed periods</option><option value="P1">P1</option><option value="P2">P2</option><option value="P3">P3</option><option value="P4">P4</option><option value="P5">P5</option><option value="P6">P6</option><option value="P7">P7</option><option value="P8">P8</option><option value="P9">P9</option><option value="P10">P10</option><option value="P11">P11</option><option value="P12">P12</option><option value="P13">P13</option></select>
@@ -105,6 +105,7 @@
         <button type="button" class="group-action-button" onclick="openGroupModal()">Manage Groups</button>
       </div>
     </div>
+    <div id="forecastLoadStatus" role="alert" hidden></div>
     <div id="performanceSummary" class="performance-summary" aria-live="polite"></div>
     <div class="forecast-health">
       <div class="health-header">
