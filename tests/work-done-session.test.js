@@ -19,6 +19,8 @@ function uploadHarness() {
     extractJob: value => value, extractWorkOrderNumber: row => row.order,
     normalizeWorkGroupSet: value => value,
     getWorkOrderAmendment: id => state.corrections[id],
+    loadWorkOrderAmendmentsAsync: async () => true,
+    applyStoredWorkOrderCorrections() {},
     setWorkDoneUploadState: (...args) => state.statuses.push(args),
     runInChunks: async (rows, handler) => rows.forEach(handler),
     updateWorkGroupFilterOptions() {}, render() {}

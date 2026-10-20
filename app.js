@@ -36,7 +36,6 @@
     const recentlyReviewedJobs = new Map();
 
     // Work order amendments (not in modules)
-    const WORK_ORDER_AMENDMENTS_KEY = 'aprWorkOrderAmendmentsV1';
     let workOrderAmendments = {};
 
     // Group management (not in modules)
@@ -552,30 +551,34 @@
     }
 
     async function loadWorkOrderAmendmentsAsync() {
-      if (window.isApiEnabled && window.isApiEnabled() && window.loadWorkOrderAmendmentsFromApi) {
-        try {
-          const apiData = await window.loadWorkOrderAmendmentsFromApi();
-          if (apiData && typeof apiData === 'object') {
-            workOrderAmendments = apiData;
-            localStorage.setItem(WORK_ORDER_AMENDMENTS_KEY, JSON.stringify(workOrderAmendments));
-            return;
-          }
-        } catch (err) {
-          console.warn('Failed to load work order amendments from API, falling back to localStorage:', err);
-        }
-      }
-
       try {
-        const raw = localStorage.getItem(WORK_ORDER_AMENDMENTS_KEY);
-        workOrderAmendments = raw ? JSON.parse(raw) : {};
-      } catch (err) {
-        console.warn('Failed to load work order amendments:', err);
+        if (!window.isApiEnabled?.()) throw new Error('Server connection required');
+        const data = await window.loadWorkOrderAmendmentsFromApi();
+        if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Corrections unavailable');
+        workOrderAmendments = data;
+        window.workOrderCorrectionsError = null;
+        return true;
+      } catch (error) {
         workOrderAmendments = {};
+        window.workOrderCorrectionsError = 'Stored Work Order corrections could not be loaded. Reporting is paused. Connect to the server and use Retry corrections.';
+        return false;
       }
     }
 
-    function saveWorkOrderAmendments() {
-      localStorage.setItem(WORK_ORDER_AMENDMENTS_KEY, JSON.stringify(workOrderAmendments));
+    // Rebuild from the uploaded originals so retries and server deletions cannot compound edits.
+    function applyStoredWorkOrderCorrections(data) {
+      data?.forEach(job => {
+        job.periods = {};
+        job.wgs = {};
+        for (const order of job.workOrders || []) {
+          const correction = getWorkOrderAmendment(order.id);
+          order.units = correction ? Number(correction.units) : Number(order.originalUnits);
+          order.isAmended = Math.abs(order.units - Number(order.originalUnits)) >= 0.0001;
+          job.periods[order.period] = (job.periods[order.period] || 0) + order.units;
+          const group = job.wgs[order.workGroup] ||= {};
+          group[order.period] = (group[order.period] || 0) + order.units;
+        }
+      });
     }
 
     function getAllGroups() {
@@ -621,8 +624,10 @@
     }
 
     async function loadWorkDoneStoreAsync(year) {
+      const ready = await loadWorkOrderAmendmentsAsync();
       const entry = window.WorkDoneSession.get(year);
-      window.wData = entry?.data || null;
+      if (ready) applyStoredWorkOrderCorrections(entry?.data);
+      window.wData = ready ? entry?.data || null : null;
       currentWorkOrders = [];
       workDoneUploadedAt = entry?.uploadedAt || null;
     }
@@ -1009,79 +1014,60 @@
     const pendingCorrections = new Map();
     function refreshCorrectionRetry() {
       const button = document.getElementById('retryCorrections');
-      if (button) { button.hidden = !pendingCorrections.size; button.textContent = 'Retry corrections (' + pendingCorrections.size + ')'; }
+      if (button) { button.hidden = !pendingCorrections.size && !window.workOrderCorrectionsError; button.textContent = pendingCorrections.size ? 'Retry corrections (' + pendingCorrections.size + ')' : 'Retry corrections'; }
     }
     async function persistCorrection(orderId, draft) {
-      pendingCorrections.set(orderId, draft); refreshCorrectionRetry();
-      try {
-        const ok = await window.saveWorkOrderAmendmentToApi(orderId, draft);
-        if (ok && pendingCorrections.get(orderId) === draft) pendingCorrections.delete(orderId);
-        if (!ok) window.Toast?.error('Correction not saved. Draft retained; use Retry corrections.');
-      } catch (error) { window.Toast?.error(error.message); }
+      pendingCorrections.set(orderId, draft);
       refreshCorrectionRetry();
+      let saved = false;
+      try {
+        if (!window.isApiEnabled?.()) throw new Error('Connect to the server to save corrections.');
+        saved = await window.saveWorkOrderAmendmentToApi(orderId, draft);
+        if (saved && pendingCorrections.get(orderId) === draft) pendingCorrections.delete(orderId);
+        if (!saved) window.Toast?.error('Correction not saved. Draft retained; use Retry corrections. Totals exclude your draft.');
+        // Refresh even after a rejected conflict so totals show the other user's saved correction.
+        await loadWorkDoneStoreAsync(currentFinancialYear);
+      } catch (error) {
+        window.Toast?.error(error.message);
+        await loadWorkDoneStoreAsync(currentFinancialYear);
+      }
+      refreshCorrectionRetry();
+      render();
+      const job = window.currentJobsMap.get(currentBreakdownJobNumber);
+      if (job && !window.workOrderCorrectionsError) showBreakdown(job, { scrollTop: false });
+      return saved;
     }
     window.retryWorkOrderCorrections = async () => {
-      for (const [orderId, draft] of [...pendingCorrections]) await persistCorrection(orderId, draft);
+      if (!pendingCorrections.size) {
+        await loadWorkDoneStoreAsync(currentFinancialYear);
+        refreshCorrectionRetry();
+        render();
+      } else {
+        for (const [orderId, draft] of [...pendingCorrections]) await persistCorrection(orderId, draft);
+      }
     };
     window.addEventListener('beforeunload', event => {
       if (pendingCorrections.size || Object.keys(breakdownPlanEditContext?.edits || {}).length) { event.preventDefault(); event.returnValue = ''; }
     });
 
-    function updateWorkOrderAmendment(orderId, units, originalUnits) {
+    function updateWorkOrderAmendment(orderId, units, originalUnits, reason = '') {
       const numeric = Number(units);
-      if (!Number.isFinite(numeric)) return;
+      if (!Number.isFinite(numeric) || numeric < 0) return Promise.resolve(false);
       const original = Number(originalUnits);
       const isSame = Number.isFinite(original) && Math.abs(numeric - original) < 0.0001;
-      if (isSame) {
-        delete workOrderAmendments[orderId];
-      } else {
-        workOrderAmendments[orderId] = {
-          units: numeric,
-          updatedAt: new Date().toISOString()
-        };
-      }
-      saveWorkOrderAmendments();
-      if (window.isApiEnabled?.()) {
-        persistCorrection(orderId, workOrderAmendments[orderId] || null);
-      }
+      return persistCorrection(orderId, isSame ? null : { units: numeric, reason: String(reason).trim().slice(0, 1000) });
     }
 
     function formatUnits(value) {
       return (Number(value) || 0).toFixed(2);
     }
 
-    function applyWorkOrderUnitAmendment(orderId, nextUnits) {
+    async function applyWorkOrderUnitAmendment(orderId, nextUnits, reason = '') {
       const updatedUnits = Number(nextUnits);
-      if (!Number.isFinite(updatedUnits)) return false;
+      if (!Number.isFinite(updatedUnits) || updatedUnits < 0 || window.workOrderCorrectionsError) return false;
       const order = currentWorkOrders.find(item => item.id === orderId);
-      if (!order) return false;
-      const job = window.wData?.get(order.jobNumber);
-      if (!job) return false;
-      const previousUnits = Number(order.units) || 0;
-      if (Math.abs(previousUnits - updatedUnits) < 0.0001) return false;
-      const delta = updatedUnits - previousUnits;
-      order.units = updatedUnits;
-      order.isAmended = Number.isFinite(order.originalUnits)
-        ? Math.abs(updatedUnits - order.originalUnits) >= 0.0001
-        : true;
-      const jobOrder = job.workOrders?.find(item => item.id === orderId);
-      if (jobOrder) {
-        jobOrder.units = updatedUnits;
-        jobOrder.isAmended = order.isAmended;
-      }
-      job.periods[order.period] = (job.periods[order.period] || 0) + delta;
-      if (!job.wgs[order.workGroup]) job.wgs[order.workGroup] = {};
-      job.wgs[order.workGroup][order.period] = (job.wgs[order.workGroup][order.period] || 0) + delta;
-      updateWorkOrderAmendment(orderId, updatedUnits, order.originalUnits);
-      render();
-      const updatedJob = window.currentJobsMap.get(order.jobNumber);
-      if (updatedJob) {
-        showBreakdown(updatedJob, { scrollTop: false });
-      }
-      if (document.getElementById('breakdown')?.classList.contains('show')) {
-        renderBreakdownWorkGroupTable();
-      }
-      return true;
+      if (!order || Math.abs(Number(order.units) - updatedUnits) < 0.0001) return false;
+      return updateWorkOrderAmendment(orderId, updatedUnits, order.originalUnits, reason);
     }
 
     function getJobComments(jobNumber) {
@@ -2002,6 +1988,10 @@
         const headerRow = parseInt(document.getElementById('wRow').value, 10);
         if (!Number.isInteger(headerRow) || headerRow < 1) throw new Error('Header row must be 1 or greater.');
         const ab = await file.arrayBuffer();
+        if (!await loadWorkOrderAmendmentsAsync()) {
+          render();
+          throw new Error(window.workOrderCorrectionsError);
+        }
         setWorkDoneUploadState('working', 'Checking report…', 'Validating the Detail sheet before replacing this session’s data.');
         const wb = XLSX.read(ab);
         if (!wb.Sheets['Detail']) {
@@ -2279,6 +2269,7 @@
     }
 
     function exportAmendedWorkOrders() {
+      if (window.workOrderCorrectionsError) { window.Toast?.error(window.workOrderCorrectionsError); return; }
       if (!window.wData || !window.wData.size) {
         alert('No Work Done data loaded to export amended work orders.');
         return;
@@ -2741,7 +2732,7 @@
           unitCell.innerHTML = `
             <div class="wo-unit-edit">
               <input type="number" class="wo-unit-input" step="0.01" value="${formatUnits(order.units)}">
-              <div class="wo-unit-actions">
+              <label>Reason (optional)<input class="wo-reason-input" type="text" maxlength="1000" placeholder="Why is this value changing?"></label><div class="wo-unit-actions">
                 <button type="button" class="wo-unit-save">Save</button>
                 <button type="button" class="wo-unit-cancel">Cancel</button>
               </div>
@@ -2757,7 +2748,7 @@
               alert('Please enter a valid number for units.');
               return;
             }
-            applyWorkOrderUnitAmendment(orderId, nextValue);
+            applyWorkOrderUnitAmendment(orderId, nextValue, unitCell.querySelector('.wo-reason-input')?.value || '');
           };
           saveBtn?.addEventListener('click', handleSave);
           cancelBtn?.addEventListener('click', renderWorkOrders);
@@ -2776,16 +2767,22 @@
     }
 
     function render() {
+      window.APRFeatures?.context();
+      refreshCorrectionRetry();
+      const reportingError = window.forecastLoadError || window.workOrderCorrectionsError;
       const forecastStatus = document.getElementById('forecastLoadStatus');
       if (forecastStatus) {
-        forecastStatus.hidden = !window.forecastLoadError;
-        forecastStatus.textContent = window.forecastLoadError || '';
+        forecastStatus.hidden = !reportingError;
+        forecastStatus.textContent = reportingError || '';
       }
       for (const selector of ['#performanceSummary', '.forecast-health', '.top-summary', '#jobs']) {
         const section = document.querySelector(selector);
-        if (section) section.hidden = Boolean(window.forecastLoadError);
+        if (section) section.hidden = Boolean(reportingError);
       }
-      if (window.forecastLoadError) return;
+      if (reportingError) {
+        document.getElementById('breakdown')?.classList.remove('open');
+        return;
+      }
       const evidenceStatus = document.getElementById('workDoneSessionStatus');
       const evidence = window.WorkDoneSession.get(currentFinancialYear);
       if (evidenceStatus) evidenceStatus.textContent = evidence
@@ -3047,6 +3044,7 @@
 
       const cont = document.getElementById('jobs');
       if (!forecastDataToUse.size) {
+        window.APRFeatures?.setQueue([]);
         renderPerformanceSummary([], null);
         updateForecastHealth({ baseFiltered: [] });
         cont.innerHTML = `<div class="discipline-section"><h3>No forecast loaded for ${currentFinancialYear} ${currentPlanVersion}</h3><p>Upload a forecast file or build one in Forecast Builder.</p></div>`;
@@ -3054,6 +3052,7 @@
       }
       const fragment = document.createDocumentFragment();
       window.currentJobsMap = new Map([...baseFiltered, ...rollupFiltered].map(job => [job.jn, job]));
+      window.APRFeatures?.setQueue(filtered.map(job => ({ job: job.jn, group: job.isGroupRollup, reviewed: isJobReviewed(job.jn), variance: getJobDisplayData(job).tot.v })));
       const topVariancePeriod = period === 'all' && maxWorkDonePeriod > 0 ? `P${maxWorkDonePeriod}` : period;
       updateTopBarStats({ jobs: baseJobs, baseFiltered, period: topVariancePeriod, getJobDisplayData, reviewStage, varianceFilter, reviewStatusFilter });
       updateForecastHealth({ baseFiltered, period, getJobDisplayData, varianceFilter });
@@ -3898,6 +3897,7 @@
     }
 
     function showBreakdown(job, options = {}) {
+      if (window.workOrderCorrectionsError || window.forecastLoadError) return;
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
       const engineerFilter = document.getElementById('engineerFilter')?.value || 'all';
       if (currentBreakdownJobNumber !== job.jn) {
@@ -3918,6 +3918,7 @@
       const dashboardScopeWorkGroups = wgFilter !== 'all'
         ? [wgFilter]
         : selectedEngineerWorkGroups?.length ? selectedEngineerWorkGroups : null;
+      window.APRFeatures?.breakdown(job, getAPRGroupMembers(job, dashboardScopeWorkGroups), job.unit, getEffectiveForecastCutoffPeriod());
       const displayData = (() => {
         const resolvedWorkGroups = new Map(Object.keys(resolvedJob.wgs || {}).map(
           workGroup => [normalizeWorkGroupSet(workGroup), workGroup]
@@ -4743,6 +4744,68 @@
       });
     });
 
-    init();
-    render();
+
   
+
+    let aprRefreshing = false;
+    function getAPRGroupMembers(job, scope) {
+      if (!job.isGroupRollup) return [];
+      const group = getAllGroups().find(item => item.id === job.groupId);
+      return [...new Set(group?.jobNumbers || [])].map(jobNumber => {
+        const metadata = window.stdJobs.get(String(jobNumber).padStart(6, '0')) || {};
+        const member = { jn: jobNumber };
+        const forecast = getForecastPeriodsForScope(member, scope, 'v1');
+        const done = getWorkDonePeriodsForScope(member, scope);
+        const storedJob = getEffectiveForecastJob(currentFinancialYear, jobNumber);
+        const doneJob = window.wData?.get(jobNumber);
+        const allowed = scope ? new Set(scope.map(normalizeWorkGroupSet)) : null;
+        const names = [...new Set([...Object.keys(storedJob?.wgs || {}), ...Object.keys(doneJob?.wgs || {})].map(normalizeWorkGroupSet))].filter(name => !allowed || allowed.has(name));
+        const children = names.map(name => {
+          const aggregate = groups => Object.entries(groups || {}).filter(([key]) => normalizeWorkGroupSet(key) === name).reduce((sum, [, values]) => { for (const [p, value] of Object.entries(values)) sum[p] = (sum[p] || 0) + Number(value || 0); return sum; }, {});
+          return { job: name, description: window.workGroupSets.get(name) || '', unit: metadata.unit || 'Unit not specified', ...window.APRFeatures.totals(aggregate(storedJob?.wgs), aggregate(doneJob?.wgs), getEffectiveForecastCutoffPeriod(), isPerformanceAvailable()) };
+        });
+        return { job: jobNumber, children, description: metadata.desc || '', unit: metadata.unit || 'Unit not specified', ...window.APRFeatures.totals(forecast, done, getEffectiveForecastCutoffPeriod(), isPerformanceAvailable()) };
+      });
+    }
+    window.APRReview = {
+      context() {
+        const entry = window.WorkDoneSession.get(currentFinancialYear);
+        const filters = ['wgFilter', 'engineerFilter', 'groupFilter', 'reviewStatusFilter', 'varianceFilter'].map(id => document.getElementById(id)?.selectedOptions?.[0]?.textContent).filter(Boolean);
+        const search = document.getElementById('search')?.value;
+        if (search) filters.push('Search: ' + search);
+        filters.push(document.getElementById('hideZeroVolume')?.checked ? 'Zero volume hidden' : 'Zero volume included');
+        return { year: currentFinancialYear, stage: currentReviewStage, plan: currentPlanVersion === 'v1' ? 'Effective Reforecast' : 'Original Approved Plan', cutoff: getEffectiveForecastCutoffPeriod(), deliveryUnit: window.getDeliveryUnitById?.(currentDeliveryUnit)?.name || currentDeliveryUnit, file: entry?.fileName, loadedAt: window.forecastLoadedAt, refreshing: aprRefreshing, error: window.forecastLoadError || window.workOrderCorrectionsError, filters };
+      },
+      hasDrafts() { return Boolean(pendingCorrections.size || Object.keys(breakdownPlanEditContext?.edits || {}).length || window.forecastBuilderPreviewContext?.hasDirtyChanges()); },
+      reviewed: isJobReviewed,
+      render: renderPreservingScroll,
+      open(job) { const found = window.currentJobsMap.get(job); if (found) showBreakdown(found); },
+      async markReviewed(job) {
+        const year = currentFinancialYear, stage = currentReviewStage;
+        const next = structuredClone(reviewStore);
+        next[job] ||= {}; next[job][year] ||= {};
+        const record = { reviewedAt: new Date().toISOString(), reviewedBy: '' };
+        next[job][year][stage] = record;
+        if (!window.isApiEnabled?.() || !await window.saveReviewsToApi(next)) return false;
+        reviewStore[job] ||= {}; reviewStore[job][year] ||= {}; reviewStore[job][year][stage] = record;
+        try { saveReviewStore(); } catch (error) { console.warn('Optional review cache unavailable', error); }
+        return true;
+      },
+      async refresh() {
+        if (aprRefreshing) return;
+        if (this.hasDrafts()) throw new Error('Save or discard edits before refreshing.');
+        if (!window.isApiEnabled?.()) throw new Error('Connect to the server to refresh shared data.');
+        aprRefreshing = true; window.APRFeatures.context();
+        try {
+          const year = currentFinancialYear, version = currentPlanVersion;
+          const loaded = await loadDashboardForecastAsync(year, version);
+          await loadWorkDoneStoreAsync(currentFinancialYear);
+          if (year === currentFinancialYear && version === currentPlanVersion) fData = loaded?.data || null;
+          updateWorkGroupFilterOptions(); renderPreservingScroll();
+          if (window.forecastLoadError || window.workOrderCorrectionsError) throw new Error(window.forecastLoadError || window.workOrderCorrectionsError);
+        } finally { aprRefreshing = false; window.APRFeatures.context(); }
+      }
+    };
+
+    window.aprReady = init();
+    render();

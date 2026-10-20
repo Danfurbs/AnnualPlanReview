@@ -23,10 +23,10 @@ module.exports = (db) => {
       const orderId = req.params.orderId;
       if (!orderId || orderId.length > 500 || ['__proto__', 'constructor', 'prototype'].includes(orderId) ||
           !Number.isInteger(expectedRevision) || expectedRevision < 0 ||
-          (value !== null && (!isPlainObject(value) || typeof value.units !== 'number' || !Number.isFinite(value.units)))) {
+          (value !== null && (!isPlainObject(value) || typeof value.units !== 'number' || !Number.isFinite(value.units) || (value.reason !== undefined && (typeof value.reason !== 'string' || value.reason.length > 1000))))) {
         return res.status(400).json({ success: false, error: 'Invalid work order amendments payload' });
       }
-      const correction = value === null ? null : { units: value.units, updatedAt: new Date().toISOString() };
+      const correction = value === null ? null : { units: value.units, reason: (value.reason || '').trim(), updatedAt: new Date().toISOString() };
       const revision = await db.updateWorkOrderAmendment(orderId, correction, expectedRevision);
       return res.json({ success: true, revision, value: correction });
     } catch (error) {

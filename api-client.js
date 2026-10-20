@@ -803,38 +803,53 @@ async function deleteCommentFromApi(commentId) {
 }
 
 
-async function loadWorkOrderAmendmentsFromApi() {
-  if (!isApiEnabled()) return null;
-  try {
-    const response = await apiRequest('/work-order-amendments');
-    if (response.success) amendmentRevisions = response.revisions || {};
-    return response.success && response.data ? response.data : {};
-  } catch (err) {
-    console.warn('Failed to load work order amendments from API:', err);
-    return null;
-  }
+function loadWorkOrderAmendmentsFromApi() {
+  // Serialize reads with writes so a late GET cannot replace newer revision tokens.
+  const operation = amendmentQueue.then(async () => {
+    if (!isApiEnabled()) return null;
+    try {
+      const response = await apiRequest('/work-order-amendments', { cache: 'no-store' });
+      if (!response.success || !response.data || typeof response.data !== 'object' || Array.isArray(response.data)) return null;
+      if (Object.values(response.data).some(value => !value || typeof value.units !== 'number' || !Number.isFinite(value.units))) return null;
+      amendmentRevisions = response.revisions || {};
+      return response.data;
+    } catch (err) {
+      console.warn('Failed to load work order amendments from API:', err);
+      return null;
+    }
+  });
+  amendmentQueue = operation.catch(() => undefined);
+  return operation;
 }
 
+// Keep the ancestry of failed drafts even when a refresh updates the displayed server snapshot.
+const pendingAmendmentRevisions = new Map();
+
 function saveWorkOrderAmendmentToApi(orderId, value) {
+  if (!isApiEnabled()) return Promise.resolve(false);
   const snapshot = value === null ? null : { ...value };
   const operation = amendmentQueue.then(async () => {
     try {
+      const expectedRevision = pendingAmendmentRevisions.get(orderId) ?? (amendmentRevisions[orderId] || 0);
+      pendingAmendmentRevisions.set(orderId, expectedRevision);
       const response = await apiRequest('/work-order-amendments/' + encodeURIComponent(orderId), {
-        method: 'PUT', body: { value: snapshot, expectedRevision: amendmentRevisions[orderId] || 0 }
+        method: 'PUT', body: { value: snapshot, expectedRevision }
       });
-      if (response.success) amendmentRevisions[orderId] = response.revision;
+      if (response.success) { amendmentRevisions[orderId] = response.revision; pendingAmendmentRevisions.delete(orderId); }
       return response.success === true;
     } catch (error) {
       if (error.status === 409) {
-        const latest = await apiRequest('/work-order-amendments');
+        const latest = await apiRequest('/work-order-amendments', { cache: 'no-store' });
+        if (!latest.success || !latest.data) return false;
         const current = latest.data?.[orderId];
         const message = 'This Work Order changed in another session. Server value: ' + (current ? current.units : 'original source value') + '. Your draft is retained. Apply your correction instead?';
         if (window.confirm(message)) {
           amendmentRevisions[orderId] = latest.revisions?.[orderId] || 0;
+          pendingAmendmentRevisions.set(orderId, amendmentRevisions[orderId]);
           const retried = await apiRequest('/work-order-amendments/' + encodeURIComponent(orderId), {
             method: 'PUT', body: { value: snapshot, expectedRevision: amendmentRevisions[orderId] }
           });
-          if (retried.success) amendmentRevisions[orderId] = retried.revision;
+          if (retried.success) { amendmentRevisions[orderId] = retried.revision; pendingAmendmentRevisions.delete(orderId); }
           return retried.success === true;
         }
       }
@@ -1001,3 +1016,11 @@ window.loadReviewsFromApi = loadReviewsFromApi;
 window.saveReviewsToApi = saveReviewsToApi;
 
 window.loadWorkOrderAmendmentsFromApi = loadWorkOrderAmendmentsFromApi;
+
+window.loadChangeHistoryFromApi = async (year, job, before) => {
+  if (!isApiEnabled()) throw new Error('Connect to the server to view saved history.');
+  const response = await apiRequest('/change-history/' + encodeURIComponent(year) + '/' + encodeURIComponent(job) + (before ? '?before=' + encodeURIComponent(before) : ''), { cache: 'no-store' });
+  if (!response.success || !Array.isArray(response.data)) throw new Error('Saved history could not be loaded.');
+  return response;
+};
+window.loadAPRDatabaseHealth = () => apiRequest('/health/db', { cache: 'no-store' });

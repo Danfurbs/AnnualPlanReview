@@ -127,3 +127,53 @@ test('per-job conflict merges server comments and confirms only after successful
   assert.equal(draft.comments.WG, 'Remote');
   assert.equal(job.wgs.WG.P8, 0);
 });
+
+
+test('correction reads reject unsuccessful responses instead of claiming an empty store', async () => {
+  const client = loadApiClient(async () => ({ ok: true, json: async () => ({ success: false }) }));
+  assert.equal(await client.loadWorkOrderAmendmentsFromApi(), null);
+});
+
+test('correction reads bypass HTTP caches and accept a confirmed empty server store', async () => {
+  let options;
+  const client = loadApiClient(async (_url, config) => { options = config; return { ok: true, json: async () => ({ success: true, data: {}, revisions: {} }) }; });
+  assert.deepEqual(JSON.parse(JSON.stringify(await client.loadWorkOrderAmendmentsFromApi())), {});
+  assert.equal(options.cache, 'no-store');
+});
+
+test('correction reads wait for pending writes and use the new revision afterwards', async () => {
+  const calls = [];
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const client = loadApiClient(async (_url, options) => {
+    calls.push(options.method);
+    if (options.method === 'PUT') { await gate; return successfulResponse(1); }
+    return { ok: true, json: async () => ({ success: true, data: { WO1: { units: 8 } }, revisions: { WO1: 1 } }) };
+  });
+  const saving = client.saveWorkOrderAmendmentToApi('WO1', { units: 8 });
+  const reading = client.loadWorkOrderAmendmentsFromApi();
+  await Promise.resolve();
+  assert.deepEqual(calls, ['PUT']);
+  release();
+  assert.equal(await saving, true);
+  assert.equal((await reading).WO1.units, 8);
+  assert.deepEqual(calls, ['PUT', 'GET']);
+});
+
+
+test('refreshing after a declined correction conflict cannot silently authorize overwrite on retry', async () => {
+  const revisions = [];
+  let confirmations = 0;
+  const client = loadApiClient(async (_url, options) => {
+    if (options.method === 'PUT') {
+      revisions.push(JSON.parse(options.body).expectedRevision);
+      return { ok: false, status: 409, json: async () => ({ error: 'Revision conflict' }) };
+    }
+    return { ok: true, json: async () => ({ success: true, data: { WO1: { units: 7 } }, revisions: { WO1: 3 } }) };
+  }, { confirm: () => { confirmations++; return false; } });
+  assert.equal(await client.saveWorkOrderAmendmentToApi('WO1', { units: 20 }), false);
+  await client.loadWorkOrderAmendmentsFromApi();
+  assert.equal(await client.saveWorkOrderAmendmentToApi('WO1', { units: 20 }), false);
+  assert.deepEqual(revisions, [0, 0]);
+  assert.equal(confirmations, 2);
+});

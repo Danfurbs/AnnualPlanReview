@@ -1,3 +1,4 @@
+const history = require('./change-history');
 /**
  * PostgreSQL Database Service
  * Handles all database operations for forecasts, baselines, and comments using PostgreSQL
@@ -26,7 +27,14 @@ class DatabaseServicePG {
     console.log('PostgreSQL database service initialized');
   }
 
+  async getChangeHistory(job, year, before = '9999', limit = 51) {
+    await this.ready;
+    const result = await this.pool.query("SELECT * FROM change_history WHERE job_number = $1 AND (fiscal_year = $2 OR kind = 'correction') AND (saved_at || id) < $3 ORDER BY saved_at DESC, id DESC LIMIT $4", [job, year, before, limit]);
+    return result.rows;
+  }
+
   async ensureSchema() {
+    await this.pool.query(history.schema);
     await this.pool.query('CREATE TABLE IF NOT EXISTS work_order_amendment_revisions (order_id TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0)');
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS forecasts (
@@ -187,6 +195,8 @@ class DatabaseServicePG {
       const current = currentResult.rows[0].revision;
       if (current !== expectedRevision) throw revisionConflict();
 
+      const beforeRows = await client.query('SELECT * FROM forecasts WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3', [jobNumber, fiscalYear, planVersion]);
+      const beforeComments = await client.query('SELECT * FROM forecast_comments WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3', [jobNumber, fiscalYear, planVersion]);
       const { wgs, comments } = forecastData;
 
       // Delete existing forecast data for this job
@@ -223,6 +233,10 @@ class DatabaseServicePG {
       }
 
       const revisionResult = await client.query(`UPDATE revisions SET revision = revision + 1 WHERE scope = 'forecast' AND data_key = $1 RETURNING revision`, [key]);
+      const afterRows = await client.query('SELECT * FROM forecasts WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3', [jobNumber, fiscalYear, planVersion]);
+      const afterComments = await client.query('SELECT * FROM forecast_comments WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3', [jobNumber, fiscalYear, planVersion]);
+      const audit = history.forecastEvents(history.rowsToForecast(beforeRows.rows, beforeComments.rows), history.rowsToForecast(afterRows.rows, afterComments.rows), fiscalYear, planVersion);
+      await history.insertPG(client, audit);
       await client.query('COMMIT');
       return revisionResult.rows[0].revision;
     } catch (error) {
@@ -580,6 +594,8 @@ class DatabaseServicePG {
       const currentResult = await client.query(`SELECT revision FROM revisions WHERE scope = 'forecast' AND data_key = $1 FOR UPDATE`, [key]);
       const current = currentResult.rows[0].revision;
       if (current !== expectedRevision) throw revisionConflict();
+      const beforeRows = await client.query('SELECT * FROM forecasts WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
+      const beforeComments = await client.query('SELECT * FROM forecast_comments WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
       await client.query('DELETE FROM forecasts WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
       await client.query('DELETE FROM forecast_comments WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
 
@@ -634,6 +650,10 @@ class DatabaseServicePG {
 
       const revision = current + 1;
       await client.query(`UPDATE revisions SET revision = $2 WHERE scope = 'forecast' AND data_key = $1`, [key, revision]);
+      const afterRows = await client.query('SELECT * FROM forecasts WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
+      const afterComments = await client.query('SELECT * FROM forecast_comments WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
+      const audit = history.forecastEvents(history.rowsToForecast(beforeRows.rows, beforeComments.rows), history.rowsToForecast(afterRows.rows, afterComments.rows), fiscalYear, planVersion);
+      await history.insertPG(client, audit);
       await client.query('COMMIT');
       return revision;
     } catch (error) {
@@ -776,9 +796,11 @@ class DatabaseServicePG {
       const revision = Number(revisions.rows[0]?.revision || 0);
       if (revision !== expectedRevision) throw revisionConflict();
       const data = { ...stored.rows[0].data_json };
+      const audit = history.correctionEvents(orderId, data[orderId], value);
       if (value === null) delete data[orderId]; else data[orderId] = value;
       await client.query('UPDATE work_order_amendments SET data_json = $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = 1', [JSON.stringify(data)]);
       await client.query('INSERT INTO work_order_amendment_revisions (order_id, revision) VALUES ($1, $2) ON CONFLICT (order_id) DO UPDATE SET revision = EXCLUDED.revision', [orderId, revision + 1]);
+      await history.insertPG(client, audit);
       await client.query('COMMIT');
       return revision + 1;
     } catch (error) { await client.query('ROLLBACK'); throw error; }

@@ -1120,6 +1120,7 @@ async function loadDashboardForecastAsync(year, planVersion) {
       }
     }
     window.forecastLoadError = null;
+    window.forecastLoadedAt = new Date().toISOString();
     return planVersion === 'v1' ? getEffectiveForecastSnapshot(year) : getForecastSnapshot(year, 'v0');
   } catch (error) {
     window.forecastMemorySnapshots?.delete(year + ':v0');

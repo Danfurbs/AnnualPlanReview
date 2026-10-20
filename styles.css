@@ -1902,3 +1902,25 @@
 @media (max-width: 600px) {
   #dashboardPage > .controls > .control-group, #dashboardPage > .controls > .control-group:nth-child(-n+3) { grid-column: 1 / -1; }
 }
+
+/* Everyday review features, contained within the existing screens. */
+.apr-context-bar { background: #fff; padding: 16px 20px; margin: 12px 0; border: 1px solid #dce3ed; border-radius: 10px; }
+.apr-context-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.apr-context-grid strong, .apr-context-grid span { display: block; overflow-wrap: anywhere; }
+.apr-context-grid span, #aprFilterDetails, #aprReviewQueueStatus { color: #526176; font-size: 12px; margin-top: 4px; }
+.apr-inline-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.apr-detail { background: white; border: 1px solid #dce3ed; padding: 14px; border-radius: 8px; margin: 14px 0; }
+.apr-detail summary, .apr-context-bar summary { cursor: pointer; font-weight: 600; }
+.apr-history-event { padding: 12px 0; border-bottom: 1px solid #e2e8f0; }
+.apr-history-event small { display: block; color: #526176; margin: 4px 0; }
+.apr-history-event ul, #aprDiagnosticsResults ul { padding-left: 20px; overflow-wrap: anywhere; }
+.apr-table-scroll { overflow-x: auto; }
+.apr-table-scroll table { width: 100%; border-collapse: collapse; }
+.apr-table-scroll td, .apr-table-scroll th { padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-variant-numeric: tabular-nums; }
+.apr-table-scroll td:first-child, .apr-table-scroll th:first-child { text-align: left; }
+.apr-table-scroll tfoot { font-weight: 700; }
+#aprRefreshStatus:empty { display: none; }
+#aprRefreshStatus { margin-top: 10px; }
+@media (max-width: 760px) { .apr-context-grid { grid-template-columns: 1fr; gap: 12px; } }
+
+.wo-unit-edit .wo-reason-input { width: min(240px, 100%); text-align: left; display: block; }

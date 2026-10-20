@@ -1,3 +1,4 @@
+const history = require('./change-history');
 /**
  * Database Service
  * Handles all database operations for forecasts, baselines, and comments
@@ -34,7 +35,12 @@ class DatabaseService {
     this.prepareStatements();
   }
 
+  getChangeHistory(job, year, before = '9999', limit = 51) {
+    return this.db.prepare("SELECT * FROM change_history WHERE job_number = ? AND (fiscal_year = ? OR kind = 'correction') AND (saved_at || id) < ? ORDER BY saved_at DESC, id DESC LIMIT ?").all(job, year, before, limit);
+  }
+
   ensureSchema() {
+    this.db.exec(history.schema);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS forecasts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -325,6 +331,8 @@ class DatabaseService {
       const key = `${fiscalYear}:${planVersion}`;
       const current = this.getRevision('forecast', key);
       if (current !== expectedRevision) throw revisionConflict();
+      const before = { [jobNumber]: this.getForecastByJob(jobNumber, fiscalYear, planVersion) };
+      const audit = history.forecastEvents(before[jobNumber] ? { [jobNumber]: before[jobNumber] } : {}, { [jobNumber]: data }, fiscalYear, planVersion);
 
       // Delete existing forecast data for this job
       this.stmts.deleteForecastsByJob.run(jobNumber, fiscalYear, planVersion);
@@ -347,6 +355,8 @@ class DatabaseService {
       }
       const revision = current + 1;
       this.stmts.setRevision.run('forecast', key, revision);
+      const after = { [jobNumber]: this.getForecastByJob(jobNumber, fiscalYear, planVersion) };
+      history.insertSQLite(this.db, history.forecastEvents(before, after, fiscalYear, planVersion));
       return revision;
     });
 
@@ -601,6 +611,8 @@ class DatabaseService {
       const key = `${fiscalYear}:${planVersion}`;
       const current = this.getRevision('forecast', key);
       if (current !== expectedRevision) throw revisionConflict();
+      const before = this.getForecastData(fiscalYear, planVersion);
+      const audit = history.forecastEvents(before, forecastData, fiscalYear, planVersion);
       this.stmts.deleteForecastsByVersion.run(fiscalYear, planVersion);
       this.stmts.deleteForecastCommentsByVersion.run(fiscalYear, planVersion);
       for (const [jobNumber, jobData] of Object.entries(forecastData)) {
@@ -624,6 +636,8 @@ class DatabaseService {
       }
       const revision = current + 1;
       this.stmts.setRevision.run('forecast', key, revision);
+      const after = this.getForecastData(fiscalYear, planVersion);
+      history.insertSQLite(this.db, history.forecastEvents(before, after, fiscalYear, planVersion));
       return revision;
     });
 
@@ -813,9 +827,11 @@ class DatabaseService {
       const revision = Number(current?.revision || 0);
       if (revision !== expectedRevision) { const error = new Error('Revision conflict'); error.code = 'REVISION_CONFLICT'; throw error; }
       const data = this.getWorkOrderAmendments();
+      const audit = history.correctionEvents(orderId, data[orderId], value);
       if (value === null) delete data[orderId]; else data[orderId] = value;
       this.saveWorkOrderAmendments(data);
       this.db.prepare('INSERT INTO work_order_amendment_revisions (order_id, revision) VALUES (?, ?) ON CONFLICT(order_id) DO UPDATE SET revision = excluded.revision').run(orderId, revision + 1);
+      history.insertSQLite(this.db, audit);
       return revision + 1;
     })();
   }

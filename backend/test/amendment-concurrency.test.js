@@ -23,6 +23,7 @@ test('SQLite snapshot retains a comment-only job after resetting its numerical o
 
 test('independent corrections merge; stale edits and stale deletion cannot overwrite newer values', () => {
   const db = new DatabaseSync(':memory:');
+  db.exec(require('../services/change-history').schema);
   db.exec('CREATE TABLE work_order_amendment_revisions (order_id TEXT PRIMARY KEY, revision INTEGER NOT NULL); CREATE TABLE work_order_amendments (id INTEGER PRIMARY KEY, data_json TEXT, updated_at TEXT)');
   const service = Object.create(SQLiteService.prototype);
   service.db = { prepare: sql => db.prepare(sql), transaction: fn => () => {

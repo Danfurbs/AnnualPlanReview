@@ -89,6 +89,17 @@ app.get('/api/health/db', async (req, res) => {
   }
 });
 
+// Read-only persisted history. Older changes cannot be reconstructed.
+app.get('/api/change-history/:year/:job', async (req, res) => {
+  const { year, job } = req.params;
+  if (!/^FY\d{2,4}$/.test(year) || !job || job.length > 50 || (req.query.before && String(req.query.before).length > 80)) return res.status(400).json({ success: false, error: 'Invalid history context' });
+  try {
+    const rows = await db.getChangeHistory(job, year, req.query.before || '9999');
+    const page = rows.slice(0, 50);
+    res.set('Cache-Control', 'no-store').json({ success: true, data: page.map(row => ({ ...row, details: JSON.parse(row.details_json), details_json: undefined })), next: rows.length > 50 ? page.at(-1).saved_at + page.at(-1).id : null });
+  } catch (error) { console.error('History load failed:', error); res.status(500).json({ success: false, error: 'History could not be loaded' }); }
+});
+
 // API Routes
 const forecastRoutes = require('./routes/forecasts')(db);
 const baselineRoutes = require('./routes/baselines')(db);

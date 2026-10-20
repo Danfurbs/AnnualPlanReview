@@ -28,7 +28,13 @@
 
     <p id="saveStateIndicator" role="status">No saves this session</p>
     <button id="retryCorrections" type="button" class="group-action-button" hidden onclick="retryWorkOrderCorrections()">Retry corrections</button>
-    <p id="reportingContext" class="reporting-context" role="status"></p>
+    <section class="apr-context-bar" aria-label="Reporting data and review actions">
+      <div id="aprReportingDetails" class="apr-context-grid"></div>
+      <div class="apr-inline-actions"><button id="aprRefreshShared" type="button" class="group-action-button">Refresh shared data</button><button id="aprStartReview" type="button" class="primary-button" disabled>Review next job</button><span id="aprReviewQueueStatus"></span></div>
+      <details><summary>Active filters</summary><p id="aprFilterDetails"></p></details>
+      <p id="aprRefreshStatus" role="status"></p>
+    </section>
+    <p id="reportingContext" class="reporting-context" role="status" hidden></p>
     <div class="controls">
       <div class="control-group">
         <label>Review stage</label>
@@ -349,6 +355,7 @@
       </div>
     </div>
 
+    <details id="aprBuilderHistory" class="apr-detail" hidden><summary>Saved change history</summary></details>
     <div class="preview-builder-layout">
       <aside class="preview-engineer-sidebar" aria-label="Engineer planning progress">
         <div class="preview-sidebar-controls">
@@ -553,6 +560,9 @@
         <button class="close" onclick="closeBreakdown()" aria-label="Close Standard Job Breakdown">&times;</button>
       </div>
       <p class="helper-text" id="breakdownModeNote"></p>
+      <div id="aprReviewNavigation" class="apr-inline-actions"><button type="button" class="group-action-button" id="aprPreviousJob">Previous</button><span id="aprQueuePosition"></span><button type="button" class="group-action-button" id="aprNextJob">Next</button><button type="button" class="primary-button" id="aprReviewNext">Mark reviewed &amp; next</button></div>
+      <details class="apr-detail" id="aprRollupExplanation" hidden><summary>Explain this group total</summary><div id="aprRollupRows"></div></details>
+      <details class="apr-detail" id="aprJobHistory"><summary>Saved change history</summary></details>
 
       <div class="breakdown-controls" style="display: flex; gap: 16px; align-items: center; margin-bottom: 16px; padding: 12px; background: #f5f5f5; border-radius: 4px;">
         <label style="font-weight: 500;">Compare against:</label>
@@ -747,6 +757,10 @@
         <button class="close" onclick="closeSettings()">&times;</button>
       </div>
       <div class="settings-content">
+        <details class="settings-section"><summary>Advanced</summary>
+          <label><input id="aprShowDiagnostics" type="checkbox"> Show developer diagnostics</label>
+          <section id="aprDeveloperDiagnostics" hidden><h3>Read-only diagnostics</h3><p class="helper-text">Checks this session and server connectivity. Automated release tests run separately in CI.</p><button type="button" class="group-action-button" id="aprRunDiagnostics">Run diagnostics</button><div id="aprDiagnosticsResults" role="status"></div></section>
+        </details>
         <div class="settings-section">
           <h3>Backend API Configuration</h3>
           <p class="helper-text">Configure your Render backend API to sync forecasts across all devices.</p>
@@ -912,6 +926,7 @@
   <script src="forecast-builder-preview.js"></script>
   <script src="baseline-storage.js"></script>
   <script src="baseline-page.js"></script>
+  <script src="review-enhancements.js"></script>
   <script src="app.js"></script>
   <script src="settings.js"></script>
 </body>
