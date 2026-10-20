@@ -54,6 +54,8 @@ const server = http.createServer(async (req, res) => {
     }));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.evaluate(() => window.aprReady);
+    assert.equal(await page.locator('#dashboard-accordion-data').evaluate(el => el.open), true, 'Missing Work Done opens uploads');
+    assert.equal(await page.locator('#dashboard-accordion-filters').evaluate(el => el.open), true, 'Filters start open');
     fixture.group = await page.evaluate(() => [...window.workGroupSets.keys()][0]);
     await page.evaluate(group => {
       requiresContextSelection = false;
@@ -72,7 +74,7 @@ const server = http.createServer(async (req, res) => {
       updateGroupFilterOptions();
       API_CONFIG.retryAttempts = 1;
     }, fixture.group);
-    await page.selectOption('#dashboardSection', 'data');
+    await page.evaluate(() => APRDashboard.openSection('data'));
     await page.locator('#aprRefreshShared').click();
     await page.waitForFunction(() => document.getElementById('aprRefreshStatus').textContent.includes('retained'));
     assert.match(await page.locator('#aprReportingDetails').textContent(), /private-work-done.xlsx/);
@@ -122,6 +124,17 @@ const server = http.createServer(async (req, res) => {
     await page.waitForFunction(() => document.getElementById('aprDiagnosticsResults').textContent.includes('Sparse'));
     assert.match(await page.locator('#aprDiagnosticsResults').textContent(), /Passed/);
     await page.evaluate(() => closeSettings());
+    // Sections expand independently and retain choices across application renders.
+    await page.evaluate(() => { APRDashboard.openSection('filters'); APRDashboard.openSection('data'); });
+    assert.equal(await page.locator('#dashboard-accordion-filters').evaluate(el => el.open), true);
+    assert.equal(await page.locator('#dashboard-accordion-data').evaluate(el => el.open), true);
+    await page.locator('#dashboard-accordion-data > summary').click();
+    await page.evaluate(() => render());
+    assert.equal(await page.locator('#dashboard-accordion-data').evaluate(el => el.open), false);
+    await page.locator('#dashboard-accordion-data > summary').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#dashboard-accordion-data').evaluate(el => el.open), true);
+    assert.equal(await page.locator('#dashboard-accordion-filters').evaluate(el => el.open), true);
     // Every original control has one live instance after the layout move.
     for (const id of ['reviewStageButton', 'dashboardPlanVersion', 'reportingPeriodSelect', 'wgFilter', 'engineerFilter', 'groupFilter', 'reviewStatusFilter', 'varianceFilter', 'hideZeroVolume', 'search', 'aprRefreshShared', 'aprStartReview', 'commentExportType']) {
       assert.equal(await page.locator('#' + id).count(), 1, id);
@@ -144,7 +157,7 @@ const server = http.createServer(async (req, res) => {
       await page.waitForTimeout(100);
       await page.evaluate(() => { scrollTo(0, 0); APRDashboard.openSection('filters'); });
       for (const section of ['filters', 'overview', 'data', 'workdone', 'comments', 'manage']) {
-        await page.selectOption('#dashboardSection', section);
+        await page.evaluate(key => APRDashboard.openSection(key), section);
         assert.equal(await page.locator('.dashboard-sidebar-content').evaluate(el => el.scrollWidth > el.clientWidth + 1), false, `${section} width ${width}`);
         assert.equal(await page.locator('#dashboardSidebar').evaluate(el => el.getBoundingClientRect().bottom <= innerHeight + 1), true, `Sidebar fits height ${height}`);
       }

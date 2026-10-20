@@ -37,25 +37,31 @@
   sidebar.id = 'dashboardSidebar';
   sidebar.setAttribute('aria-label', 'Review filters and supporting tools');
   const sidebarHead = make('div', 'dashboard-sidebar-head');
-  const sectionLabel = make('label', '', 'Review tools');
-  sectionLabel.htmlFor = 'dashboardSection';
-  const sectionSelect = make('select');
-  sectionSelect.id = 'dashboardSection';
+  const sectionLabel = make('strong', '', 'Review tools');
   const panels = make('div', 'dashboard-sidebar-content');
   const sections = {};
+  const accordions = {};
+  const summaries = {};
+  let missingWorkDoneKey = null;
   [
-    ['filters', 'Filters'], ['overview', 'Review overview'],
-    ['data', 'Data & uploads'], ['workdone', 'Work Done activity'],
+    ['data', 'Data & uploads'], ['filters', 'Filters'],
+    ['overview', 'Review overview'], ['workdone', 'Work Done activity'],
     ['comments', 'Comments & exports'], ['manage', 'Manage']
   ].forEach(([key, title]) => {
-    const option = make('option', '', title);
-    option.value = key;
-    sectionSelect.append(option);
+    const accordion = make('details', 'dashboard-sidebar-section');
+    accordion.id = 'dashboard-accordion-' + key;
+    accordion.open = key === 'filters' || key === 'data';
+    const heading = make('summary');
+    const status = make('span', 'dashboard-section-status');
+    heading.append(make('span', 'dashboard-section-title', title), status);
+    accordion.append(heading);
+    accordions[key] = accordion;
+    summaries[key] = status;
     const panel = make('section', 'dashboard-sidebar-panel');
     panel.id = 'dashboard-section-' + key;
     panel.setAttribute('aria-label', title);
-    panel.hidden = key !== 'filters';
-    panels.append(panel);
+    accordion.append(panel);
+    panels.append(accordion);
     sections[key] = panel;
   });
   const mobile = matchMedia('(max-width: 700px)');
@@ -65,7 +71,7 @@
   toggle.setAttribute('aria-controls', sidebar.id);
   const close = button('Close sidebar', () => { setExpanded(false); toggle.focus(); });
   close.classList.add('dashboard-sidebar-close');
-  sidebarHead.append(sectionLabel, close, sectionSelect);
+  sidebarHead.append(sectionLabel, close);
   sidebar.append(sidebarHead, panels);
   const main = make('main', 'dashboard-main');
   const toolbar = make('div', 'dashboard-job-toolbar');
@@ -124,12 +130,12 @@
     sidebar.hidden = !value;
   }
   function openSection(key) {
-    sectionSelect.value = key;
-    Object.entries(sections).forEach(([name, panel]) => { panel.hidden = name !== key; });
-    panels.scrollTop = 0;
+    if (!accordions[key]) return;
+    accordions[key].open = true;
     setExpanded(true);
+    // Scroll only the sidebar; preserve the user's position in the standard jobs.
+    panels.scrollTop += accordions[key].getBoundingClientRect().top - panels.getBoundingClientRect().top;
   }
-  sectionSelect.addEventListener('change', () => openSection(sectionSelect.value));
   sidebar.addEventListener('keydown', event => {
     if (event.key === 'Escape') { setExpanded(false); toggle.focus(); }
   });
@@ -155,8 +161,17 @@
         + Number($('hideZeroVolume').checked) + Number(Boolean($('search').value.trim()));
       toggle.textContent = active ? `Filters & tools (${active})` : 'Filters & tools';
       reset.hidden = !active;
+      summaries.filters.textContent = active ? `${active} active` : 'All jobs';
+      summaries.data.textContent = c.error ? 'Data unavailable' : !c.file ? 'Work Done needed' : 'Work Done loaded';
+      // Open on first missing upload or a newly selected year, not on every render.
+      // Native details preserve the user's choices while filters and data refresh.
+      const missingKey = c.file ? null : c.year;
+      if (missingKey && missingKey !== missingWorkDoneKey) accordions.data.open = true;
+      missingWorkDoneKey = missingKey;
     },
     counts(rows) {
+      const jobs = rows.filter(row => !row.group);
+      summaries.overview.textContent = `${jobs.filter(row => row.reviewed).length}/${jobs.length} reviewed`;
       count.textContent = `${rows.filter(row => !row.group).length} standard jobs · ${rows.filter(row => row.group).length} groups`;
     }
   };

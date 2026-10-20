@@ -2004,3 +2004,16 @@
 #dashboardPage .jobs-grid { grid-template-columns: minmax(0, 1fr); }
 #dashboardPage .job-details, #dashboardPage .job-card { min-width: 0; }
 #dashboardPage .group-planned-actual-box { flex-wrap: wrap; }
+
+/* Independently expandable sidebar sections keep all tools discoverable. */
+.dashboard-sidebar-head > strong { font-size: 14px; }
+.dashboard-sidebar-content { padding: 0; }
+.dashboard-sidebar-section { border-bottom: 1px solid #e2e8f0; }
+.dashboard-sidebar-section:last-child { border-bottom: 0; }
+.dashboard-sidebar-section > summary { padding: 14px; cursor: pointer; color: #1e293b; font-size: 13px; }
+.dashboard-sidebar-section > summary:hover { background: #f8fafc; }
+.dashboard-sidebar-section > summary:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+.dashboard-section-title { font-weight: 650; }
+.dashboard-section-status { display: block; padding-left: 16px; margin-top: 4px; font-size: 11px; color: #64748b; }
+.dashboard-section-status:empty { display: none; }
+.dashboard-sidebar-section > .dashboard-sidebar-panel { padding: 0 14px 16px; }
