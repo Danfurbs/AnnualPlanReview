@@ -72,6 +72,7 @@ const server = http.createServer(async (req, res) => {
       updateGroupFilterOptions();
       API_CONFIG.retryAttempts = 1;
     }, fixture.group);
+    await page.selectOption('#dashboardSection', 'data');
     await page.locator('#aprRefreshShared').click();
     await page.waitForFunction(() => document.getElementById('aprRefreshStatus').textContent.includes('retained'));
     assert.match(await page.locator('#aprReportingDetails').textContent(), /private-work-done.xlsx/);
@@ -106,6 +107,9 @@ const server = http.createServer(async (req, res) => {
     await page.locator('#aprRefreshShared').click();
     await page.waitForFunction(() => Boolean(window.forecastLoadError));
     assert.equal(await page.locator('#jobs').isVisible(), false);
+    for (const id of ['reviewProgressCard', 'workOrderActivityCard', 'commentsCard', 'variancesCard']) {
+      assert.equal(await page.locator('#' + id).evaluate(el => el.hidden), true, 'Failed loads hide relocated summaries');
+    }
     assert.equal(await page.evaluate(() => WorkDoneSession.get('FY27').fileName), 'private-work-done.xlsx');
     fixture.failForecast = false;
     await page.locator('#aprRefreshShared').click();
@@ -118,10 +122,50 @@ const server = http.createServer(async (req, res) => {
     await page.waitForFunction(() => document.getElementById('aprDiagnosticsResults').textContent.includes('Sparse'));
     assert.match(await page.locator('#aprDiagnosticsResults').textContent(), /Passed/);
     await page.evaluate(() => closeSettings());
-    for (const width of [1440, 768, 390]) {
-      await page.setViewportSize({ width, height: 1000 });
-      assert.equal(await page.locator('.apr-context-bar').evaluate(el => el.scrollWidth > el.clientWidth), false);
+    // Every original control has one live instance after the layout move.
+    for (const id of ['reviewStageButton', 'dashboardPlanVersion', 'reportingPeriodSelect', 'wgFilter', 'engineerFilter', 'groupFilter', 'reviewStatusFilter', 'varianceFilter', 'hideZeroVolume', 'search', 'aprRefreshShared', 'aprStartReview', 'commentExportType']) {
+      assert.equal(await page.locator('#' + id).count(), 1, id);
     }
+    const savedContext = await page.evaluate(() => ({
+      year: currentFinancialYear, stage: currentReviewStage, area: currentDeliveryUnit,
+      plan: currentPlanVersion, cutoff: currentForecastCutoff,
+      file: WorkDoneSession.get('FY27').fileName
+    }));
+    await page.locator('#search').fill('Inspection A');
+    await page.locator('#dashboardClearFilters').click();
+    assert.equal(await page.locator('#search').inputValue(), '');
+    assert.deepEqual(await page.evaluate(() => ({
+      year: currentFinancialYear, stage: currentReviewStage, area: currentDeliveryUnit,
+      plan: currentPlanVersion, cutoff: currentForecastCutoff,
+      file: WorkDoneSession.get('FY27').fileName
+    })), savedContext);
+    for (const [width, height] of [[1440, 900], [1024, 600], [768, 650], [390, 844], [320, 640], [844, 390]]) {
+      await page.setViewportSize({ width, height });
+      await page.waitForTimeout(100);
+      await page.evaluate(() => { scrollTo(0, 0); APRDashboard.openSection('filters'); });
+      for (const section of ['filters', 'overview', 'data', 'workdone', 'comments', 'manage']) {
+        await page.selectOption('#dashboardSection', section);
+        assert.equal(await page.locator('.dashboard-sidebar-content').evaluate(el => el.scrollWidth > el.clientWidth + 1), false, `${section} width ${width}`);
+        assert.equal(await page.locator('#dashboardSidebar').evaluate(el => el.getBoundingClientRect().bottom <= innerHeight + 1), true, `Sidebar fits height ${height}`);
+      }
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `Page width ${width}`);
+      await page.evaluate(() => { APRDashboard.openSection('overview'); scrollTo(0, 500); });
+      await page.waitForTimeout(50);
+      assert.equal(await page.locator('#dashboardSidebar').evaluate(el => {
+        const r = el.getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= innerHeight + 1;
+      }), true, `Sticky sidebar at ${width}x${height}`);
+      const before = await page.evaluate(() => scrollY);
+      await page.locator('.dashboard-sidebar-content').evaluate(el => { el.scrollTop = el.scrollHeight; });
+      assert.equal(await page.evaluate(() => scrollY), before, 'Sidebar scroll must not move jobs');
+      await page.locator('.dashboard-sidebar-close').click();
+      assert.equal(await page.locator('#dashboardSidebar').isVisible(), false);
+      await page.locator('#dashboardSidebarToggle').click();
+      assert.equal(await page.locator('#dashboardSidebar').isVisible(), true);
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => { scrollTo(0, 0); APRDashboard.openSection('filters'); });
+
     if (process.env.SCREENSHOT_PATH) {
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.screenshot({ path: process.env.SCREENSHOT_PATH });

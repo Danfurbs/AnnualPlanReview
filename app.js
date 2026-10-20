@@ -2775,7 +2775,7 @@
         forecastStatus.hidden = !reportingError;
         forecastStatus.textContent = reportingError || '';
       }
-      for (const selector of ['#performanceSummary', '.forecast-health', '.top-summary', '#jobs']) {
+      for (const selector of ['#performanceSummary', '.forecast-health', '#reviewProgressCard', '#workOrderActivityCard', '#commentsCard', '#variancesCard', '#jobs']) {
         const section = document.querySelector(selector);
         if (section) section.hidden = Boolean(reportingError);
       }

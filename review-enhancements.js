@@ -22,9 +22,8 @@
   function context() {
     const c = root.APRReview.context(), node = $('aprReportingDetails');
     if (!node) return;
-    node.innerHTML = `<div><strong>${esc(c.year)} · ${esc(c.stage)} · ${esc(c.plan)}</strong>
-      <span>${esc(c.deliveryUnit)} · ${esc(c.cutoff === null ? 'Choose a completed reporting period' : 'Completed through P' + c.cutoff)}</span></div>
-      <div><strong>Your Work Done</strong><span>${esc(c.file || 'No file uploaded')} · private to this session</span></div>
+    root.APRDashboard?.update(c);
+    node.innerHTML = `<div><strong>Your Work Done</strong><span>${esc(c.file || 'No file uploaded')} · private to this session</span></div>
       <div><strong>Shared data</strong><span>${c.error ? 'Unavailable — retry loading' : c.loadedAt ? 'Loaded ' + esc(new Date(c.loadedAt).toLocaleString()) : 'Not loaded'}</span></div>`;
     $('aprFilterDetails').textContent = c.filters.join(' · ');
     $('aprRefreshShared').disabled = Boolean(c.refreshing);
@@ -33,6 +32,7 @@
   }
   function setQueue(rows) {
     queue = reviewQueue(rows);
+    root.APRDashboard?.counts(rows);
     $('aprReviewQueueStatus').textContent = `${queue.length} unreviewed jobs in the current filters`;
     $('aprStartReview').disabled = !queue.length;
   }

@@ -1924,3 +1924,83 @@
 @media (max-width: 760px) { .apr-context-grid { grid-template-columns: 1fr; gap: 12px; } }
 
 .wo-unit-edit .wo-reason-input { width: min(240px, 100%); text-align: left; display: block; }
+
+/* Compact reporting context and an independently scrollable, sticky review sidebar. */
+#dashboardPage { max-width: 1800px; --dashboard-header-height: 160px; }
+#dashboardPage .top-bar { position: sticky; top: 0; z-index: 30; padding: 12px 16px; gap: 10px; margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 8px; }
+#dashboardPage .top-bar h1 { font-size: 20px; margin: 0; }
+#dashboardPage .top-bar-icon { width: 32px; height: 32px; font-size: 12px; box-shadow: none; }
+#dashboardPage .top-bar-title { gap: 9px; }
+#dashboardPage .top-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+#dashboardPage .top-bar-actions button { padding: 8px 12px; font-size: 13px; }
+#dashboardPage #saveStateIndicator { flex-basis: 100%; margin: 0; text-align: right; overflow-wrap: anywhere; }
+.dashboard-context { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.dashboard-context .control-group { min-width: 0; gap: 4px; position: relative; }
+.dashboard-context .control-group > label { font-size: 11px; }
+.dashboard-context select, .dashboard-context button { width: 100%; min-width: 0; padding: 8px 10px; font-size: 13px; background: white; }
+.dashboard-context #reviewStageButton { background: #edf3ff; color: #1e40af; white-space: normal; text-align: left; }
+.dashboard-field-help { font-size: 11px; color: #64748b; }
+.dashboard-field-help summary { cursor: pointer; }
+.dashboard-field-help .helper-text { display: block; padding: 8px; font-size: 12px; background: #f8fafc; line-height: 1.5; }
+.dashboard-layout { display: grid; grid-template-columns: clamp(240px, 23vw, 310px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.dashboard-sidebar { position: sticky; top: calc(var(--dashboard-header-height) + 16px); height: calc(100vh - var(--dashboard-header-height) - 48px); height: calc(100dvh - var(--dashboard-header-height) - 48px); min-height: 0; display: flex; flex-direction: column; background: white; border: 1px solid #dce3ed; border-radius: 8px; }
+.dashboard-sidebar-head { flex: 0 0 auto; display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 14px; border-bottom: 1px solid #e2e8f0; align-items: center; }
+.dashboard-sidebar-head > label { font-size: 14px; font-weight: 700; }
+.dashboard-sidebar-head > select { grid-column: 1 / -1; }
+.dashboard-sidebar-head .dashboard-sidebar-close { padding: 5px 8px; font-size: 11px; }
+.dashboard-sidebar-content { overflow-y: auto; overflow-x: hidden; min-height: 0; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 14px; }
+.dashboard-sidebar-panel { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.dashboard-sidebar .control-group { width: 100%; min-width: 0; gap: 5px; }
+.dashboard-sidebar label { font-size: 11px; }
+.dashboard-sidebar select, .dashboard-sidebar input:not([type="checkbox"]), .dashboard-sidebar button { width: 100%; min-width: 0; max-width: 100%; }
+.dashboard-sidebar select { text-overflow: ellipsis; background: white; padding: 9px 8px; font-size: 13px; }
+.dashboard-sidebar button { white-space: normal; padding: 8px 10px; font-size: 12px; }
+.dashboard-sidebar p, .dashboard-sidebar li, .dashboard-sidebar span { overflow-wrap: anywhere; }
+.dashboard-sidebar .helper-text { font-size: 11px; line-height: 1.5; }
+.dashboard-sidebar .apr-context-bar { margin: 0; border: 0; padding: 0; }
+.dashboard-sidebar .apr-context-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; font-size: 13px; }
+.dashboard-sidebar .performance-summary { grid-template-columns: minmax(0, 1fr); margin: 0; }
+.dashboard-sidebar .summary-card, .dashboard-sidebar .forecast-health { box-shadow: none; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; margin: 0; min-width: 0; }
+.dashboard-sidebar .summary-card .card-header { flex-wrap: wrap; }
+.dashboard-sidebar .health-content { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+.dashboard-sidebar .health-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.dashboard-sidebar .health-stat { padding: 7px 2px; }
+.dashboard-sidebar .health-stat-value { font-size: 20px; }
+.dashboard-sidebar .health-stat-label { font-size: 10px; }
+.dashboard-sidebar .health-legend { gap: 4px; }
+.dashboard-sidebar .header-actions { flex-wrap: wrap; }
+.dashboard-main { min-width: 0; }
+.dashboard-job-toolbar { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 10px; }
+.dashboard-search { flex: 1 1 180px; min-width: 0; }
+.dashboard-search input { width: 100%; min-width: 0; background: white; }
+.dashboard-job-toolbar button { padding: 10px 12px; font-size: 13px; }
+.dashboard-job-meta { display: flex; gap: 8px 14px; align-items: center; flex-wrap: wrap; margin: 0 0 16px; font-size: 12px; color: #526176; }
+.dashboard-job-meta button { font-size: 12px; padding: 5px 8px; }
+#dashboardDataStatus { margin-left: auto; }
+#dashboardDataStatus.dashboard-data-attention { background: #fff3d6; color: #854d0e; }
+.dashboard-data-notice { background: #fffbeb; border: 1px solid #fcd34d; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; overflow-wrap: anywhere; }
+.dashboard-sidebar-collapsed .dashboard-layout { grid-template-columns: minmax(0, 1fr); }
+#dashboardPage .discipline-header { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 1000px) {
+  .dashboard-layout { gap: 12px; grid-template-columns: 240px minmax(0, 1fr); }
+  #dashboardPage .top-bar-hero { gap: 8px; }
+  #dashboardPage .top-bar-actions { width: auto; }
+}
+@media (max-width: 700px) {
+  #dashboardPage .top-bar { padding: 10px; }
+  #dashboardPage .top-bar h1 { font-size: 17px; }
+  .dashboard-context { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  .dashboard-context > .control-group:first-child { grid-column: 1 / -1; }
+  .dashboard-context select { font-size: 16px; }
+  .dashboard-field-help { font-size: 11px; }
+  .dashboard-layout { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-sidebar { position: fixed; left: 10px; top: calc(var(--dashboard-header-height) + 10px); width: min(340px, calc(100vw - 20px)); height: calc(100dvh - var(--dashboard-header-height) - 20px); z-index: 35; box-shadow: 0 10px 35px rgba(15,23,42,.22); }
+  .dashboard-job-toolbar { align-items: center; }
+  .dashboard-search { order: -1; flex-basis: 100%; }
+  #dashboardPage .top-bar-actions button { padding: 7px 9px; }
+  .dashboard-sidebar select { font-size: 16px; }
+}
+
+#dashboardPage .jobs-grid { grid-template-columns: minmax(0, 1fr); }
+#dashboardPage .job-details, #dashboardPage .job-card { min-width: 0; }
+#dashboardPage .group-planned-actual-box { flex-wrap: wrap; }
