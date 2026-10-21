@@ -46,7 +46,7 @@
   [
     ['data', 'Data & uploads'], ['filters', 'Filters'],
     ['overview', 'Review overview'], ['workdone', 'Work Done activity'],
-    ['comments', 'Comments & exports'], ['manage', 'Manage']
+    ['comments', 'Review & exports'], ['manage', 'Manage']
   ].forEach(([key, title]) => {
     const accordion = make('details', 'dashboard-sidebar-section');
     accordion.id = 'dashboard-accordion-' + key;
@@ -110,10 +110,10 @@
   sections.filters.append($('aprFilterDetails').parentElement);
   const contextBar = page.querySelector('.apr-context-bar');
   sections.data.append($('workDoneSessionStatus'), contextBar);
-  sections.overview.append($('performanceSummary'), page.querySelector('.forecast-health'), $('reviewProgressCard'), $('variancesCard'));
+  sections.overview.append($('performanceSummary'), page.querySelector('.forecast-health'), $('reviewProgressCard'));
   sections.overview.querySelector('.health-header h3').textContent = 'Delivery variance';
   sections.workdone.append($('workOrderActivityCard'));
-  sections.comments.append($('commentsCard'));
+  sections.comments.append($('variancesCard'), $('commentsCard'));
   page.querySelector('.top-summary').remove();
   const actions = header.querySelector('.top-bar-actions');
   actions.prepend(toggle);

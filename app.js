@@ -11,6 +11,16 @@
     let currentChart = null;
     let topVarianceBriefCharts = [];
     let latestTopVarianceBrief = null;
+    let topVarianceMode = 'units';
+    function topVarianceValue(item) { return topVarianceMode === 'percent' ? item.percent : item.variance; }
+    function topVarianceLabel(item) {
+      return topVarianceMode === 'units' ? formatSignedUnits(item.variance) : item.percent === null ? 'No forecast' : formatSignedUnits(item.percent) + '%';
+    }
+    window.setTopVarianceMode = function(mode) {
+      topVarianceMode = mode === 'percent' ? 'percent' : 'units';
+      ['topVarianceMode', 'topVarianceSlideMode'].forEach(id => { document.getElementById(id).value = topVarianceMode; });
+      render();
+    };
     let currentWorkOrders = [];
     let currentWorkOrderWorkGroup = 'all';
     let lastForecastRowCount = null;
@@ -1550,13 +1560,18 @@
             job,
             selected,
             variance: cumulativeVariance,
+            percent: cumulativeForecast ? cumulativeVariance / Math.abs(cumulativeForecast) * 100 : null,
             chartLabels,
             forecastSeries,
             actualSeries
           };
         })
         .filter(item => Math.abs(item.variance) > 0.0001)
-        .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance))
+        .sort((a, b) => {
+          const av = topVarianceValue(a), bv = topVarianceValue(b);
+          if (av === null || bv === null) return av === bv ? Math.abs(b.variance) - Math.abs(a.variance) : av === null ? 1 : -1;
+          return Math.abs(bv) - Math.abs(av) || a.job.jn.localeCompare(b.job.jn);
+        })
         .slice(0, 10);
 
       const selectedTotals = items.reduce((acc, item) => {
@@ -1585,101 +1600,17 @@
 
     function renderTopVariancesModal() {
       const data = latestTopVarianceBrief;
-      const modal = document.getElementById('topVariancesModal');
-      const metaEl = document.getElementById('topVarianceModalMeta');
-      const summaryEl = document.getElementById('topVarianceBriefSummary');
-      const gridEl = document.getElementById('topVarianceSlideGrid');
-      if (!modal || !summaryEl || !gridEl) return;
-
+      const grid = document.getElementById('topVarianceSlideGrid');
       destroyTopVarianceBriefCharts();
-      if (!data || !data.items.length) {
-        if (metaEl) metaEl.textContent = 'No variance data for the current dashboard selection.';
-        summaryEl.innerHTML = '';
-        gridEl.innerHTML = '<div class="empty-slide-state">No variances to display for the current filters.</div>';
-        return;
-      }
-
-      if (metaEl) metaEl.textContent = data.meta;
-      const totalClass = data.selectedTotals.v > 0 ? 'positive' : data.selectedTotals.v < 0 ? 'negative' : 'neutral';
-      summaryEl.innerHTML = `
-        <div class="brief-summary-card"><span>Selection</span><strong>${escapeHtml(data.throughLabel)}</strong></div>
-        <div class="brief-summary-card"><span>Jobs shown</span><strong>${data.items.length}</strong></div>
-        <div class="brief-summary-card"><span>Forecast to P${data.periodNumber}</span><strong>${formatUnits(data.selectedTotals.f)}</strong></div>
-        <div class="brief-summary-card"><span>Actual to P${data.periodNumber}</span><strong>${formatUnits(data.selectedTotals.a)}</strong></div>
-        <div class="brief-summary-card"><span>Work Done to P${data.periodNumber}</span><strong>${formatUnits(data.selectedTotals.wd)}</strong></div>
-        <div class="brief-summary-card"><span>Variance to P${data.periodNumber}</span><strong class="${totalClass}">${formatSignedUnits(data.selectedTotals.v)}</strong></div>
-      `;
-
-      gridEl.innerHTML = data.items.map((item, index) => {
-        const selectedClass = item.variance > 0 ? 'positive' : item.variance < 0 ? 'negative' : 'neutral';
-        const health = getJobHealthStatus(item.selected);
-        return `
-          <article class="top-variance-slide-card">
-            <div class="slide-card-heading">
-              <div>
-                <div class="slide-card-rank">#${index + 1}</div>
-                <h3>${escapeHtml(item.job.jn)}</h3>
-                <p>${escapeHtml(item.job.desc)}</p>
-              </div>
-              <span class="slide-rag slide-rag-${health.status}">${escapeHtml(health.label)}</span>
-            </div>
-            <div class="slide-period-summary">
-              <div><span>Forecast to P${data.periodNumber}</span><strong>${formatUnits(item.selected.f)}</strong></div>
-              <div><span>Actual to P${data.periodNumber}</span><strong>${formatUnits(item.selected.a)}</strong></div>
-              <div><span>Work Done to P${data.periodNumber}</span><strong>${formatUnits(item.selected.wd || 0)}</strong></div>
-              <div><span>${escapeHtml(data.throughLabel)}</span><strong class="${selectedClass}">${formatSignedUnits(item.variance)}</strong></div>
-            </div>
-            <div class="slide-chart-wrap"><canvas id="topVarianceChart${index}" aria-label="Cumulative forecast and work done for ${escapeHtml(item.job.jn)}"></canvas></div>
-          </article>
-        `;
-      }).join('');
-
-      data.items.forEach((item, index) => {
-        const canvas = document.getElementById(`topVarianceChart${index}`);
-        if (!canvas) return;
-        const chart = new Chart(canvas, {
-          type: 'line',
-          data: {
-            labels: item.chartLabels,
-            datasets: [
-              {
-                label: 'Forecast',
-                data: item.forecastSeries,
-                borderColor: '#2563eb',
-                backgroundColor: 'rgba(37, 99, 235, 0.08)',
-                borderWidth: 2,
-                pointRadius: 1.5,
-                tension: 0.25,
-                fill: false
-              },
-              {
-                label: 'Work Done',
-                data: item.actualSeries,
-                borderColor: '#10b981',
-                backgroundColor: 'rgba(16, 185, 129, 0.08)',
-                borderWidth: 2,
-                pointRadius: 1.5,
-                tension: 0.25,
-                fill: false
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            plugins: {
-              legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
-              tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}` } }
-            },
-            scales: {
-              x: { ticks: { font: { size: 10 }, maxRotation: 0 }, grid: { display: false } },
-              y: { beginAtZero: true, ticks: { font: { size: 10 } } }
-            }
-          }
-        });
-        topVarianceBriefCharts.push(chart);
-      });
+      document.getElementById('topVarianceBriefSummary').innerHTML = '';
+      document.getElementById('topVarianceModalMeta').textContent = data ? data.meta : 'Current dashboard selection';
+      if (!data?.items.length) { grid.innerHTML = '<p>No variances to display for the current filters.</p>'; return; }
+      const maximum = Math.max(...data.items.map(item => Math.abs(topVarianceValue(item) || 0)), 1);
+      grid.innerHTML = '<div class="variance-slide-sheet"><div class="variance-slide-heading"><strong>TOP ' + data.items.length + ' VARIANCES</strong><span>Ranked by ' + (topVarianceMode === 'percent' ? 'percentage (%)' : 'units') + '</span></div><table class="variance-slide-table"><thead><tr><th>#</th><th>Standard job</th><th>Unit</th><th>Forecast</th><th>Actual</th><th>Variance</th></tr></thead><tbody>' + data.items.map((item, i) => {
+        const color = item.variance < 0 ? 'negative' : 'positive';
+        const width = Math.abs(topVarianceValue(item) || 0) / maximum * 100;
+        return '<tr><td>' + (i + 1) + '</td><td><strong>' + escapeHtml(item.job.jn) + '</strong><span class="variance-slide-description">' + escapeHtml(item.job.desc) + '</span></td><td>' + escapeHtml(item.job.unit || '—') + '</td><td>' + formatUnits(item.selected.f) + '</td><td>' + formatUnits(item.selected.a) + '</td><td class="' + color + '"><strong>' + escapeHtml(topVarianceLabel(item)) + '</strong><div class="variance-slide-track"><span class="' + color + '" style="width:' + width + '%"></span></div></td></tr>';
+      }).join('') + '</tbody></table><p class="variance-slide-footnote">Actual minus forecast · cumulative through P' + data.periodNumber + ' · % = variance / absolute forecast × 100. Zero forecasts show “No forecast” and rank after calculable percentages. Units may differ; volumes are shown per job.</p></div>';
     }
 
     function openTopVariancesModal() {
@@ -1785,7 +1716,8 @@
         if (!latestTopVarianceBrief.items.length) {
           varianceListEl.innerHTML = '<li class="variance-item"><span class="variance-desc">No variances to display.</span></li>';
         } else {
-          varianceListEl.innerHTML = latestTopVarianceBrief.items.map(({ job, variance }) => {
+          varianceListEl.innerHTML = latestTopVarianceBrief.items.map(item => {
+            const { job, variance } = item;
             const valueClass = variance > 0 ? 'positive' : variance < 0 ? 'negative' : 'neutral';
             return `
               <li class="variance-item" onclick="showBreakdownByJobNumber('${escapeHtml(job.jn)}')">
@@ -1793,12 +1725,13 @@
                   <strong>${escapeHtml(job.jn)}</strong>
                   <span class="variance-desc">${escapeHtml(job.desc)}</span>
                 </div>
-                <div class="variance-value ${valueClass}">${formatSignedUnits(variance)}</div>
+                <div class="variance-value ${valueClass}">${escapeHtml(topVarianceLabel(item))}<small>${escapeHtml(job.unit || '')}</small></div>
               </li>
             `;
           }).join('');
         }
       }
+      if (document.getElementById('topVariancesModal')?.classList.contains('open')) renderTopVariancesModal();
     }
 
     function showBreakdownByJobNumber(jobNumber) {

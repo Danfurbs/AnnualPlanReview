@@ -2017,3 +2017,33 @@
 .dashboard-section-status { display: block; padding-left: 16px; margin-top: 4px; font-size: 11px; color: #64748b; }
 .dashboard-section-status:empty { display: none; }
 .dashboard-sidebar-section > .dashboard-sidebar-panel { padding: 0 14px 16px; }
+
+/* A compact presentation summary with explicit units and readable numbers. */
+.variance-mode-control, .variance-slide-actions { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.variance-value small { display:block; color:#64748b; font-size:11px; }
+#topVarianceSlideGrid { display:block; }
+.variance-slide-sheet { background:white; padding:24px; border:1px solid #e2e8f0; border-radius:12px; }
+.variance-slide-heading { display:flex; justify-content:space-between; margin-bottom:16px; color:#0f172a; font-size:20px; }
+.variance-slide-heading span { font-size:14px; color:#64748b; }
+.variance-slide-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:14px; }
+.variance-slide-table th { background:#0f172a; color:white; padding:10px; text-align:right; }
+.variance-slide-table td { padding:8px 10px; border-bottom:1px solid #e2e8f0; text-align:right; font-variant-numeric:tabular-nums; }
+.variance-slide-table th:nth-child(1) { width:4%; }
+.variance-slide-table th:nth-child(2) { width:38%; }
+.variance-slide-table th:nth-child(3) { width:10%; }
+.variance-slide-table th:nth-child(-n+3), .variance-slide-table td:nth-child(-n+3) { text-align:left; }
+.variance-slide-table tr:nth-child(even) { background:#f8fafc; }
+.variance-slide-description { display:block; color:#475569; font-size:12px; overflow-wrap:anywhere; }
+.variance-slide-track { height:4px; background:#e2e8f0; margin-top:5px; }
+.variance-slide-track span { display:block; height:100%; background:#2563eb; }
+.variance-slide-track span.negative { background:#d97706; }
+.variance-slide-footnote { color:#64748b; font-size:11px; margin:12px 0 0; }
+@media print {
+  @page { size: A4 landscape; margin:10mm; }
+  body:has(#topVariancesModal.open) > :not(#topVariancesModal) { display:none !important; }
+  #topVariancesModal.open { position:static; display:block; background:white; padding:0; overflow:visible; }
+  #topVariancesModal.open .modal-content { width:100%; max-width:none; max-height:none; margin:0; padding:0; overflow:visible; box-shadow:none; }
+  #topVariancesModal .close, #topVariancesModal .variance-slide-actions { display:none; }
+  .variance-slide-sheet { break-inside:avoid; }
+  .variance-slide-table th { color:#0f172a; background:#e2e8f0; }
+}
