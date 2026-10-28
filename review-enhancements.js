@@ -28,20 +28,22 @@
     $('aprFilterDetails').textContent = c.filters.join(' · ');
     $('aprRefreshShared').disabled = Boolean(c.refreshing);
     $('aprRefreshShared').textContent = c.refreshing ? 'Refreshing…' : 'Refresh shared data';
-    $('aprStartReview').disabled = Boolean(c.error) || !queue.length;
+    $('aprStartReview').disabled = Boolean(c.error || c.refreshing) || !queue.length;
   }
   function setQueue(rows) {
     queue = reviewQueue(rows);
     root.APRDashboard?.counts(rows);
     $('aprReviewQueueStatus').textContent = `${queue.length} unreviewed jobs in the current filters`;
-    $('aprStartReview').disabled = !queue.length;
+    const c = root.APRReview.context();
+    $('aprStartReview').disabled = Boolean(c.error || c.refreshing) || !queue.length;
   }
   function canLeave() {
     if (root.APRReview.hasDrafts()) { root.Toast?.error('Save or discard open edits before moving between jobs or refreshing.'); return false; }
     return true;
   }
   function openJob(job) {
-    if (!job || !canLeave()) return;
+    const c = root.APRReview.context();
+    if (!job || c.error || c.refreshing || !canLeave()) return;
     root.APRReview.open(job);
   }
   function navigation(job) {
@@ -87,12 +89,18 @@
     historyTarget.querySelector('[data-history-more]').hidden = !historyNext;
   }
   async function loadHistory(target, year, job, append = false) {
+    if (target.dataset.historyLoading === 'true' || (append && !historyNext)) return;
     const serial = ++historySerial;
     historyTarget = target;
     if (!append) { historyRecords = []; historyNext = null; }
     const status = target.querySelector('[data-history-status]');
     const button = target.querySelector('[data-history-load]');
+    const more = target.querySelector('[data-history-more]');
+    target.dataset.historyLoading = 'true';
+    target.setAttribute('aria-busy', 'true');
     button.disabled = true;
+    more.disabled = true;
+    if (!append) renderHistory();
     status.textContent = 'Loading saved history…';
     try {
       const page = await root.loadChangeHistoryFromApi(year, job, append ? historyNext : null);
@@ -100,17 +108,28 @@
       historyRecords = append ? [...historyRecords, ...page.data] : page.data;
       historyNext = page.next;
       renderHistory();
-      status.textContent = 'Recorded from history rollout onward. Earlier changes are not reconstructed. Named editors require sign-in.';
+      status.textContent = 'History starts from when change recording was enabled.';
     } catch (error) {
       if (serial !== historySerial) return;
       status.textContent = error.message;
-    } finally { button.disabled = false; }
+    } finally {
+      button.disabled = false;
+      more.disabled = false;
+      if (serial === historySerial) {
+        target.dataset.historyLoading = 'false';
+        target.setAttribute('aria-busy', 'false');
+      }
+    }
   }
   function bindHistory(target, year, job) {
     historySerial++;
+    historyTarget = target;
+    historyRecords = []; historyNext = null;
+    target.dataset.historyLoading = 'false';
+    target.setAttribute('aria-busy', 'false');
     target.innerHTML = `<summary>Saved change history · ${esc(job)}</summary>
       <div class="apr-inline-actions"><label>Show <select aria-label="History change type"><option value="all">All changes</option><option value="forecast">Forecast</option><option value="correction">Corrections</option></select></label><button type="button" class="group-action-button" data-history-load>Load history</button></div>
-      <p class="helper-text" data-history-status>Load server-confirmed changes for this job.</p><div data-history-body></div><button type="button" class="group-action-button" data-history-more hidden>Load older changes</button>`;
+      <p class="helper-text" role="status" data-history-status></p><div data-history-body></div><button type="button" class="group-action-button" data-history-more hidden>Load older changes</button>`;
     target.querySelector('[data-history-load]').onclick = () => loadHistory(target, year, job);
     target.querySelector('[data-history-more]').onclick = () => loadHistory(target, year, job, true);
     target.querySelector('select').onchange = () => { if (historyTarget === target) renderHistory(); };
@@ -163,7 +182,7 @@
       status.textContent = 'Loading shared forecasts and corrections…';
       try {
         await root.APRReview.refresh();
-        status.textContent = 'Shared forecasts and corrections refreshed. Your Work Done upload and filters are retained.';
+        status.textContent = 'Shared data refreshed.';
       } catch (error) { status.textContent = error.message; }
       context();
     };

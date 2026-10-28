@@ -1915,6 +1915,19 @@
 .apr-history-event small { display: block; color: #526176; margin: 4px 0; }
 .apr-history-event ul, #aprDiagnosticsResults ul { padding-left: 20px; overflow-wrap: anywhere; }
 .apr-table-scroll { overflow-x: auto; }
+.apr-table-scroll th { white-space: nowrap; }
+.apr-table-scroll tbody tr:hover { background: #f8fafc; }
+.apr-history-event:last-child { border-bottom: 0; }
+button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+button:disabled { cursor: default; }
+@media (max-width: 600px) {
+  .modal-content { padding: 16px; max-height: 90dvh; }
+  .apr-inline-actions { gap: 8px; }
+  .apr-table-scroll td, .apr-table-scroll th { padding: 8px; }
+  .variance-slide-actions, .variance-mode-control { flex-wrap: wrap; }
+  .variance-slide-sheet { padding: 12px; overflow-x: auto; }
+  .variance-slide-table { min-width: 640px; }
+}
 .apr-table-scroll table { width: 100%; border-collapse: collapse; }
 .apr-table-scroll td, .apr-table-scroll th { padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-variant-numeric: tabular-nums; }
 .apr-table-scroll td:first-child, .apr-table-scroll th:first-child { text-align: left; }
@@ -2047,3 +2060,8 @@
   .variance-slide-sheet { break-inside:avoid; }
   .variance-slide-table th { color:#0f172a; background:#e2e8f0; }
 }
+.forecast-value { border: 0; padding: 2px 0; background: transparent; color: inherit; font: inherit; cursor: help; white-space: nowrap; }
+.forecast-value:hover { background: #eef2ff; color: #312e81; }
+.forecast-value:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; border-radius: 3px; }
+.forecast-v1-badge { display: inline-block; padding: 1px 3px; border-radius: 3px; font-size: 9px; font-weight: 700; color: #3730a3; background: #e0e7ff; vertical-align: middle; }
+.forecast-value-tip { position: fixed; z-index: 10000; max-width: min(320px, calc(100vw - 16px)); padding: 10px 12px; border-radius: 6px; background: #1e293b; color: #fff; font-size: 13px; line-height: 1.5; white-space: pre-line; box-shadow: 0 4px 16px #0003; }

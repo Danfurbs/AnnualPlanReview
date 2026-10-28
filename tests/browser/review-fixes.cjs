@@ -17,16 +17,26 @@ const server = http.createServer((req, res) => {
   try {
     browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE || undefined });
     const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+    await page.route('**/api/work-order-amendments', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: {}, revisions: {} }) }));
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('dialog', dialog => dialog.accept());
     const real = process.env.REAL_BROWSER_LIBRARIES === 'true';
-    if (!real) await page.route('https://cdn.jsdelivr.net/**', route => route.fulfill({ contentType: 'text/javascript', body: '' }));
+    if (!real) await page.route('https://cdn.jsdelivr.net/**', route => route.fulfill({ contentType: 'text/javascript', body: route.request().url().includes('chart') ? 'window.Chart=class {constructor(){} destroy(){} update(){}};' : '' }));
     await page.addInitScript(() => localStorage.setItem('aprApiEnabled', 'false'));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.waitForFunction(() => window.stdJobs?.size > 0);
     if (real) await page.waitForFunction(() => window.XLSX && window.Chart);
     const fixture = await page.evaluate(async () => {
+      // Forecast fixtures are local; corrections still require a confirmed server read.
+      const loadCorrections = loadWorkOrderAmendmentsAsync;
+      loadWorkOrderAmendmentsAsync = async () => {
+        const enabled = API_CONFIG.enabled;
+        API_CONFIG.enabled = true;
+        try { return await loadCorrections(); }
+        finally { API_CONFIG.enabled = enabled; }
+      };
+      await loadWorkOrderAmendmentsAsync();
       const engineer = getDeliveryUnits().flatMap(du => getEngineersForDeliveryUnit(du.id).map(e => ({ ...e, du: du.id }))).find(e => e.workGroupSets.length);
       const wg = engineer.workGroupSets[0], job = window.stdJobs.keys().next().value;
       const data = new Map([[job, { wgs: { [wg]: { P1: 100, P7: 100, P8: 100, P9: 100 } }, periods: { P1: 100, P7: 100, P8: 100, P9: 100 }, comments: { [wg]: 'V0 comment' } }]]);
@@ -36,6 +46,7 @@ const server = http.createServer((req, res) => {
       return { wg, job, du: engineer.du };
     });
     assert.equal(await page.locator('#reportingPeriodSelect').inputValue(), '');
+    await page.evaluate(() => APRDashboard.openSection('overview'));
     assert.match(await page.locator('#performanceSummary').innerText(), /Unavailable/);
     await page.selectOption('#reportingPeriodSelect', 'P0');
     assert.match(await page.locator('#performanceSummary').innerText(), /400/);

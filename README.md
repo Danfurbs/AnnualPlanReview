@@ -44,7 +44,7 @@ For long-term safety, take periodic external PostgreSQL backups (`pg_dump "$DATA
 
 ## Current development state
 
-As of 5 October 2026, RF6 is complete for development planning. The legacy Builder has been retired with user approval; V1 changes are made individually in the Standard Job review screen. Read these files in order:
+As of 5 October 2026, RF6 is complete for development planning. The legacy Builder has been replaced by the Engineer → Standard Job Forecast Builder for V0 planning; V1 changes are made individually in the Standard Job review screen. Read these files in order:
 
 1. This README for architecture and setup.
 2. [Business rules](FORECAST_BUSINESS_RULES_UPDATED.md) for authoritative semantics.

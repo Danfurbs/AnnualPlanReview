@@ -54,9 +54,6 @@
     let workDoneUploadedAt = null;
     let workDoneUploadInProgress = false;
 
-    // Breakdown plan version preference
-    const BREAKDOWN_PLAN_VERSION_KEY = 'aprBreakdownPlanVersionV1';
-    let breakdownPlanVersion = 'v0'; // Default to v0
     const DELIVERY_UNIT_KEY = 'aprDeliveryUnitV1';
     const storedDeliveryUnit = localStorage.getItem(DELIVERY_UNIT_KEY) || '';
     // Legacy selections were Standard Job MNT codes. They are deliberately not
@@ -67,35 +64,6 @@
     // Read-only application context for isolated preview screens. The dashboard
     // remains the single owner of the selected Delivery Unit.
     window.getCurrentDeliveryUnitId = () => currentDeliveryUnit;
-
-    function loadBreakdownPlanVersion() {
-      const saved = localStorage.getItem(BREAKDOWN_PLAN_VERSION_KEY);
-      if (saved && ['v0', 'v1', 'both'].includes(saved)) {
-        breakdownPlanVersion = saved;
-      }
-    }
-
-    function saveBreakdownPlanVersion(version) {
-      breakdownPlanVersion = version;
-      localStorage.setItem(BREAKDOWN_PLAN_VERSION_KEY, version);
-    }
-
-    function handleBreakdownPlanVersionChange(sourceSelect) {
-      const select = sourceSelect || document.getElementById('wgComparePlanVersion') || document.getElementById('breakdownPlanVersion');
-      if (!select) return;
-      saveBreakdownPlanVersion(select.value);
-      const modalSelect = document.getElementById('breakdownPlanVersion');
-      if (modalSelect && modalSelect !== select && modalSelect.value !== select.value) modalSelect.value = select.value;
-      const sectionSelect = document.getElementById('wgComparePlanVersion');
-      if (sectionSelect && sectionSelect !== select && sectionSelect.value !== select.value) sectionSelect.value = select.value;
-      // Re-render the current breakdown if it's open
-      if (currentCommentJob) {
-        const job = window.currentJobsMap.get(currentCommentJob);
-        if (job) showBreakdown(job);
-      }
-    }
-    // Expose globally for HTML onclick handler
-    window.handleBreakdownPlanVersionChange = handleBreakdownPlanVersionChange;
 
     function getDefaultBreakdownChartScope() {
       const workGroup = document.getElementById('wgFilter')?.value || 'all';
@@ -125,15 +93,9 @@
       }
     }
     window.handleBreakdownChartScopeTargetChange = handleBreakdownChartScopeTargetChange;
-    function getBreakdownComparisonLabel() {
-      if (breakdownPlanVersion === 'v1') return 'Comparing against Plan v1';
-      if (breakdownPlanVersion === 'both') return 'Comparing against both Plan v0 and Plan v1';
-      return 'Comparing against Plan v0';
-    }
-
     // Work group table display mode preference (forecast vs variance)
-    const WG_DISPLAY_MODE_KEY = 'aprWgDisplayModeV1';
-    let wgDisplayMode = 'variance'; // Default to variance (current behavior)
+    const WG_DISPLAY_MODE_KEY = 'aprWgDisplayModeV2';
+    let wgDisplayMode = 'forecast';
 
     function loadWgDisplayMode() {
       const saved = localStorage.getItem(WG_DISPLAY_MODE_KEY);
@@ -1172,7 +1134,7 @@
       await loadGroupStoreAsync();
       refreshWorkDoneYearSelector();
       document.getElementById('workDoneFySelect')?.addEventListener('change', () => { workDoneUploadSerial += 1; });
-      loadBreakdownPlanVersion();
+
     try { disciplineCollapseState = JSON.parse(localStorage.getItem('aprDisciplineCollapseStateV1') || '{}'); } catch { disciplineCollapseState = {}; }
     initForecastCutoffTimeline();
       loadWgDisplayMode();
@@ -3829,7 +3791,84 @@
       }
     }
 
+    function getBreakdownSourceNumbers(job) {
+      return [...new Set(job.isGroupRollup
+        ? getAllGroups().find(group => group.id === job.groupId)?.jobNumbers || []
+        : [job.jn])];
+    }
+
+    function hasForecastUpdates(year, number) {
+      const forecast = getForecastSnapshot(year, 'v1')?.data.get(number);
+      return Object.values(forecast?.wgs || {}).some(periods =>
+        Object.keys(periods || {}).some(period => /^P([1-9]|1[0-3])$/.test(period)));
+    }
+
+    function v0PeriodsEqual(job, scope) {
+      const original = getForecastPeriodsForScope(job, scope, 'v0');
+      const latest = getForecastPeriodsForScope(job, scope, 'v1');
+      return Boolean(original && latest) && Array.from({ length: 13 }, (_, i) => `P${i+1}`)
+        .every(period => Number(original[period] || 0) === Number(latest[period] || 0));
+    }
+
+    function renderLatestForecastValue(job, groups, period, value) {
+      const workGroups = Array.isArray(groups) ? groups : [groups];
+      const periods = period ? [period] : Array.from({ length: 13 }, (_, i) => `P${i+1}`);
+      let updated = false, hasOriginal = false, hasForecast = false, original = 0, missingOriginal = false;
+      getBreakdownSourceNumbers(job).forEach(number => {
+        const v0 = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(number);
+        const v1 = getForecastSnapshot(currentFinancialYear, 'v1')?.data.get(number);
+        workGroups.forEach(group => {
+          const before = resolveForecastWorkGroupPeriods(v0, group) || {};
+          const after = resolveForecastWorkGroupPeriods(v1, group) || {};
+          periods.forEach(key => {
+            const isUpdate = Object.hasOwn(after, key);
+            updated ||= isUpdate;
+            hasOriginal ||= Object.hasOwn(before, key);
+            hasForecast ||= isUpdate || Object.hasOwn(before, key);
+            missingOriginal ||= isUpdate && !Object.hasOwn(before, key);
+            original += Number(before[key] || 0);
+          });
+        });
+      });
+      if (!hasForecast) return '<span title="No forecast available">—</span>';
+      const formatted = Number(value || 0).toFixed(1);
+      if (!updated) return formatted;
+      const delta = Number(value || 0) - original;
+      const comparison = !hasOriginal ? 'No original plan available'
+        : `Original plan (V0): ${original.toFixed(1)}\n${missingOriginal ? 'Partial original plan · Some updated values have no V0 comparison' : delta === 0 ? 'Unchanged from original' : `Change: ${delta > 0 ? '+' : ''}${delta.toFixed(1)}`}`;
+      const tip = `${period ? 'Latest forecast (V1)' : 'Latest forecast · Includes V1 updates'}: ${formatted}\n${comparison}`;
+      return `<button type="button" class="forecast-value" data-forecast-tip="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}">${formatted} <span class="forecast-v1-badge">V1</span></button>`;
+    }
+
+    function bindForecastValueTips(container) {
+      container.querySelectorAll('[data-forecast-tip]').forEach(button => {
+        let tip;
+        const hide = () => { tip?.remove(); tip = null; button.removeAttribute('aria-describedby'); };
+        const show = () => {
+          if (tip?.isConnected) return;
+          document.querySelectorAll('.forecast-value-tip').forEach(existing => existing.remove());
+          tip = document.createElement('div');
+          tip.className = 'forecast-value-tip';
+          tip.id = 'forecastValueTip';
+          tip.setAttribute('role', 'tooltip');
+          tip.textContent = button.dataset.forecastTip;
+          document.getElementById('breakdown').appendChild(tip);
+          const rect = button.getBoundingClientRect();
+          tip.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - tip.offsetWidth - 8))}px`;
+          tip.style.top = `${Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - tip.offsetHeight - 8))}px`;
+          button.setAttribute('aria-describedby', tip.id);
+        };
+        button.addEventListener('mouseenter', show);
+        button.addEventListener('mouseleave', hide);
+        button.addEventListener('focus', show);
+        button.addEventListener('blur', hide);
+        button.addEventListener('click', event => { event.stopPropagation(); show(); });
+        button.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); hide(); } });
+      });
+    }
+
     function showBreakdown(job, options = {}) {
+      document.querySelectorAll('.forecast-value-tip').forEach(tip => tip.remove());
       if (window.workOrderCorrectionsError || window.forecastLoadError) return;
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
       const engineerFilter = document.getElementById('engineerFilter')?.value || 'all';
@@ -3841,7 +3880,7 @@
         currentBreakdownJobNumber = job.jn;
       }
       const period = normalizePeriodKey(document.getElementById('period')?.value || 'all');
-      const resolvedJob = getBreakdownTableJob(job, breakdownPlanVersion === 'v0' ? 'v0' : 'v1');
+      const resolvedJob = getBreakdownTableJob(job, 'v1');
       const wgLabel = wgFilter === 'all' ? '' : ` • ${wgFilter}`;
       const breakdownModal = document.getElementById('breakdown');
       const modalContent = breakdownModal?.querySelector('.modal-content');
@@ -3891,19 +3930,14 @@
         compareButton.style.display = hasV1 ? 'inline-flex' : 'none';
       }
 
-      // Set breakdown plan version selector
-      const breakdownPlanSelect = document.getElementById('breakdownPlanVersion');
-      if (breakdownPlanSelect) {
-        breakdownPlanSelect.value = breakdownPlanVersion;
-      }
-      const wgComparePlanSelect = document.getElementById('wgComparePlanVersion');
-      if (wgComparePlanSelect) {
-        wgComparePlanSelect.value = breakdownPlanVersion;
-      }
-      const wgCompareBadge = document.getElementById('wgCompareBadge');
-      if (wgCompareBadge) {
-        wgCompareBadge.textContent = getBreakdownComparisonLabel();
-      }
+      const sourceNumbers = getBreakdownSourceNumbers(job);
+      const hasUpdates = sourceNumbers.some(number => hasForecastUpdates(currentFinancialYear, number));
+      const hasOriginal = sourceNumbers.some(number => getForecastSnapshot(currentFinancialYear, 'v0')?.data.has(number));
+      const sourceLabel = hasUpdates
+        ? 'Latest forecast: V1 · Unchanged periods retain original plan values.'
+        : hasOriginal ? 'Forecast: V0 · No reforecast available for this SJN.' : 'No forecast available.';
+      document.getElementById('wgCompareBadge').textContent = sourceLabel;
+      document.getElementById('periodForecastSource').textContent = sourceLabel;
 
       // Set work group display mode selector
       const wgDisplaySelect = document.getElementById('wgDisplayMode');
@@ -3955,6 +3989,7 @@
         : `${breakdownChartScope === 'workgroup' ? 'Work group set' : 'Engineer'} · ${selectedTarget?.label || 'No matching data'}`;
       const chartScopeBadge = document.getElementById('breakdownChartScopeBadge');
       if (chartScopeBadge) chartScopeBadge.textContent = `Showing ${chartScopeLabel}`;
+      if (chartScopeBadge && hasUpdates && v0PeriodsEqual(job, chartScopeWorkGroups)) chartScopeBadge.textContent += ' · V1 matches V0';
 
       // Build cumulative data
       const periods = [];
@@ -3965,12 +4000,8 @@
       const v0Periods = getForecastPeriodsForScope(job, chartScopeWorkGroups, 'v0');
       const v1Periods = getForecastPeriodsForScope(job, chartScopeWorkGroups, 'v1');
       const forecastCutoffPeriod = getEffectiveForecastCutoffPeriod();
-      // Complete the projected line with the updated plan whenever v1 is part
-      // of the selected comparison and is available. Fall back to v0 for
-      // legacy years without a v1 snapshot (or when v0 is explicitly chosen).
-      const hasV1Forecast = Boolean(getForecastSnapshot(currentFinancialYear, 'v1'));
-      const projectionPlanVersion = breakdownPlanVersion !== 'v0' && hasV1Forecast ? 'v1' : 'v0';
-      const projectionPeriods = projectionPlanVersion === 'v1' ? v1Periods : v0Periods;
+      const projectionPlanVersion = hasUpdates ? 'v1' : 'v0';
+      const projectionPeriods = v1Periods;
       const reportedWorkDonePeriods = getWorkDonePeriodsForScope(job, chartScopeWorkGroups);
       
       for(let i=1; i<=13; i++) {
@@ -4001,13 +4032,9 @@
 
       const datasets = [];
 
-      // Add plan datasets based on user preference
-      const showV0 = breakdownPlanVersion === 'v0' || breakdownPlanVersion === 'both';
-      const showV1 = breakdownPlanVersion === 'v1' || breakdownPlanVersion === 'both';
-
-      if (showV0 && v0Periods) {
+      if (v0Periods) {
         datasets.push({
-          label: 'Forecast v0 (Original)',
+          label: 'Original approved plan (V0)',
           data: cumPlanV0,
           borderColor: '#60a5fa',
           backgroundColor: 'rgba(96, 165, 250, 0.12)',
@@ -4015,9 +4042,10 @@
           fill: true
         });
       }
-      if (showV1 && v1Periods) {
+      if (hasUpdates && v1Periods) {
         datasets.push({
-          label: 'Forecast v1 (Updated)',
+          label: 'Latest forecast (V1)',
+          borderDash: [7, 4],
           data: cumPlanV1,
           borderColor: '#6366f1',
           backgroundColor: 'rgba(99, 102, 241, 0.12)',
@@ -4026,7 +4054,7 @@
         });
       }
       datasets.push({
-        label: `Work Done + Forecast ${projectionPlanVersion} (Projected)`,
+        label: `Work done + latest forecast (${projectionPlanVersion.toUpperCase()})`,
         data: cumActual,
         borderColor: '#10b981',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -4111,9 +4139,8 @@
       
       // Build work group table
       const wgTable = document.getElementById('wgTable');
-      // Work-group edits are available only while viewing v1; the popup saves a sparse override.
-      const canEditPlanV1 = !job.isGroupRollup && ['v1', 'both'].includes(breakdownPlanVersion);
-      const v0BreakdownJob = getForecastSnapshot(currentFinancialYear, 'v0')?.data.get(job.jn);
+      // The popup saves a sparse V1 override of the latest forecast.
+      const canEditPlanV1 = !job.isGroupRollup;
       // Intentionally raw: presence here drives the per-work-group "Edited" indicator, not displayed forecast values.
       const v1BreakdownJob = getForecastSnapshot(currentFinancialYear, 'v1')?.data.get(job.jn);
       const findForecastWorkGroup = (forecastJob, workGroup) => Object.keys(forecastJob?.wgs || {})
@@ -4122,17 +4149,14 @@
         const stored = findForecastWorkGroup(forecastJob, workGroup);
         return stored ? forecastJob.wgs[stored] : null;
       };
-      const renderPlannedCell = (_workGroup, _period, fallbackValue) => Number(fallbackValue || 0).toFixed(1);
+      const renderPlannedCell = (groups, period, value) => renderLatestForecastValue(job, groups, period, value);
       let tableHTML = '<thead><tr><th>Work Group</th>';
       for(let i=1; i<=13; i++) tableHTML += `<th>P${i}</th>`;
       tableHTML += '<th>Total</th></tr></thead><tbody>';
 
       const isFiltered = wgFilter !== 'all';
       const engineerWorkGroups = getSelectedEngineerWorkGroups();
-      // "Both" uses v0 for the single-value table; the chart remains the
-      // explicit two-plan comparison and v1 overrides retain their edit badge.
-      const tablePlanVersion = breakdownPlanVersion === 'v1' ? 'v1' : 'v0';
-      const tableJob = getBreakdownTableJob(job, tablePlanVersion);
+      const tableJob = resolvedJob;
       const wgEntries = Object.entries(tableJob.wgs || {}).filter(([wg]) => {
         if (isFiltered && normalizeWorkGroupSet(wg) !== normalizeWorkGroupSet(wgFilter)) return false;
         if (!engineerWorkGroups || engineerWorkGroups.length === 0) return true;
@@ -4190,7 +4214,7 @@
             ? (engTotal !== 0 ? 'forecast-nonzero' : '')
             : (engTotal > 0 ? 'positive' : engTotal < 0 ? 'negative' : 'neutral');
           const engHeaderPrefix = showForecast ? '' : (engTotal > 0 ? '+' : '');
-          tableHTML += `<tr class="engineer-header" data-eng="${engineer.id}"><td colspan="14">${engHeaderLabel}</td><td class="${engHeaderTotalClass}"><strong>${engHeaderPrefix}${engTotal.toFixed(1)}</strong></td></tr>`;
+          tableHTML += `<tr class="engineer-header" data-eng="${engineer.id}"><td colspan="14">${engHeaderLabel}</td><td class="${engHeaderTotalClass}"><strong>${showForecast ? renderPlannedCell(workGroups.map(([wg]) => wg), null, engTotal) : engHeaderPrefix + engTotal.toFixed(1)}</strong></td></tr>`;
 
           // Work group rows for this engineer
           workGroups.forEach(([wg, data]) => {
@@ -4206,11 +4230,11 @@
               rowTotal += val;
               const cl = showForecast ? (val !== 0 ? 'forecast-nonzero' : '') : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
               const prefix = showForecast ? '' : (val > 0 ? '+' : '');
-              tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
+              tableHTML += `<td class="${cl}">${showForecast ? renderPlannedCell(wg, p, val) : prefix + val.toFixed(1)}</td>`;
             }
             const tcl = showForecast ? (rowTotal !== 0 ? 'forecast-nonzero' : '') : (rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral');
             const tprefix = showForecast ? '' : (rowTotal > 0 ? '+' : '');
-            tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
+            tableHTML += `<td class="${tcl}"><strong>${showForecast ? renderPlannedCell(wg, null, rowTotal) : tprefix + rowTotal.toFixed(1)}</strong></td></tr>`;
 
             const detailRows = [
               { shortLabel: 'P', label: 'Planned', key: 'f' },
@@ -4229,7 +4253,7 @@
                 tableHTML += `<td class="${cl}" data-detail-key="${key}" data-period="${p}">${key === 'f' ? renderPlannedCell(wg, p, val) : `${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}`}</td>`;
               }
               const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
-              tableHTML += `<td class="${tcl}" data-detail-total="${key}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+              tableHTML += `<td class="${tcl}" data-detail-total="${key}"><strong>${key === 'f' ? renderPlannedCell(wg, null, detailTotal) : (key === 'v' && detailTotal > 0 ? '+' : '') + detailTotal.toFixed(1)}</strong></td></tr>`;
             });
           });
 
@@ -4239,11 +4263,11 @@
             const val = engSubtotals[i];
             const cl = showForecast ? (val !== 0 ? 'forecast-nonzero' : '') : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
             const prefix = showForecast ? '' : (val > 0 ? '+' : '');
-            tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
+            tableHTML += `<td class="${cl}">${showForecast ? renderPlannedCell(workGroups.map(([wg]) => wg), `P${i+1}`, val) : prefix + val.toFixed(1)}</td>`;
           }
           const etcl = showForecast ? (engTotal !== 0 ? 'forecast-nonzero' : '') : (engTotal > 0 ? 'positive' : engTotal < 0 ? 'negative' : 'neutral');
           const etprefix = showForecast ? '' : (engTotal > 0 ? '+' : '');
-          tableHTML += `<td class="${etcl}"><strong>${etprefix}${engTotal.toFixed(1)}</strong></td></tr>`;
+          tableHTML += `<td class="${etcl}"><strong>${showForecast ? renderPlannedCell(workGroups.map(([wg]) => wg), null, engTotal) : etprefix + engTotal.toFixed(1)}</strong></td></tr>`;
         });
 
         // Render ungrouped work groups (if any)
@@ -4254,7 +4278,7 @@
               ? (ungroupedTotal !== 0 ? 'forecast-nonzero' : '')
               : (ungroupedTotal > 0 ? 'positive' : ungroupedTotal < 0 ? 'negative' : 'neutral');
             const ungroupedHeaderPrefix = showForecast ? '' : (ungroupedTotal > 0 ? '+' : '');
-            tableHTML += `<tr class="engineer-header" data-eng="ungrouped"><td colspan="14">${ungroupedHeaderLabel}</td><td class="${ungroupedHeaderTotalClass}"><strong>${ungroupedHeaderPrefix}${ungroupedTotal.toFixed(1)}</strong></td></tr>`;
+            tableHTML += `<tr class="engineer-header" data-eng="ungrouped"><td colspan="14">${ungroupedHeaderLabel}</td><td class="${ungroupedHeaderTotalClass}"><strong>${showForecast ? renderPlannedCell(ungrouped.map(([wg]) => wg), null, ungroupedTotal) : ungroupedHeaderPrefix + ungroupedTotal.toFixed(1)}</strong></td></tr>`;
           }
           ungrouped.forEach(([wg, data]) => {
             const idx = globalIdx++;
@@ -4270,11 +4294,11 @@
               rowTotal += val;
               const cl = showForecast ? (val !== 0 ? 'forecast-nonzero' : '') : (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral');
               const prefix = showForecast ? '' : (val > 0 ? '+' : '');
-              tableHTML += `<td class="${cl}">${prefix}${val.toFixed(1)}</td>`;
+              tableHTML += `<td class="${cl}">${showForecast ? renderPlannedCell(wg, p, val) : prefix + val.toFixed(1)}</td>`;
             }
             const tcl = showForecast ? (rowTotal !== 0 ? 'forecast-nonzero' : '') : (rowTotal > 0 ? 'positive' : rowTotal < 0 ? 'negative' : 'neutral');
             const tprefix = showForecast ? '' : (rowTotal > 0 ? '+' : '');
-            tableHTML += `<td class="${tcl}"><strong>${tprefix}${rowTotal.toFixed(1)}</strong></td></tr>`;
+            tableHTML += `<td class="${tcl}"><strong>${showForecast ? renderPlannedCell(wg, null, rowTotal) : tprefix + rowTotal.toFixed(1)}</strong></td></tr>`;
 
             const detailRows = [
               { shortLabel: 'P', label: 'Planned', key: 'f' },
@@ -4293,13 +4317,14 @@
                 tableHTML += `<td class="${cl}" data-detail-key="${key}" data-period="${p}">${key === 'f' ? renderPlannedCell(wg, p, val) : `${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}`}</td>`;
               }
               const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
-              tableHTML += `<td class="${tcl}" data-detail-total="${key}"><strong>${key === 'v' && detailTotal > 0 ? '+' : ''}${detailTotal.toFixed(1)}</strong></td></tr>`;
+              tableHTML += `<td class="${tcl}" data-detail-total="${key}"><strong>${key === 'f' ? renderPlannedCell(wg, null, detailTotal) : (key === 'v' && detailTotal > 0 ? '+' : '') + detailTotal.toFixed(1)}</strong></td></tr>`;
             });
           });
         }
       }
       tableHTML += '</tbody>';
       wgTable.innerHTML = tableHTML;
+      bindForecastValueTips(wgTable);
       if (!isPerformanceAvailable()) {
         wgTable.querySelectorAll('[data-detail-key="a"], [data-detail-key="v"], [data-detail-total="a"], [data-detail-total="v"]').forEach(cell => cell.textContent = '—');
         if (!showForecast) wgTable.querySelectorAll('td:not(:first-child)').forEach(cell => cell.textContent = '—');
@@ -4449,12 +4474,14 @@
         periodGrid.innerHTML += `
           <div class="breakdown-item">
             <strong>Period ${i}</strong>
-            <div class="breakdown-row"><span>Forecast:</span><span>${d.f.toFixed(2)}</span></div>
+            <div class="breakdown-row"><span>Forecast:</span><span>${renderPlannedCell(dashboardScopeWorkGroups || Object.keys(resolvedJob.wgs), p, d.f)}</span></div>
             <div class="breakdown-row"><span>Actual:</span><span>${d.a.toFixed(2)}</span></div>
             <div class="breakdown-row ${vc}"><span>Variance:</span><span>${d.v>0?'+':''}${d.v.toFixed(2)}</span></div>
           </div>
         `;
       }
+
+      bindForecastValueTips(periodGrid);
 
       // Work orders
       currentWorkOrders = job.isGroupRollup

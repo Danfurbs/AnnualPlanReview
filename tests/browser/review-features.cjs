@@ -76,7 +76,7 @@ const server = http.createServer(async (req, res) => {
     }, fixture.group);
     await page.evaluate(() => APRDashboard.openSection('data'));
     await page.locator('#aprRefreshShared').click();
-    await page.waitForFunction(() => document.getElementById('aprRefreshStatus').textContent.includes('retained'));
+    await page.waitForFunction(() => document.getElementById('aprRefreshStatus').textContent === 'Shared data refreshed.');
     assert.match(await page.locator('#aprReportingDetails').textContent(), /private-work-done.xlsx/);
     assert.equal(await page.evaluate(() => wData.get('009001').periods.P1), 9);
     assert.match(await page.locator('#aprReviewQueueStatus').textContent(), /2 unreviewed/);
@@ -108,6 +108,8 @@ const server = http.createServer(async (req, res) => {
     fixture.failForecast = true;
     await page.locator('#aprRefreshShared').click();
     await page.waitForFunction(() => Boolean(window.forecastLoadError));
+    await page.evaluate(() => APRFeatures.setQueue([{ job: '009002', variance: 4 }]));
+    assert.equal(await page.locator('#aprStartReview').isDisabled(), true, 'Queue updates cannot enable review after a load failure');
     assert.equal(await page.locator('#jobs').isVisible(), false);
     for (const id of ['reviewProgressCard', 'workOrderActivityCard', 'commentsCard', 'variancesCard']) {
       assert.equal(await page.locator('#' + id).evaluate(el => el.hidden), true, 'Failed loads hide relocated summaries');

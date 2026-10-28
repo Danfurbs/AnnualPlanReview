@@ -19,6 +19,8 @@ const server = http.createServer((req, res) => {
   try {
     browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE || undefined });
     const page = await browser.newPage();
+    let corrections = {};
+    await page.route('**/api/work-order-amendments', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: corrections, revisions: {} }) }));
     const workDoneRequests = [];
     page.on('request', req => { if (req.url().includes('/api/work-done')) workDoneRequests.push(req.url()); });
     await page.route('https://cdn.jsdelivr.net/**', route => route.fulfill({ contentType: 'text/javascript', body: '' }));
@@ -34,10 +36,19 @@ const server = http.createServer((req, res) => {
     await page.waitForFunction(() => window.stdJobs?.size > 0 && document.getElementById('workDoneFySelect').options.length > 0);
     assert.equal(await page.evaluate(() => localStorage.getItem('aprWorkDoneByYearV1')), null);
     const job = await page.evaluate(() => window.stdJobs.keys().next().value);
+    corrections = { [`${job}-WO1-1`]: { units: 9 } };
     await page.evaluate(job => { localStorage.setItem('aprWorkOrderAmendmentsV1', JSON.stringify({ [`${job}-WO1-1`]: { units: 9 } })); }, job);
     await page.reload();
     await page.waitForFunction(() => document.getElementById('workDoneFySelect').options.length > 0);
     await page.evaluate(async () => {
+      // Keep forecast fixtures local while exercising the server correction endpoint.
+      const loadCorrections = loadWorkOrderAmendmentsAsync;
+      loadWorkOrderAmendmentsAsync = async () => {
+        const enabled = API_CONFIG.enabled;
+        API_CONFIG.enabled = true;
+        try { return await loadCorrections(); }
+        finally { API_CONFIG.enabled = enabled; }
+      };
       await setForecastContext('RF6', 'FY27', 'v0', { deliveryUnit: getDeliveryUnits().find(du => getEngineersForDeliveryUnit(du.id).length).id });
       closeStageModal();
       openModal();
