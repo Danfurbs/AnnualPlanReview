@@ -6,7 +6,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const repo = path.resolve(__dirname, '../..');
 const { publicAsset } = require('../../backend/static-assets');
 const fixture = { group: 'Track', correction: 9, future: 30, failForecast: false, failCorrection: false, failReview: false, reviews: {} };
-const forecast = version => version === 'v0' ? {
+const forecast = version => fixture.large ? fixture.large[version] : version === 'v0' ? {
   '009001': { wgs: { [fixture.group]: { P1: 10, P2: 20 } }, periods: { P1: 10, P2: 20 } },
   '009002': { wgs: { [fixture.group]: { P1: 6, P2: 4 } }, periods: { P1: 6, P2: 4 } }
 } : { '009001': { wgs: { [fixture.group]: { P2: fixture.future } }, periods: { P2: fixture.future } } };
@@ -113,11 +113,34 @@ const server = http.createServer(async (req, res) => {
         savedBooks.push({name, sheets:decoded.SheetNames, rows:Object.fromEntries(decoded.SheetNames.map(key=>[key,XLSX.utils.sheet_to_json(decoded.Sheets[key],{defval:null})])), first:decoded.Sheets[decoded.SheetNames[0]]});
       };
     });
+    await page.evaluate(()=>{
+      const capture=APRExportSource.capture, prepare=APRExportData.prepareAsync;
+      window.exportReads=0; window.exportBuilds=0;
+      APRExportSource.capture=(...args)=>{exportReads++;return capture(...args);};
+      APRExportData.prepareAsync=(...args)=>{exportBuilds++;return prepare(...args);};
+    });
+    fs.mkdirSync(path.join(repo,'.cache'),{recursive:true});
+    await page.screenshot({path:path.join(repo,'.cache/dashboard-clean-header.png')});
+    const aligned = await page.evaluate(()=>{
+      const sidebar=document.getElementById('dashboardSidebar').getBoundingClientRect();
+      const button=document.getElementById('dashboardExports').getBoundingClientRect();
+      return button.left >= sidebar.left && button.right <= sidebar.right;
+    });
+    assert.equal(aligned,true,'Exports stays aligned inside the sidebar');
     await page.locator('#dashboardExports').click();
-    await page.waitForFunction(() => document.getElementById('exportsStatus').textContent.startsWith('Report data ready'));
+    assert.equal(await page.evaluate(()=>exportReads),0,'opening does not load shared data');
+    assert.equal(await page.evaluate(()=>exportBuilds),0,'opening does not build any report');
+    await page.screenshot({path:path.join(repo,'.cache/exports-clean.png')});
+    const openReport=async id=>{const report=page.locator('[data-report="'+id+'"]');if(!await report.evaluate(el=>el.open))await report.locator('summary').click();};
+    await page.locator('.exports-settings > summary').click();
     assert.equal(await page.locator('#exportsModal').isVisible(),true);
     const performance=page.locator('[data-report="performance"]');
+    await openReport('performance');
+    await performance.locator('[data-preview]').click();
+    await page.waitForFunction(()=>document.getElementById('exportsStatus').textContent.startsWith('Preview ready'));
+    assert.equal(await page.evaluate(()=>exportBuilds),1,'preview builds only one requested dataset');
     assert.match(await performance.locator('[data-count]').innerText(),/2 rows/);
+    await openReport('performance');
     await performance.locator('[data-download]').click();
     await page.waitForFunction(()=>savedBooks.length===1);
     let output=await page.evaluate(()=>savedBooks.at(-1));
@@ -131,16 +154,21 @@ const server = http.createServer(async (req, res) => {
     await performance.locator('[data-scale]').selectOption('engineer');
     await performance.locator('[data-target]').selectOption(owner.engineer.id);
     const comments=page.locator('[data-report="comments"]');
+    await openReport('comments');
     await comments.locator('[data-scale]').selectOption('workgroup');
     await comments.locator('[data-target]').selectOption(fixture.group);
-    await page.locator('#exportsDownloadPack').click();
+    assert.equal(await page.locator('[data-pack], #exportsDownloadPack, .exports-pack').count(),0);
+    await comments.locator('[data-download]').click();
     await page.waitForFunction(()=>savedBooks.length===2);
     output=await page.evaluate(()=>savedBooks.at(-1));
-    assert.deepEqual(output.sheets,['SJN performance','Comments','Review progress','About']);
+    assert.deepEqual(output.sheets,['Comments','About']);
     assert.equal(output.rows.Comments[0].Comment,'=This is text');
-    assert.equal(output.rows.About.find(row=>row.Setting==='SJN performance scope').Value.includes(owner.engineer.name),true);
+    assert.equal(await performance.locator('[data-scale]').inputValue(),'engineer');
+    assert.equal(await performance.locator('[data-target]').inputValue(),owner.engineer.id);
     assert.equal(output.rows.About.find(row=>row.Setting==='Comments scope').Value.includes(fixture.group),true);
+    await openReport('performance');
     await performance.locator('[data-preview]').click();
+    await page.waitForFunction(()=>document.getElementById('exportsStatus').textContent.startsWith('Preview ready'));
     assert.equal(await page.locator('#exportsPreview').isVisible(),true);
     for(const width of [1440,768,390]){
       await page.setViewportSize({width,height:1000});
@@ -156,27 +184,33 @@ const server = http.createServer(async (req, res) => {
     const backup=await downloaded;
     assert.deepEqual(JSON.parse(fs.readFileSync(await backup.path(),'utf8')),fixture.comments);
     fixture.failForecast=true;
+    await openReport('performance');
     await performance.locator('[data-download]').click();
     await page.waitForFunction(()=>document.getElementById('exportsStatus').textContent.includes('could not be read'));
     assert.equal(await page.evaluate(()=>savedBooks.length),2,'failed read cannot generate stale workbook');
     fixture.failForecast=false;
     fixture.future=0;
+    await openReport('performance');
     await performance.locator('[data-download]').click();
     await page.waitForFunction(()=>savedBooks.length===3);
     output=await page.evaluate(()=>savedBooks.at(-1));
     assert.equal(output.rows['SJN performance'][0]['Latest forecast'],10);
     assert.equal(output.rows['SJN performance'][0]['Projected full year'],9);
     await page.selectOption('#exportsCutoff','');
+    await page.locator('#exportsRefresh').click();
     await page.waitForFunction(()=>document.getElementById('exportsStatus').textContent.startsWith('Report data ready'));
+    await openReport('performance');
     await performance.locator('[data-download]').click();
     await page.waitForFunction(()=>savedBooks.length===4);
     output=await page.evaluate(()=>savedBooks.at(-1));
     assert.equal(output.rows['SJN performance'][0]['Projected full year'],null);
     assert.equal(output.rows['SJN performance'][0].RAG,'Unavailable');
     await page.selectOption('#exportsCutoff','1');
+    await page.locator('#exportsRefresh').click();
     await page.waitForFunction(()=>document.getElementById('exportsStatus').textContent.startsWith('Report data ready'));
     for (const id of ['periods','comparison','orders','coverage','reviews','top10','comments']) {
       const previous = await page.evaluate(()=>savedBooks.length);
+      await openReport(id);
       await page.locator('[data-report="'+id+'"] [data-download]').click();
       await page.waitForFunction(count=>savedBooks.length===count+1,previous);
       const report = await page.evaluate(()=>savedBooks.at(-1));
@@ -190,18 +224,22 @@ const server = http.createServer(async (req, res) => {
       }
     }
     const beforeCoverage=await page.evaluate(()=>savedBooks.length);
+    await openReport('coverage');
     await page.selectOption('#exportsCoverageYears',['FY28']);
+    await openReport('coverage');
     await page.locator('[data-report="coverage"] [data-download]').click();
     await page.waitForFunction(count=>savedBooks.length===count+1,beforeCoverage);
     const years=await page.evaluate(()=>savedBooks.at(-1).rows['Work Group coverage']);
     assert.ok(years.some(row=>row['Financial Year']==='FY28' && row['Latest forecast SJN count']===0));
     const beforeCorrectionFailure=await page.evaluate(()=>savedBooks.length);
     fixture.failCorrection=true;
+    await openReport('orders');
     await page.locator('[data-report="orders"] [data-download]').click();
     await page.waitForFunction(()=>document.getElementById('exportsStatus').textContent.includes('corrections could not be loaded'));
     assert.equal(await page.evaluate(()=>savedBooks.length),beforeCorrectionFailure);
     fixture.failCorrection=false;
     await page.evaluate(()=>{window.printCount=0;window.print=()=>printCount++;});
+    await openReport('top10');
     await page.locator('#exportsPrintBrief').click();
     await page.waitForFunction(()=>printCount===1);
     assert.match(await page.locator('#exportsPreviewTitle').innerText(),/Top 10/);
@@ -210,6 +248,7 @@ const server = http.createServer(async (req, res) => {
     await page.emulateMedia({media:'screen'});
     const countBeforeDraft = await page.evaluate(()=>savedBooks.length);
     await page.evaluate(()=>pendingCorrections.set('unsaved-test',{}));
+    await openReport('performance');
     await performance.locator('[data-download]').click();
     assert.match(await page.locator('#exportsStatus').innerText(),/Save or discard/);
     assert.equal(await page.evaluate(()=>savedBooks.length),countBeforeDraft);
@@ -236,7 +275,30 @@ const server = http.createServer(async (req, res) => {
     const csvRows=await page.evaluate(csv=>{const book=XLSX.read(csv,{type:'string'});return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);},csv);
     assert.equal(Number(csvRows[0].P01),10,'CSV resolves original periods');
     assert.equal(Number(csvRows[0].P02),0,'CSV retains updated zero');
+    fixture.large = await page.evaluate(du=>{
+      closeForecastBuilderPreview();
+      const codes=getDeliveryUnitWorkGroups(du).slice(0,12);
+      const data={};
+      for(let i=1;i<=600;i++)data[String(i).padStart(6,'0')]={wgs:Object.fromEntries(codes.map(code=>[code,{P1:10,P2:20,P3:30}]))};
+      return {v0:data,v1:{}};
+    },owner.deliveryUnit.id);
+    const openTiming = await page.evaluate(async()=>{
+      const reads=exportReads, builds=exportBuilds, start=performance.now();
+      await APRExports.open();
+      return {ms:performance.now()-start,reads:exportReads-reads,builds:exportBuilds-builds};
+    });
+    assert.equal(openTiming.reads,0); assert.equal(openTiming.builds,0);
+    assert.ok(openTiming.ms<500,'modal opens promptly with large forecast sources');
+    await openReport('performance');
+    await page.evaluate(()=>{window.exportTicks=0;window.exportTimer=setInterval(()=>exportTicks++,0);});
+    await performance.locator('[data-preview]').click();
+    await page.waitForFunction(()=>document.getElementById('exportsStatus').textContent.startsWith('Preview ready'));
+    const ticks=await page.evaluate(()=>{clearInterval(exportTimer);return exportTicks;});
+    assert.ok(ticks>10,'large report yields to browser events');
+    assert.match(await performance.locator('[data-count]').innerText(),/602 rows/);
+    console.log('Large data check: modal opened in '+openTiming.ms.toFixed(1)+'ms; no reads or report builds on open; 600-SJN preview yielded '+ticks+' browser ticks.');
+    await page.keyboard.press('Escape');
     assert.deepEqual(errors,[]);
-    console.log('PASS: exports modal, per-report scopes, real Excel roundtrip, combined workbook, comments backup, zero, missing cutoff, failed reads and responsive layout');
+    console.log('PASS: exports modal, per-report scopes, real Excel roundtrip, standalone reports, comments backup, zero, missing cutoff, failed reads and responsive layout');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>server.close());

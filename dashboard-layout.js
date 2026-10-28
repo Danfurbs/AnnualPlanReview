@@ -123,7 +123,9 @@
   actions.prepend(toggle);
   sections.manage.append(actions.querySelector('[onclick="openBaselinePage()"]'));
   sections.data.prepend(actions.querySelector('[onclick="openModal()"]'));
-  actions.append($('saveStateIndicator'));
+  const headerStatus = make('div', 'dashboard-header-status');
+  headerStatus.append($('saveStateIndicator'));
+  header.querySelector('.top-bar-title > div:last-child').append(headerStatus);
   header.querySelector('.subtitle').remove();
   context.id = 'dashboardHeaderDetails';
   const compactContext = make('span', 'dashboard-compact-context');

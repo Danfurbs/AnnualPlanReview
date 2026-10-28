@@ -1,12 +1,12 @@
 # Exports refresh proposal
 
-Status: initial Excel release implemented. PDF engineer review packs remain a later enhancement.
+Status: standalone Excel reports implemented. Combined review packs removed at the user’s request. Opening the modal performs no data reads or report calculations; preparation is on demand and yields in batches.
 
-Implemented: left-menu Exports modal, independent DU/Engineer/Work Group Set scope for every report, inherited job filters with an explicit clear option, eight Excel reports, previews, optional combined workbook, multi-year coverage, printable variance brief, and a separate collapsed Saved data backups section. Forecast downloads remain in Forecast Builder, including saved-file controls moved from Settings. Comments Excel and JSON transfer formats are preserved. Browser acceptance checks encode and decode real XLSX workbooks using synthetic data.
+Implemented: left-menu Exports modal, independent DU/Engineer/Work Group Set scope for every report, inherited job filters with an explicit clear option, eight Excel reports, previews, multi-year coverage, printable variance brief, and a separate collapsed Saved data backups section. Forecast downloads remain in Forecast Builder, including saved-file controls moved from Settings. Comments Excel and JSON transfer formats are preserved. Browser acceptance checks encode and decode real XLSX workbooks using synthetic data.
 
 ## Aim
 
-Add one **Exports** button to the dashboard's left menu. It opens a single modal for review reports, review packs and non-forecast data backups. Keep forecast file exports in Forecast Builder.
+Add one **Exports** button to the dashboard's left menu. It opens a single modal for standalone review reports and non-forecast data backups. Keep forecast file exports in Forecast Builder.
 
 ## Existing exports and proposed destination
 
@@ -24,7 +24,7 @@ Add one **Exports** button to the dashboard's left menu. It opens a single modal
 
 ## Modal design
 
-- Three sections: **Reports**, **Review packs**, **Data backups**.
+- Standalone expandable **Reports**, plus a separate **Data backups** section.
 - A shared scope panel shows FY, RF stage, completed reporting cutoff, Delivery Unit, Engineer and Work Group Set. Search, SJN group, review status, variance and zero-volume filters appear explicitly when applicable.
 - Confirmed default: inherit the current Delivery Unit and dashboard filters, with an explicit way to widen scope. Export scope changes do not change the dashboard.
 - Each report has a short purpose statement, format, applicable filters, row/job count and one clear download action. Irrelevant controls are hidden rather than silently ignored.
@@ -44,9 +44,8 @@ Add one **Exports** button to the dashboard's left menu. It opens a single modal
 | Work Group coverage | Number of SJNs with forecast evidence per Work Group Set and FY, separating original and effective forecast | Refresh existing |
 | Review progress | Reviewed/unreviewed SJNs for the selected FY/RF, with Engineer and Work Group Set context | First release |
 | Top 10 variance brief | Existing brief, with explicit scope, ranking basis and printable preview | Refresh existing |
-| Engineer review pack | Summary, SJN graphs, period performance, comments, review status and space for handwritten notes | Later phase |
 
-Confirmed output priority: individual Excel reports first, with an optional combined Excel review workbook using the same report datasets as separate sheets. A PDF review pack remains a later enhancement outside the initial delivery.
+Confirmed output priority: each report is standalone, with its own scope, preview and download. No combined review pack.
 
 ## Consistent calculations and safeguards
 
@@ -57,20 +56,20 @@ Confirmed output priority: individual Excel reports first, with an optional comb
 - Show forecast comparison columns together; do not reintroduce a V0/V1 selection for review reports.
 - Mark explicit V1 values and include original values/change in comparison sheets. Excel cannot depend on browser hover tooltips.
 - Count unique SJNs in coverage and review totals. Do not add group rollups to their member rows. Separate incompatible units in summaries.
-- Use the same scope and calculation rules across preview, workbook and review pack. Define comment-only/untagged comment inclusion explicitly, following current organisational ownership.
+- Use the same scope and calculation rules across preview and workbook. Define comment-only/untagged comment inclusion explicitly, following current organisational ownership.
 - Read confirmed shared data for saved business records and combine it with the current session's Work Done when required. Block dependent exports on failed reads or unresolved saves; do not silently substitute stale data.
-- Generate every selected sheet from the same captured data and scope. Record generation time, source/load times, cutoff, unit definitions, applied filters and availability notes on an About sheet.
+- Generate each report from its captured data and scope. Record generation time, source/load times, cutoff, unit definitions, applied filters and availability notes on an About sheet.
 - Keep leading zeros in SJNs, numeric zeros, existing import formats and all comments intact. Use readable column widths, filters and consistent filenames. Treat user-entered spreadsheet content as text where needed.
 
 ## Delivery sequence
 
 1. Scope defaults and output priorities are confirmed. Map existing file columns and import compatibility.
 2. Build the Exports modal and common report/scope/data preparation layer. Relocate existing downloads and preserve Forecast Builder exports.
-3. Refresh existing reports and add SJN performance, period detail and review progress. Add an optional combined Excel review workbook.
-4. Add the printable Engineer review pack, retaining graphs and note space.
+3. Refresh existing reports and add SJN performance, period detail and review progress. Keep every report standalone.
+4. Retain the standalone printable Top 10 variance brief.
 5. Verify downloaded contents against the dashboard for single SJNs, Engineers, DUs and groups; partial V1, explicit zero, mixed units, missing uploads, P0/P13, different FYs, empty results and failed data loads. Check keyboard/mobile access and backup round trips.
 
 ## Confirmed user preferences
 
 1. Reports default to the current Delivery Unit and filters, with a clear option to widen scope.
-2. Excel reports come first, with an optional combined Excel review pack. PDF packs are a later enhancement.
+2. Each report is standalone. Combined review packs have been removed.

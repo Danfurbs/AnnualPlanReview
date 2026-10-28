@@ -4798,13 +4798,21 @@
         if (window.APRReview.hasDrafts()) throw new Error('Save or discard your edits before exporting.');
         const done = structuredClone(entry?.data || new Map());
         if (correctionsReady) applyStoredWorkOrderCorrections(done);
+        // Build scope lookups once per capture instead of rescanning the catalogue per cell.
+        const aliasKey = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\s*\(/g, '(');
+        const aliases = new Map();
+        window.workGroupSets.forEach((description, code) => { aliases.set(aliasKey(code), code); aliases.set(aliasKey(description), code); });
+        const normalise = value => aliases.get(aliasKey(value)) || aliases.get(aliasKey(String(value || '').split(/\s+/)[0])) || String(value || '').trim();
+        const units = new Map(window.getDeliveryUnits().map(unit => [unit.id, unit]));
+        const organisations = new Map();
+        window.getEngineers().forEach(engineer => engineer.workGroupSets.forEach(code => organisations.set(normalise(code), { engineer, deliveryUnit: units.get(engineer.deliveryUnitId) })));
         return {
           year, stage, cutoff, v0: structuredClone(results[0]?.data || new Map()), v1: structuredClone(results[1]?.data || new Map()),
           comments: structuredClone(results[2] || {}), reviews: structuredClone(results[3] || {}), done,
           hasWorkDone: Boolean(entry), file: entry?.fileName || 'Not uploaded', uploadedAt: entry?.uploadedAt || '',
           capturedAt: new Date().toISOString(), correctionsError: correctionsReady ? '' : window.workOrderCorrectionsError || 'Work Order corrections unavailable',
           catalogue: structuredClone(window.stdJobs), amendments: structuredClone(workOrderAmendments), groupCodes: [...window.workGroupSets.keys()],
-          normalise: normalizeWorkGroupSet, organisation: window.getOrganisationForWorkGroup,
+          normalise, organisation: code => organisations.get(normalise(code)),
           commentOrganisation: window.getCommentOrganisation, commentScope: window.commentMatchesOrganisationScope,
           groupDescription: code => window.workGroupSets.get(code) || code
         };

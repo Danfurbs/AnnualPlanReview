@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { prepare } = require('../exports-data');
+const { prepareAsync } = require('../exports-data');
 const orgs = {
   A: { engineer: { id: 'e1', name: 'Engineer one' }, deliveryUnit: { id: 'du1', name: 'DU one' } },
   B: { engineer: { id: 'e2', name: 'Engineer two' }, deliveryUnit: { id: 'du1', name: 'DU one' } },
@@ -94,4 +95,23 @@ test('unit rankings retain ten entries per unit type and never compare unlike un
   assert.equal(ranked.filter(row => row.Unit === 'Miles').length, 10);
   assert.equal(ranked.filter(row => row.Unit === 'Count').length, 10);
   assert.equal(prepare(data, { du: 'du1', scale: 'du' }, { rank: 'percent' }).datasets.top10.length, 10);
+});
+
+test('large report preparation yields to the UI, memoizes scope lookups and builds only requested detail', async () => {
+  const data = fixture({ v0: new Map(), v1: new Map(), done: new Map(), comments: {}, catalogue: new Map() });
+  const codes = Array.from({ length: 12 }, (_, i) => 'WG' + i);
+  let lookups = 0, aliases = 0, ticks = 0;
+  data.organisation = () => { lookups++; return orgs.A; };
+  data.normalise = value => { aliases++; return value; };
+  for (let index = 1; index <= 1200; index++) data.v0.set(String(index).padStart(6, '0'), { wgs: Object.fromEntries(codes.map(code => [code, { P1: 10, P2: 20 }])) });
+  const timer = setInterval(() => ticks++, 0);
+  let result;
+  try { result = await prepareAsync(data, { du: 'du1', scale: 'du' }, {}, 'performance'); }
+  finally { clearInterval(timer); }
+  assert.equal(result.datasets.performance.length, 1200);
+  assert.equal(result.datasets.periods.length, 0);
+  assert.equal(result.datasets.comparison.length, 0);
+  assert.ok(ticks > 10, 'main event loop remains responsive while preparing');
+  assert.equal(lookups, codes.length);
+  assert.equal(aliases, codes.length);
 });

@@ -233,7 +233,7 @@ function addApiSyncIndicator() {
   indicator.className = 'api-sync-indicator';
   indicator.title = 'Server connectivity';
 
-  topBar.appendChild(indicator);
+  (document.querySelector('.dashboard-header-status') || topBar).appendChild(indicator);
 
   // Update indicator status
   updateApiSyncIndicator();
