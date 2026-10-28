@@ -45,6 +45,24 @@ function successfulResponse(revision) {
   };
 }
 
+test('automatic resolutions use the confirmed revision, serialize with saves, and never prompt over conflicts', async () => {
+  const requests = [];
+  let confirms = 0;
+  const client = loadApiClient(async (url, options) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    requests.push({ url, body });
+    if (!body) return { ok: true, json: async () => ({ success: true, data: { ORDER: { units: 9 } }, revisions: { ORDER: 4 } }) };
+    if (url.endsWith('/reconcile')) return { ok: true, json: async () => ({ success: true, results: [{ orderId: 'ORDER', resolved: true, revision: 5 }] }) };
+    return successfulResponse(6);
+  }, { confirm: () => { confirms++; return true; } });
+  await client.loadWorkOrderAmendmentsFromApi();
+  await client.reconcileWorkOrderCorrectionsFromApi([{ orderId: 'ORDER', identity: { jobNumber:'000001',number:'WO',workGroup:'WG' }, sourceUnits: 9 }]);
+  await client.saveWorkOrderAmendmentToApi('ORDER', { units: 12 });
+  assert.equal(requests[1].body.items[0].expectedRevision, 4);
+  assert.equal(requests[2].body.expectedRevision, 5);
+  assert.equal(confirms, 0);
+});
+
 test('rapid review saves are serialized and use the latest server revision', async () => {
   const requests = [];
   let releaseFirst;

@@ -12,14 +12,20 @@
     let topVarianceBriefCharts = [];
     let latestTopVarianceBrief = null;
     let topVarianceMode = 'units';
+    let topVarianceView = 'graphs';
     function topVarianceValue(item) { return topVarianceMode === 'percent' ? item.percent : item.variance; }
     function topVarianceLabel(item) {
       return topVarianceMode === 'units' ? formatSignedUnits(item.variance) : item.percent === null ? 'No forecast' : formatSignedUnits(item.percent) + '%';
     }
     window.setTopVarianceMode = function(mode) {
       topVarianceMode = mode === 'percent' ? 'percent' : 'units';
-      ['topVarianceMode', 'topVarianceSlideMode'].forEach(id => { document.getElementById(id).value = topVarianceMode; });
+      const select = document.getElementById('topVarianceSlideMode');
+      if (select) select.value = topVarianceMode;
       render();
+    };
+    window.setTopVarianceView = function(view) {
+      topVarianceView = view === 'list' ? 'list' : 'graphs';
+      renderTopVariancesModal();
     };
     let currentWorkOrders = [];
     let currentWorkOrderWorkGroup = 'all';
@@ -539,18 +545,18 @@
 
     // Rebuild from the uploaded originals so retries and server deletions cannot compound edits.
     function applyStoredWorkOrderCorrections(data) {
-      data?.forEach(job => {
-        job.periods = {};
-        job.wgs = {};
-        for (const order of job.workOrders || []) {
-          const correction = getWorkOrderAmendment(order.id);
-          order.units = correction ? Number(correction.units) : Number(order.originalUnits);
-          order.isAmended = Math.abs(order.units - Number(order.originalUnits)) >= 0.0001;
-          job.periods[order.period] = (job.periods[order.period] || 0) + order.units;
-          const group = job.wgs[order.workGroup] ||= {};
-          group[order.period] = (group[order.period] || 0) + order.units;
-        }
-      });
+      window.WorkOrderReview.apply(data, workOrderAmendments, value => window.resolveWorkGroupCode?.(value) || String(value || '').trim().toUpperCase());
+    }
+
+    async function reconcileUploadedWorkOrders(data) {
+      const proposals = window.WorkOrderReview.proposals(data, workOrderAmendments, value => window.resolveWorkGroupCode?.(value) || String(value || '').trim().toUpperCase());
+      if (!proposals.length) return 0;
+      if (pendingCorrections.size) throw new Error('Save or discard pending Work Order corrections before uploading a replacement report.');
+      setWorkDoneUploadState('working', 'Checking completed corrections…', `${proposals.length} saved corrections match ELLIPSE. Confirming their resolution.`);
+      const results = await window.reconcileWorkOrderCorrectionsFromApi(proposals);
+      if (!results) throw new Error('Completed corrections could not be confirmed. The previous upload is retained; please retry.');
+      // A revision conflict leaves the other user's current correction active.
+      return results.filter(item => item.resolved).length;
     }
 
     function getAllGroups() {
@@ -599,7 +605,9 @@
       const ready = await loadWorkOrderAmendmentsAsync();
       const entry = window.WorkDoneSession.get(year);
       if (ready) applyStoredWorkOrderCorrections(entry?.data);
-      window.wData = ready ? entry?.data || null : null;
+      const stale = [...entry?.data?.values() || []].some(job => job.workOrders?.some(order => order.correctionSourceStale));
+      if (stale) window.workOrderCorrectionsError = 'A saved correction has been resolved in ELLIPSE since this Work Done upload. Upload a fresh report to continue reporting.';
+      window.wData = ready && !stale ? entry?.data || null : null;
       currentWorkOrders = [];
       workDoneUploadedAt = entry?.uploadedAt || null;
     }
@@ -1039,7 +1047,9 @@
       if (!Number.isFinite(updatedUnits) || updatedUnits < 0 || window.workOrderCorrectionsError) return false;
       const order = currentWorkOrders.find(item => item.id === orderId);
       if (!order || Math.abs(Number(order.units) - updatedUnits) < 0.0001) return false;
-      return updateWorkOrderAmendment(orderId, updatedUnits, order.originalUnits, reason);
+      if (order.missingFromUpload || order.correctionMatchIssue || !order.reviewIdentity) { window.Toast?.error('This Work Order cannot be matched uniquely. Check the source report before correcting it.'); return false; }
+      const same = window.WorkOrderReview.equalUnits(updatedUnits, order.originalUnits);
+      return persistCorrection(order.correctionId || order.id, same ? null : { units: updatedUnits, reason: String(reason).trim().slice(0, 1000), identity: order.reviewIdentity });
     }
 
     function getJobComments(jobNumber) {
@@ -1491,6 +1501,7 @@
 
     function buildTopVarianceBriefData({ baseFiltered, period, getJobDisplayData, varianceFilter, reviewStatusFilter }) {
       const periodNumber = getPeriodNumber(period);
+      const cutoff = getEffectiveForecastCutoffPeriod();
       const throughLabel = getTopVarianceThroughLabel(periodNumber);
       const items = (isPerformanceAvailable() ? (baseFiltered || []) : [])
         .map(job => {
@@ -1525,7 +1536,9 @@
             percent: cumulativeForecast ? cumulativeVariance / Math.abs(cumulativeForecast) * 100 : null,
             chartLabels,
             forecastSeries,
-            actualSeries
+            actualSeries,
+            periodForecastSeries: Array.from({ length: 13 }, (_, i) => Number(displayData.periods[`P${i+1}`]?.f || 0)),
+            periodWorkDoneSeries: Array.from({ length: 13 }, (_, i) => cutoff !== null && i < cutoff ? Number(displayData.periods[`P${i+1}`]?.wd || 0) : null)
           };
         })
         .filter(item => Math.abs(item.variance) > 0.0001)
@@ -1566,7 +1579,25 @@
       destroyTopVarianceBriefCharts();
       document.getElementById('topVarianceBriefSummary').innerHTML = '';
       document.getElementById('topVarianceModalMeta').textContent = data ? data.meta : 'Current dashboard selection';
+      document.getElementById('topVarianceListView').setAttribute('aria-pressed', String(topVarianceView === 'list'));
+      document.getElementById('topVarianceGraphView').setAttribute('aria-pressed', String(topVarianceView === 'graphs'));
       if (!data?.items.length) { grid.innerHTML = '<p>No variances to display for the current filters.</p>'; return; }
+      if (topVarianceView === 'graphs') {
+        grid.innerHTML = '<p class="variance-slide-footnote">Period-by-period values · Forecast shown through P13 · Work Done shown only through the completed reporting period. Each SJN keeps its own unit and scale.</p><div class="variance-job-graphs">' + data.items.map((item, i) =>
+          `<section class="variance-job-graph"><div class="variance-job-graph-heading"><div><h3>${i+1}. ${escapeHtml(item.job.jn)}</h3><p>${escapeHtml(item.job.desc)}</p></div><strong class="${item.variance < 0 ? 'negative' : 'positive'}">${escapeHtml(topVarianceLabel(item))}<small>Variance through P${data.periodNumber}</small></strong></div><div class="variance-job-chart"><canvas id="topVarianceJobChart${i}" role="img" aria-label="Period-by-period forecast and Work Done for ${escapeHtml(item.job.jn)} in ${escapeHtml(item.job.unit || 'units')}"></canvas></div></section>`
+        ).join('') + '</div>';
+        data.items.forEach((item, i) => {
+          topVarianceBriefCharts.push(new Chart(document.getElementById(`topVarianceJobChart${i}`), {
+            type: 'bar',
+            data: { labels: Array.from({ length: 13 }, (_, n) => `P${n+1}`), datasets: [
+              { type: 'line', label: `Forecast (${currentPlanVersion.toUpperCase()})`, data: item.periodForecastSeries, borderColor: '#4f46e5', backgroundColor: '#4f46e5', borderWidth: 2, tension: 0, pointRadius: 2, fill: false },
+              { label: 'Completed Work Done', data: item.periodWorkDoneSeries, backgroundColor: '#10b981', borderColor: '#059669', borderWidth: 1 }
+            ] },
+            options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom' } }, scales: { x: { title: { display: true, text: 'Reporting period' } }, y: { beginAtZero: true, title: { display: true, text: item.job.unit || 'Units' } } } }
+          }));
+        });
+        return;
+      }
       const maximum = Math.max(...data.items.map(item => Math.abs(topVarianceValue(item) || 0)), 1);
       grid.innerHTML = '<div class="variance-slide-sheet"><div class="variance-slide-heading"><strong>TOP ' + data.items.length + ' VARIANCES</strong><span>Ranked by ' + (topVarianceMode === 'percent' ? 'percentage (%)' : 'units') + '</span></div><table class="variance-slide-table"><thead><tr><th>#</th><th>Standard job</th><th>Unit</th><th>Forecast</th><th>Actual</th><th>Variance</th></tr></thead><tbody>' + data.items.map((item, i) => {
         const color = item.variance < 0 ? 'negative' : 'positive';
@@ -1576,8 +1607,8 @@
     }
 
     function openTopVariancesModal() {
-      renderTopVariancesModal();
       document.getElementById('topVariancesModal')?.classList.add('open');
+      renderTopVariancesModal();
     }
     window.openTopVariancesModal = openTopVariancesModal;
 
@@ -1635,23 +1666,34 @@
       let totalUnits = 0;
       let flaggedCount = 0;
       let amendedCount = 0;
+      let missingCount = 0;
+      const scopeGroups = getSelectedEngineerWorkGroups();
+      const groupFilter = document.getElementById('wgFilter')?.value || 'all';
+      const groupIdentities = new Map();
+      const normaliseGroup = value => { if (!groupIdentities.has(value)) groupIdentities.set(value, normalizeWorkGroupSet(value)); return groupIdentities.get(value); };
+      const allowedGroups = scopeGroups ? new Set(scopeGroups.map(normaliseGroup)) : null;
+      const orderInScope = value => (groupFilter === 'all' || normaliseGroup(value) === normaliseGroup(groupFilter)) && (!allowedGroups || allowedGroups.has(normaliseGroup(value)));
       if (window.wData) {
         window.wData.forEach(jobData => {
-          const workOrders = jobData.workOrders || [];
+          const workOrders = (jobData.workOrders || []).filter(order => orderInScope(order.workGroup));
+          const stats = getWorkOrderStats(workOrders);
           totalWorkOrders += workOrders.length;
           workOrders.forEach(wo => {
             totalUnits += wo.units || 0;
-            if (wo.flags && wo.flags.length > 0) flaggedCount++;
-            if (wo.isAmended) amendedCount++;
+            if (getWorkOrderFlags(wo, stats).length > 0) flaggedCount++;
+            if (wo.correctionStatus === 'active' || wo.isAmended) amendedCount++;
           });
         });
+        missingCount = window.WorkOrderReview.missing(window.wData, workOrderAmendments).filter(([, saved]) => orderInScope(saved.identity.workGroup)).length;
+        amendedCount += missingCount;
+        flaggedCount += missingCount;
       }
       const workOrderCountEl = document.getElementById('workOrderCount');
       const workOrderMetaEl = document.getElementById('workOrderMeta');
       const workOrderFlaggedEl = document.getElementById('workOrderFlagged');
       const workOrderAmendedEl = document.getElementById('workOrderAmended');
       if (workOrderCountEl) workOrderCountEl.textContent = totalWorkOrders.toLocaleString();
-      if (workOrderMetaEl) workOrderMetaEl.textContent = window.wData ? 'All uploaded periods · ' + currentFinancialYear : 'Work Done not uploaded';
+      if (workOrderMetaEl) workOrderMetaEl.textContent = window.wData ? 'All uploaded periods · ' + currentFinancialYear + (missingCount ? ` · ${missingCount} outstanding correction${missingCount === 1 ? '' : 's'} not in this upload` : '') : 'Work Done not uploaded';
       if (workOrderFlaggedEl) workOrderFlaggedEl.textContent = flaggedCount.toLocaleString();
       if (workOrderAmendedEl) workOrderAmendedEl.textContent = amendedCount.toLocaleString();
 
@@ -1947,8 +1989,7 @@
           const rawUnits = parseFloat(units || 0);
           const workOrderNumber = extractWorkOrderNumber(r);
           const workOrderId = `${jn}-${workOrderNumber || 'unknown'}-${job.workOrders.length + 1}`;
-          const amendment = getWorkOrderAmendment(workOrderId);
-          const amendedUnits = Number.isFinite(Number(amendment?.units)) ? Number(amendment.units) : rawUnits;
+          const amendedUnits = rawUnits;
           const u = amendedUnits;
           job.periods[per] = (job.periods[per] || 0) + u;
           const wg = normalizeWorkGroupSet(
@@ -1978,7 +2019,7 @@
             period: per,
             units: u,
             originalUnits: rawUnits,
-            isAmended: Number.isFinite(Number(amendment?.units)) && Math.abs(amendedUnits - rawUnits) >= 0.0001,
+            isAmended: false,
             workGroup: wg,
             closedDate: String(
               r['Work Order Closed Date'] ||
@@ -1995,11 +2036,13 @@
         if (uploadSerial !== workDoneUploadSerial || selectedYear !== getSelectedWorkDoneYear()) {
           throw new Error('Upload cancelled because its financial-year context changed. Please upload again.');
         }
+        const resolvedCount = await reconcileUploadedWorkOrders(nextWorkDoneData);
+        if (uploadSerial !== workDoneUploadSerial || selectedYear !== getSelectedWorkDoneYear()) throw new Error('Upload context changed. Please upload again.');
         window.WorkDoneSession.replace(selectedYear, nextWorkDoneData, file.name);
         await loadWorkDoneStoreAsync(currentFinancialYear);
         updateWorkGroupFilterOptions();
         render();
-        setWorkDoneUploadState('success', 'Upload complete', `${matched.toLocaleString()} valid rows loaded for ${selectedYear}, for this session only.`);
+        setWorkDoneUploadState('success', 'Upload complete', `${matched.toLocaleString()} valid rows loaded for ${selectedYear}, for this session only.${resolvedCount ? ` ${resolvedCount} corrections confirmed in ELLIPSE and resolved.` : ''}`);
         const input = document.getElementById('wFile');
         if (input) input.value = '';
         uploadComplete = true;
@@ -2176,7 +2219,7 @@
       window.wData.forEach((jobData, jobNumber) => {
         const meta = window.stdJobs.get(jobNumber) || {};
         (jobData.workOrders || []).forEach(order => {
-          if (!order.isAmended) return;
+          if (order.correctionStatus !== 'active' && !order.isAmended) return;
           const originalUnits = Number(order.originalUnits);
           const amendedUnits = Number(order.units);
           const organisation = window.getOrganisationForWorkGroup?.(order.workGroup);
@@ -2344,6 +2387,10 @@
     }
 
     function getWorkOrderFlags(order, stats) {
+      if (order.missingFromUpload) return ['Missing from current upload — still outstanding'];
+      if (order.correctionMatchIssue) return [order.correctionMatchIssue];
+      if (order.correctionResolved) return [];
+      if (order.correctionStatus === 'active') return ['Correction awaiting ELLIPSE'];
       const flags = [];
       const units = Number(order.units) || 0;
       if (units === 0 && order.period) {
@@ -2500,7 +2547,7 @@
       const table = document.getElementById('woTable');
       if (!table) return;
       const workOrders = currentWorkOrders || [];
-      const stats = getWorkOrderStats(workOrders);
+      const stats = getWorkOrderStats(workOrders.filter(order => !order.missingFromUpload));
       const search = (document.getElementById('woSearch')?.value || '').toLowerCase();
       const flaggedOnly = document.getElementById('woFlagOnly')?.checked || false;
 
@@ -2549,7 +2596,7 @@
       }
 
       if (!filtered.length) {
-        table.innerHTML = '<thead><tr><th>Work Orders</th></tr></thead><tbody><tr><td class="wo-empty">No work orders match the current filters.</td></tr></tbody>';
+        table.innerHTML = '<thead><tr><th>Work Orders</th></tr></thead><tbody><tr><td class="wo-empty">' + (flaggedOnly && !search ? 'No outstanding Work Order corrections or flags in this selection. Clear the review-only filter to view all orders.' : 'No work orders match the current filters.') + '</td></tr></tbody>';
         return;
       }
 
@@ -2566,7 +2613,7 @@
               <button type="button" class="wo-revert" data-id="${escapeHtml(order.id)}">Revert</button>
             </div>
           `
-          : '';
+          : order.missingFromUpload ? '<div class="wo-unit-meta">Saved correction target · source not in current upload</div>' : order.correctionResolved ? '<div class="wo-unit-meta">Confirmed in ELLIPSE · resolved</div>' : '';
         const unitClass = canRevert ? 'wo-unit-value amended' : 'wo-unit-value';
 
         // Create Ellipse hyperlink for work order number
@@ -2586,7 +2633,7 @@
             <td class="wo-units" data-units-cell data-order-id="${escapeHtml(order.id)}">
               <div class="wo-unit-cell">
                 <span class="${unitClass}">${formatUnits(order.units)}</span>
-                <button type="button" class="wo-amend" data-id="${escapeHtml(order.id)}">Amend</button>
+                <button type="button" class="wo-amend" data-id="${escapeHtml(order.id)}" ${order.correctionMatchIssue || order.missingFromUpload ? 'disabled' : ''}>Amend</button>
               </div>
               ${amendedNote}
             </td>
@@ -4490,11 +4537,16 @@
       currentWorkOrders = job.isGroupRollup
         ? getWorkOrdersForGroup(job.groupId).slice()
         : (window.wData?.get(job.jn)?.workOrders || []).slice();
+      const sourceJobNumbers = new Set(getBreakdownSourceNumbers(job));
+      window.WorkOrderReview.missing(window.wData, workOrderAmendments).forEach(([id, saved]) => {
+        if (!sourceJobNumbers.has(saved.identity.jobNumber)) return;
+        currentWorkOrders.push({ id: 'missing|' + id, correctionId: id, reviewIdentity: saved.identity, jobNumber: saved.identity.jobNumber, number: saved.identity.number, workGroup: normalizeWorkGroupSet(saved.identity.workGroup), units: saved.units, originalUnits: null, period: '', missingFromUpload: true, correctionStatus: 'active', isAmended: false });
+      });
       currentWorkOrderWorkGroup = wgFilter;
       const woSearch = document.getElementById('woSearch');
       const woFlagOnly = document.getElementById('woFlagOnly');
       if (woSearch) woSearch.value = '';
-      if (woFlagOnly) woFlagOnly.checked = false;
+      if (woFlagOnly) woFlagOnly.checked = true;
       if (woSearch) woSearch.oninput = renderWorkOrders;
       if (woFlagOnly) woFlagOnly.onchange = renderWorkOrders;
       renderWorkOrders();
@@ -4798,6 +4850,7 @@
         if (window.APRReview.hasDrafts()) throw new Error('Save or discard your edits before exporting.');
         const done = structuredClone(entry?.data || new Map());
         if (correctionsReady) applyStoredWorkOrderCorrections(done);
+        const staleSource = [...done.values()].some(job => job.workOrders?.some(order => order.correctionSourceStale));
         // Build scope lookups once per capture instead of rescanning the catalogue per cell.
         const aliasKey = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\s*\(/g, '(');
         const aliases = new Map();
@@ -4810,7 +4863,7 @@
           year, stage, cutoff, v0: structuredClone(results[0]?.data || new Map()), v1: structuredClone(results[1]?.data || new Map()),
           comments: structuredClone(results[2] || {}), reviews: structuredClone(results[3] || {}), done,
           hasWorkDone: Boolean(entry), file: entry?.fileName || 'Not uploaded', uploadedAt: entry?.uploadedAt || '',
-          capturedAt: new Date().toISOString(), correctionsError: correctionsReady ? '' : window.workOrderCorrectionsError || 'Work Order corrections unavailable',
+          capturedAt: new Date().toISOString(), correctionsError: staleSource ? 'Upload fresh Work Done: a correction was resolved after this report was loaded.' : correctionsReady ? '' : window.workOrderCorrectionsError || 'Work Order corrections unavailable',
           catalogue: structuredClone(window.stdJobs), amendments: structuredClone(workOrderAmendments), groupCodes: [...window.workGroupSets.keys()],
           normalise, organisation: code => organisations.get(normalise(code)),
           commentOrganisation: window.getCommentOrganisation, commentScope: window.commentMatchesOrganisationScope,

@@ -81,7 +81,7 @@
     const body = historyTarget.querySelector('[data-history-body]');
     body.innerHTML = records.length ? records.map(event => {
       const changes = event.kind === 'correction' ? [event.details] : event.details.changes;
-      return `<article class="apr-history-event"><strong>${esc(event.kind === 'correction' ? event.details.orderId + ' · correction (shared across uploads)' : event.fiscal_year + ' · ' + event.plan_version.toUpperCase())}</strong>
+      return `<article class="apr-history-event"><strong>${esc(event.kind === 'correction' ? event.details.orderId + (event.details.status === 'resolved' ? ' · resolved in ELLIPSE' : ' · correction (shared across uploads)') : event.fiscal_year + ' · ' + event.plan_version.toUpperCase())}</strong>
         <small>${esc(new Date(event.saved_at).toLocaleString())} · server-confirmed</small>${event.details.reason ? `<p>${esc(event.details.reason)}</p>` : ''}
         <details><summary>${changes.length} changed ${changes.length === 1 ? 'value' : 'values'}</summary>
         <ul>${changes.map(change => `<li>${esc([change.group, change.period].filter(Boolean).join(' · '))} ${esc(formatHistoryValue(change.from, event))} → ${esc(formatHistoryValue(change.to, event))}</li>`).join('')}</ul></details></article>`;

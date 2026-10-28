@@ -785,7 +785,7 @@ class DatabaseServicePG {
 
 
 
-  async updateWorkOrderAmendment(orderId, value, expectedRevision) {
+  async updateWorkOrderAmendment(orderId, value, expectedRevision, resolution = null) {
     await this.ready;
     const client = await this.pool.connect();
     try {
@@ -796,6 +796,7 @@ class DatabaseServicePG {
       const revision = Number(revisions.rows[0]?.revision || 0);
       if (revision !== expectedRevision) throw revisionConflict();
       const data = { ...stored.rows[0].data_json };
+      if (resolution) value = require('../../work-order-review').resolvedValue(orderId, data[orderId], resolution);
       const audit = history.correctionEvents(orderId, data[orderId], value);
       if (value === null) delete data[orderId]; else data[orderId] = value;
       await client.query('UPDATE work_order_amendments SET data_json = $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = 1', [JSON.stringify(data)]);

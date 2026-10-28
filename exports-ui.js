@@ -7,7 +7,7 @@
     ['periods', 'Performance by period', 'One row per SJN, Work Group Set and period, with V1 updates clearly identified.'],
     ['comparison', 'Forecast comparison', 'Original V0 against the complete latest forecast, with period changes and explicit V1 markers.'],
     ['comments', 'Comments', 'Review commentary and existing actions, scoped by current organisational ownership.'],
-    ['orders', 'Work Orders', 'Original and corrected units, differences and saved correction details.'],
+    ['orders', 'Work Orders', 'Outstanding corrections awaiting ELLIPSE, or all uploaded orders with their resolution status.'],
     ['coverage', 'Work Group coverage', 'Unique SJNs with forecast evidence per Work Group Set. Compare financial years if needed.'],
     ['reviews', 'Review progress', 'Reviewed and outstanding SJNs for the selected review stage.'],
     ['top10', 'Top 10 variance brief', 'Largest variances in this scope. Unit rankings are separated by measurement unit.']
@@ -34,7 +34,7 @@
     <div class="exports-report-list">${reports.map(([id,title,description])=>`<details class="exports-report" data-report="${id}"><summary><span>${title}</span><span data-count></span></summary><div class="exports-report-body"><p class="helper-text">${description}</p>
       <div class="exports-report-options"><label>Scope<select data-scale aria-label="${title} scope"><option value="du">Entire selected DU</option><option value="engineer">Engineer</option><option value="workgroup">Work Group Set</option></select></label><label data-target-label>Selection<select data-target aria-label="${title} selection"></select></label>
       ${id === 'comments' ? '<label>Comment type<select id="exportsCommentType"><option value="all">All types</option></select></label><label>Comment review stage<select id="exportsCommentStage"><option value="all">All stages</option></select></label>' : ''}
-      ${id === 'orders' ? '<label>Orders<select id="exportsOrderMode"><option value="corrected">Corrected orders only</option><option value="all">All uploaded orders</option></select></label>' : ''}
+      ${id === 'orders' ? '<label>Orders<select id="exportsOrderMode"><option value="corrected">Outstanding corrections only</option><option value="all">All uploaded orders (including resolved)</option></select></label>' : ''}
       ${id === 'top10' ? '<label>Rank by<select id="exportsRank"><option value="units">Units (per unit type)</option><option value="percent">Percentage</option></select></label>' : ''}
       ${id === 'coverage' ? '<label>Additional financial years<select id="exportsCoverageYears" multiple size="2"></select></label>' : ''}</div>
       <div class="exports-report-actions"><button type="button" class="group-action-button" data-preview>Preview</button><button type="button" class="primary-button" data-download>Download Excel</button>${id==='top10'?'<button type="button" class="group-action-button" id="exportsPrintBrief">Print / save PDF</button>':''}</div></div></details>`).join('')}</div>
@@ -129,7 +129,7 @@
       const headings = data.rows.length && card.dataset.report === 'top10' ? ['Standard Job No','Description','Unit','Latest forecast','Projected full year','Variance vs latest','Variance %','RAG'] : Object.keys(data.rows[0] || {});
       $('exportsPreviewTitle').textContent = title;
       $('exportsPreviewScope').textContent = `${snapshot.year} · ${snapshot.stage} · Work Done through ${snapshot.cutoff === null ? 'not selected' : 'P'+snapshot.cutoff} · ${scopeLabel(card)} · ${data.rows.length} rows${!printing && data.rows.length > 20 ? ' (first 20 shown)' : ''}`;
-      $('exportsPreviewRows').innerHTML = headings.length ? `<table><thead><tr>${headings.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${(printing ? data.rows : data.rows.slice(0,20)).map(row=>`<tr>${headings.map(h=>`<td>${esc(row[h] === null ? 'Unavailable' : h === 'Variance %' ? (row[h]*100).toFixed(1)+'%' : row[h])}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<p>No matching records in this scope.</p>';
+      $('exportsPreviewRows').innerHTML = headings.length ? `<table><thead><tr>${headings.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${(printing ? data.rows : data.rows.slice(0,20)).map(row=>`<tr>${headings.map(h=>`<td>${esc(row[h] === null ? 'Unavailable' : h === 'Variance %' ? (row[h]*100).toFixed(1)+'%' : row[h])}</td>`).join('')}</tr>`).join('')}</tbody></table>` : card.dataset.report === 'orders' && filters().orders === 'corrected' ? '<p>No outstanding Work Order corrections in this selection. Confirmed ELLIPSE resolutions are excluded.</p>' : '<p>No matching records in this scope.</p>';
       $('exportsPreview').hidden = false;
       $('exportsPreview').scrollIntoView({block:'nearest'});
       return true;
@@ -149,6 +149,7 @@
         ['Performance availability', snapshot.correctionsError || (snapshot.cutoff === null ? 'Reporting period not selected' : snapshot.cutoff > 0 && !snapshot.hasWorkDone ? 'Work Done not uploaded' : 'Available')],
         ['Latest forecast', 'Explicit V1 period values over V0; absent V1 inherits V0, zero overrides V0.'], ['Projected outcome', 'Corrected Work Done through cutoff plus latest forecast after cutoff.'],
         ['Units', 'Unit types are kept separate. No mixed-unit grand total.'], ['Empty numeric cells', 'Unavailable or no original value; zero is a real numeric zero.'],
+        ['Work Order correction lifecycle', 'Outstanding corrections exclude confirmed ELLIPSE resolutions. Identified active corrections missing from the current upload remain outstanding; their source units are unavailable. Corrections are shared across uploads rather than FY-specific.'],
         ['Job filters', $('exportsKeepFilters').checked ? $('exportsFilterNote').textContent : 'Cleared for this export']
       ];
       let count = 0;
@@ -174,7 +175,7 @@
         if (id === 'orders') notes.push(['Work Order selection', filters().orders]);
         if (id === 'top10') notes.push(['Ranking', filters().rank === 'units' ? 'Absolute units, top 10 per unit type' : 'Absolute percentage; nonzero delivery against zero forecast ranks first']);
       }
-      if (!count) throw new Error('No matching records. Adjust the scope or filters and try again.');
+      if (!count) throw new Error(card.dataset.report === 'orders' && filters().orders === 'corrected' ? 'No outstanding Work Order corrections in this selection. Confirmed ELLIPSE resolutions are excluded.' : 'No matching records. Adjust the scope or filters and try again.');
       XLSX.utils.book_append_sheet(workbook, sheet(notes.map(([Setting,Value])=>({Setting,Value}))), 'About');
       const slug = value => String(value).replace(/[^a-z0-9-]+/gi,'-');
       const filenameScope = scopeLabel(card);

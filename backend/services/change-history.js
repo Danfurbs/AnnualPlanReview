@@ -33,7 +33,10 @@ function event(kind, job, year, version, details) {
 }
 function correctionEvents(id, before, after) {
   const from = before ? Number(before.units) : null, to = after ? Number(after.units) : null;
-  return from === to ? [] : [event('correction', id.split('-')[0], '', '', { orderId: id, from, to, reason: after?.reason || (after === null ? 'Reverted to uploaded original' : '') })];
+  const resolution = before?.status !== 'resolved' && after?.status === 'resolved';
+  const reopened = before?.status === 'resolved' && after && after.status !== 'resolved';
+  const job = after?.identity?.jobNumber || before?.identity?.jobNumber || (id.startsWith('wo2|') ? decodeURIComponent(id.split('|')[1]) : id.split('-')[0]);
+  return from === to && !resolution && !reopened ? [] : [event('correction', job, '', '', { orderId: id, from, to, status: after?.status || (after === null ? 'removed' : 'active'), reason: resolution ? 'Resolved: fresh ELLIPSE upload matches the saved correction.' : after?.reason || (after === null ? 'Reverted to uploaded original' : '') })];
 }
 function rowsToForecast(rows, comments = []) {
   const data = Object.create(null);

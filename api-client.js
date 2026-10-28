@@ -825,6 +825,23 @@ function loadWorkOrderAmendmentsFromApi() {
 // Keep the ancestry of failed drafts even when a refresh updates the displayed server snapshot.
 const pendingAmendmentRevisions = new Map();
 
+function reconcileWorkOrderCorrectionsFromApi(items) {
+  const operation = amendmentQueue.then(async () => {
+    if (!isApiEnabled()) return null;
+    try {
+      const response = await apiRequest('/work-order-amendments/reconcile', {
+        method: 'POST', body: { items: items.map(item => ({ ...item, expectedRevision: amendmentRevisions[item.orderId] || 0 })) }
+      });
+      if (!response.success || !Array.isArray(response.results)) return null;
+      response.results.forEach(result => { if (result.resolved) amendmentRevisions[result.orderId] = result.revision; });
+      return response.results;
+    } catch (error) { console.warn('Correction resolutions could not be confirmed:', error); return null; }
+  });
+  amendmentQueue = operation.catch(() => undefined);
+  return operation;
+}
+window.reconcileWorkOrderCorrectionsFromApi = reconcileWorkOrderCorrectionsFromApi;
+
 function saveWorkOrderAmendmentToApi(orderId, value) {
   if (!isApiEnabled()) return Promise.resolve(false);
   const snapshot = value === null ? null : { ...value };

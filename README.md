@@ -59,6 +59,18 @@ Upload the report for an explicit FY. Successful uploads replace that FY in memo
 
 Saved Work Order corrections are reapplied to matching fresh uploads. Preview can use session evidence or its compact temporary importer. Copying a profile into V0 remains an explicit forecast operation. A missing upload is not confirmed zero delivery.
 
+### Work Order correction review
+
+New corrections identify an order by SJN, Work Order number and canonical Work Group Set, independently of upload row order. Existing row-index corrections can match a uniquely identified SJN/Work Order; ambiguous or duplicate matches stay flagged and cannot be amended automatically. Work Order numbers and SJN identities must be present for safe editing.
+
+After a validated fresh Work Done upload, matching ELLIPSE units automatically resolve the saved correction through a revision-checked server transaction. Resolution retains the correction and its history, stops future overriding, clears the resolved order's warning flags, and removes it from the default outstanding-corrections export. Zero is a valid confirmed value. A later source value is used as uploaded rather than being overwritten by a retired correction. A newly arising anomaly can still require review.
+
+The breakdown opens with **Needs review only** selected. Clear it to view resolved orders, labelled **Confirmed in ELLIPSE**. Identified active corrections missing from an upload remain visible as outstanding and are included in the correction export with unavailable source values; they do not contribute invented Work Done to totals. Duplicate/uncertain matches remain flagged. Legacy records without enough identity are retained rather than guessed or deleted. An already loaded source invalidated by another session's resolution requires a fresh upload before reporting continues.
+
+A failed reconciliation retains the previous upload and shows a retryable error. Revision conflicts never overwrite another planner's newer correction. Only successful fresh-upload reconciliation changes correction status; normal reads and exports do not resolve records. No uploaded Work Done snapshots are stored on the server. Deploy the updated browser assets and backend together and reload older clients; no schema migration is required for the new status/identity metadata in correction JSON.
+
+Run `node tests/browser/work-order-review.cjs` for end-to-end acceptance against the production correction routes and an isolated in-memory SQLite store. Tests cover reordered uploads, resolution and durable history, explicit zero, source changes, missing/duplicate rows, a failed resolution and retry, and a simultaneous planner edit. PostgreSQL resolution transaction checks use a mocked client; production PostgreSQL acceptance remains separate.
+
 ## Tests
 
 ```sh
@@ -89,6 +101,8 @@ Work Order corrections are server-only. Browser correction caches are ignored an
 ## Integrated review tools
 
 ### Exports
+
+Top 10 Variances has no ranking control in the sidebar. Its slide view offers List and Graphs, with Graphs selected initially. Each graph shows the selected plan's individual P1–P13 forecast values and completed Work Done only through the reporting cutoff, using that SJN's unit. Ranking by units/percentage remains available in the slide view and applies to both presentations. Run `node tests/browser/top-variances.cjs` for real Chart.js browser checks covering period values, cutoff exclusion, switching, ranking, responsive widths and chart cleanup.
 
 Open **Exports** in the left menu for standalone Excel reports. Each report independently selects the entire selected Delivery Unit, an Engineer or a Work Group Set. The shared Delivery Unit selector can widen to all DUs. Reports start from the current dashboard selection; additional job filters can be retained or cleared without changing the dashboard.
 

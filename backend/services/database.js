@@ -821,12 +821,13 @@ class DatabaseService {
   }
 
 
-  updateWorkOrderAmendment(orderId, value, expectedRevision) {
+  updateWorkOrderAmendment(orderId, value, expectedRevision, resolution = null) {
     return this.db.transaction(() => {
       const current = this.db.prepare('SELECT revision FROM work_order_amendment_revisions WHERE order_id = ?').get(orderId);
       const revision = Number(current?.revision || 0);
       if (revision !== expectedRevision) { const error = new Error('Revision conflict'); error.code = 'REVISION_CONFLICT'; throw error; }
       const data = this.getWorkOrderAmendments();
+      if (resolution) value = require('../../work-order-review').resolvedValue(orderId, data[orderId], resolution);
       const audit = history.correctionEvents(orderId, data[orderId], value);
       if (value === null) delete data[orderId]; else data[orderId] = value;
       this.saveWorkOrderAmendments(data);

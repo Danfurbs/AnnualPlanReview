@@ -2052,6 +2052,18 @@ button:disabled { cursor: default; }
 .variance-slide-track span { display:block; height:100%; background:#2563eb; }
 .variance-slide-track span.negative { background:#d97706; }
 .variance-slide-footnote { color:#64748b; font-size:11px; margin:12px 0 0; }
+.variance-view-toggle { display: inline-flex; gap: 3px; padding: 3px; border-radius: 7px; background: #e2e8f0; }
+.variance-view-toggle button { padding: 6px 12px; background: transparent; color: #475569; }
+.variance-view-toggle button[aria-pressed="true"] { background: #1e40af; color: white; }
+.variance-job-graphs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 14px; }
+.variance-job-graph { min-width: 0; padding: 16px; background: white; border: 1px solid #dce3ed; border-radius: 10px; break-inside: avoid; }
+.variance-job-graph-heading { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.variance-job-graph-heading h3 { font-size: 17px; }
+.variance-job-graph-heading p { font-size: 12px; color: #64748b; margin-top: 4px; overflow-wrap: anywhere; }
+.variance-job-graph-heading > strong { white-space: nowrap; text-align: right; }
+.variance-job-graph-heading small { display: block; color: #64748b; font-size: 10px; font-weight: 400; margin-top: 4px; }
+.variance-job-chart { position: relative; height: 250px; min-width: 0; }
+@media (max-width: 800px) { .variance-job-graphs { grid-template-columns: minmax(0, 1fr); } }
 @media print {
   @page { size: A4 landscape; margin:10mm; }
   body:has(#topVariancesModal.open) > :not(#topVariancesModal) { display:none !important; }

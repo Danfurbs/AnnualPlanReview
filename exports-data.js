@@ -35,6 +35,7 @@
       return ratio >= 0.5 ? 'Red' : ratio >= 0.1 ? 'Amber' : 'Green';
     };
     const datasets = { performance: [], periods: [], comparison: [], comments: [], orders: [], coverage: [], reviews: [], top10: [] };
+    const eligibleJobs = new Set();
     const coverage = new Map();
     (input.groupCodes || []).filter(allowed).forEach(code => coverage.set(code, { original: new Set(), latest: new Set() }));
     const all = new Set([...v0.keys(), ...v1.keys(), ...done.keys(), ...comments.keys()]);
@@ -86,6 +87,7 @@
         const match = { good: status === 'Green', warning: status === 'Amber', bad: status === 'Red', over: variance > 0, under: variance < 0, variance: variance !== null && variance !== 0 };
         if (!match[filters.variance]) continue;
       }
+      eligibleJobs.add(sjn);
       if (codes.length) {
         const ownership = { 'Delivery Units': [...new Set(codes.map(code => organisation(code)?.deliveryUnit?.name || 'Unassigned'))].join(', '), Engineers: [...new Set(codes.map(code => organisation(code)?.engineer?.name || 'Unassigned'))].join(', '), 'Work Group Sets': codes.join(', ') };
         if (wants('performance')) datasets.performance.push({ ...base, ...ownership, 'Original plan V0': originalTotal, 'Latest forecast': latestTotal, 'Completed Work Done': available ? completed : null, 'Projected full year': projected, 'Variance vs latest': variance, 'Variance %': available && latestTotal ? variance / Math.abs(latestTotal) : null, 'Percentage note': available && !latestTotal && projected ? 'Nonzero projection against zero forecast' : '', RAG: status, 'V1 updated cells': changed, 'Review status': reviewed ? 'Reviewed' : 'Not reviewed' });
@@ -102,10 +104,27 @@
         const org = input.commentOrganisation(entry);
         datasets.comments.push({ 'Standard Job Number': sjn, Description: base.Description, Unit: base.Unit, 'Financial Year': input.year, 'Review Stage': entry.rf || '', 'Comment Type': entry.category || 'General', Comment: entry.text || '', 'Delivery Unit ID': org?.deliveryUnit?.id || '', 'Delivery Unit': org?.deliveryUnit?.name || '', Engineer: org?.engineer?.name || '', 'Work Group Set': normalise(entry.filteredWorkGroup || ''), 'Root Cause': entry.rootCause || '', 'Corrective Action': entry.correctiveAction || '', Owner: entry.owner || '', 'Due Date': entry.dueDate || '', 'Evidence Links': (entry.evidenceLinks || []).join('\n') });
       });
-      if (wants('orders')) (done.get(sjn)?.workOrders || []).filter(order => allowed(normalise(order.workGroup))).filter(order => filters.orders !== 'corrected' || order.isAmended).forEach(order => {
+      if (wants('orders')) (done.get(sjn)?.workOrders || []).filter(order => allowed(normalise(order.workGroup))).filter(order => filters.orders !== 'corrected' || order.correctionStatus === 'active' || order.isAmended || order.correctionMatchIssue && order.hasSavedCorrection).forEach(order => {
         const org = organisation(normalise(order.workGroup));
-        datasets.orders.push({ ...base, 'Delivery Unit': org?.deliveryUnit?.name || '', Engineer: org?.engineer?.name || '', 'Work Group Set': normalise(order.workGroup), 'Work Order': order.number || '', 'Order description': order.description || '', 'Order type': order.workOrderType || '', 'Closed period': order.period || '', 'Closed date': order.closedDate || '', 'Original units': number(order.originalUnits), 'Corrected units': number(order.units), Difference: number(order.units) - number(order.originalUnits), Corrected: order.isAmended ? 'Yes' : 'No', 'Correction saved at': input.amendments?.[order.id]?.updatedAt || '', 'Correction reason': input.amendments?.[order.id]?.reason || '' });
+        const saved = input.amendments?.[order.correctionId || order.id];
+        datasets.orders.push({ ...base, 'Delivery Unit': org?.deliveryUnit?.name || '', Engineer: org?.engineer?.name || '', 'Work Group Set': normalise(order.workGroup), 'Work Order': order.number || '', 'Order description': order.description || '', 'Order type': order.workOrderType || '', 'Closed period': order.period || '', 'Closed date': order.closedDate || '', 'Original units': number(order.originalUnits), 'Corrected units': number(order.units), Difference: number(order.units) - number(order.originalUnits), 'Review status': order.correctionResolved ? 'Resolved in ELLIPSE' : order.correctionStatus === 'active' ? 'Awaiting ELLIPSE correction' : order.correctionMatchIssue || 'No active correction', Corrected: order.isAmended ? 'Yes' : 'No', 'Correction saved at': saved?.updatedAt || '', 'Resolved at': saved?.resolvedAt || '', 'Correction reason': saved?.reason || '' });
       });
+    }
+    // Missing rows do not prove that ELLIPSE has been corrected. Keep identified active corrections outstanding.
+    if (wants('orders') && filters.orders === 'corrected') {
+      const seen = new Set([...done.values()].flatMap(job => (job.workOrders || []).flatMap(order => order.matchedCorrectionIds || (order.correctionId ? [order.correctionId] : [order.id]))));
+      for (const [id, saved] of Object.entries(input.amendments || {})) {
+        const value = saved.identity;
+        if (saved.status === 'resolved' || !value || seen.has(id) || !allowed(normalise(value.workGroup))) continue;
+        const sjn = jobKey(value.jobNumber), meta = catalogue.get(sjn) || {};
+        if (filters.search && ![sjn,meta.desc,meta.disc].some(text => String(text || '').toLowerCase().includes(filters.search.toLowerCase()))) continue;
+        if (memberSet && !memberSet.has(sjn)) continue;
+        const reviewed = Boolean(input.reviews?.[sjn]?.[input.year]?.[input.stage]?.reviewedAt);
+        if (filters.review === 'reviewed' && !reviewed || filters.review === 'needsreview' && reviewed) continue;
+        if (filters.variance && filters.variance !== 'all' && !eligibleJobs.has(sjn)) continue;
+        const org = organisation(normalise(value.workGroup));
+        datasets.orders.push({ 'Standard Job No': sjn, Description: meta.desc || '', Discipline: meta.disc || '', Unit: meta.unit || 'Unit not specified', 'Delivery Unit': org?.deliveryUnit?.name || '', Engineer: org?.engineer?.name || '', 'Work Group Set': normalise(value.workGroup), 'Work Order': value.number, 'Order description': '', 'Order type': '', 'Closed period': '', 'Closed date': '', 'Original units': null, 'Corrected units': saved.units, Difference: null, 'Review status': 'Missing from current upload — still outstanding', Corrected: 'Pending source confirmation', 'Correction saved at': saved.updatedAt || '', 'Resolved at': '', 'Correction reason': saved.reason || '' });
+      }
     }
     for (const [code, counts] of coverage) {
       const org = organisation(code);
