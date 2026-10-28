@@ -60,6 +60,12 @@ const server = http.createServer((req, res) => {
     const loaded = await page.evaluate(job => ({ uploaded: Boolean(window.WorkDoneSession.get('FY27')), order: window.wData?.get(job)?.workOrders[0] }), job);
     assert.equal(loaded.uploaded, true);
     assert.equal(loaded.order.units, 9);
+    assert.equal(await page.locator('#modal').evaluate(el => el.classList.contains('open')), false, 'successful upload closes the dialog');
+    await page.evaluate(() => openModal());
+    await page.setInputFiles('#wFile', { name: 'invalid.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from('[]') });
+    await page.evaluate(() => uploadSelectedWorkDoneFile());
+    assert.equal(await page.locator('#modal').evaluate(el => el.classList.contains('open')), true, 'failed upload keeps the dialog open');
+    assert.match(await page.locator('#workDoneUploadStatusTitle').innerText(), /Upload not completed/);
     await page.evaluate(() => closeModal());
     await page.evaluate(() => openForecastBuilderPreview());
     assert.equal(await page.locator('#forecastBuilderPreviewPage').evaluate(el => el.classList.contains('is-hidden')), false);

@@ -514,6 +514,7 @@ function populateExportSelectors() {
  * Download forecast JSON export from settings (uses settings selectors)
  */
 async function downloadSettingsForecastExport() {
+  if (window.APRReview?.hasDrafts()) { window.Toast?.error('Save or discard edits before exporting.'); return; }
   const fySelect = document.getElementById('exportFySelect');
   const planSelect = document.getElementById('exportPlanSelect');
 
@@ -532,7 +533,7 @@ async function downloadSettingsForecastExport() {
 
   // Load forecast data for the selected year and plan version
   try {
-    const snapshot = await window.getForecastSnapshotAsync(year, planVersion);
+    const snapshot = window.isApiEnabled?.() ? await window.loadForecastFromApi(year, planVersion) : await window.getForecastSnapshotAsync(year, planVersion);
 
     if (!snapshot || !snapshot.data || !snapshot.data.size) {
       alert(`No forecast data found for ${year} ${planVersion}`);
@@ -551,6 +552,7 @@ async function downloadSettingsForecastExport() {
  * Download Excel template export from settings (uses settings selectors)
  */
 async function downloadSettingsExcelExport() {
+  if (window.APRReview?.hasDrafts()) { window.Toast?.error('Save or discard edits before exporting.'); return; }
   const fySelect = document.getElementById('exportFySelect');
   const planSelect = document.getElementById('exportPlanSelect');
   const workGroupSelect = document.getElementById('exportWorkGroupSelect');
@@ -579,7 +581,11 @@ async function downloadSettingsExcelExport() {
 
   // Load forecast data for the selected year and plan version
   try {
-    const snapshot = await window.getForecastSnapshotAsync(year, planVersion);
+    const read = version => window.isApiEnabled?.() ? window.loadForecastFromApi(year, version) : window.getForecastSnapshotAsync(year, version);
+    const original = await read('v0');
+    const overrides = planVersion === 'v1' ? await read('v1') : null;
+    if (window.isApiEnabled?.() && (!original || planVersion === 'v1' && !overrides)) throw new Error('Saved forecast data could not be read.');
+    const snapshot = planVersion === 'v1' ? { data: new Map([...new Set([...(original?.data.keys() || []), ...(overrides?.data.keys() || [])])].map(key => [key, { wgs: window.mergeForecastWorkGroups(original?.data.get(key)?.wgs, overrides?.data.get(key)?.wgs), comments: { ...original?.data.get(key)?.comments, ...overrides?.data.get(key)?.comments } }])) } : original;
 
     if (!snapshot || !snapshot.data || !snapshot.data.size) {
       alert(`No forecast data found for ${year} ${planVersion}`);
@@ -597,7 +603,8 @@ async function downloadSettingsExcelExport() {
     const periods = window.FORECAST_PERIODS || ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11', 'P12', 'P13'];
 
     snapshot.data.forEach((job, jobNumber) => {
-      const wgData = job?.wgs?.[workGroup];
+      const storedGroup = Object.keys(job?.wgs || {}).find(key => window.resolveWorkGroupCode(key) === workGroup || key === workGroup);
+      const wgData = job?.wgs?.[storedGroup];
       if (!wgData) return;
 
       // Check if this job has any data for the current work group

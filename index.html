@@ -184,7 +184,7 @@
           <li><span>Amended</span><strong id="workOrderAmended">0</strong></li>
         </ul>
         <div class="summary-card-actions">
-          <button type="button" class="secondary" onclick="exportAmendedWorkOrders()">Export amended work orders</button>
+
         </div>
       </div>
       <div class="summary-card" id="commentsCard">
@@ -192,13 +192,7 @@
         <div class="card-value" id="commentTotal">0</div>
         <div class="card-meta" id="commentMeta">No comments yet</div>
         <ul class="comment-breakdown" id="commentBreakdown"></ul>
-        <div class="summary-card-actions summary-card-actions--stacked">
-          <label for="commentExportType">Export comment type</label>
-          <select id="commentExportType">
-            <option value="all">All comment types</option>
-          </select>
-          <button type="button" class="secondary" onclick="exportComments()">Export selected comments</button>
-        </div>
+
       </div>
       <div class="summary-card" id="variancesCard">
         <div class="card-header"><div class="card-title">Top 10 Variances</div><div class="header-actions"><button type="button" class="section-toggle" onclick="openTopVariancesModal()">Slide view</button><button type="button" class="section-toggle" onclick="toggleTopSummaryCard('variancesCard', this)">Collapse</button></div></div>
@@ -218,7 +212,7 @@
           <h2>Top 10 Variance Brief</h2>
           <p class="helper-text" id="topVarianceModalMeta">Current dashboard selection</p>
         </div>
-        <div class="variance-slide-actions"><label>Rank by <select id="topVarianceSlideMode" onchange="setTopVarianceMode(this.value)"><option value="units">Units</option><option value="percent">Percentage (%)</option></select></label><button type="button" onclick="window.print()">Print / Save PDF</button></div><button class="close" onclick="closeTopVariancesModal()">&times;</button>
+        <div class="variance-slide-actions"><label>Rank by <select id="topVarianceSlideMode" onchange="setTopVarianceMode(this.value)"><option value="units">Units</option><option value="percent">Percentage (%)</option></select></label></div><button class="close" onclick="closeTopVariancesModal()">&times;</button>
       </div>
       <div class="top-variance-brief-summary" id="topVarianceBriefSummary"></div>
       <div class="top-variance-slide-grid" id="topVarianceSlideGrid"></div>
@@ -230,7 +224,7 @@
       <div class="modal-header">
         <div>
           <span class="modal-eyebrow">Data management</span>
-          <h2 id="uploadModalTitle">Upload &amp; export files</h2>
+          <h2 id="uploadModalTitle">Upload files</h2>
           <p class="helper-text" id="uploadModeNote"></p>
         </div>
         <button class="close" type="button" onclick="closeModal()" aria-label="Close upload dialog">&times;</button>
@@ -276,12 +270,7 @@
           <input type="number" id="cRow" value="1" min="1">
         </div>
         <p class="helper-text">Required columns: Standard Job Number, Comment Type, Comment</p>
-        <div class="upload-export-actions">
-          <button type="button" onclick="exportComments()">Export Comments</button>
-          <label for="summaryExportYears">Summary export financial years (select one or more)</label><select id="summaryExportYears" multiple size="4"></select>
-          <button type="button" onclick="exportWorkGroupJobSummary()">Export Work Group Job Summary</button>
-          <button type="button" onclick="exportForecastSummary()">Export Forecast Summary</button>
-        </div>
+
       </div>
     </div>
   </div>
@@ -414,6 +403,39 @@
             <label for="forecastPreviewClearWgsSelect">Work Group Set in this Delivery Unit</label><select id="forecastPreviewClearWgsSelect"></select>
             <button type="button" class="danger-button" id="forecastPreviewClearWgs">Clear selected Work Group Set…</button></div>
           </details>
+          <details class="forecast-card saved-forecast-exports" id="forecastSavedFileExports">
+            <summary>Saved forecast file exports (V0 / V1)</summary>
+            <div class="data-action-group">
+              <h4>Saved forecast files</h4><p class="helper-text">JSON covers the entire selected FY and version, across all Delivery Units. V1 JSON contains saved amendments for transfer. CSV uses the selected Work Group Set and resolves inherited V0 periods. These saved forecast files do not include Work Done.</p>
+              <div class="export-selectors" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                <div class="file-input-group" style="flex: 1; min-width: 120px;">
+                  <label for="exportFySelect">Financial Year</label>
+                  <select id="exportFySelect" style="width: 100%;">
+                    <option value="">Select FY...</option>
+                  </select>
+                </div>
+                <div class="file-input-group" style="flex: 1; min-width: 100px;">
+                  <label for="exportPlanSelect">Plan Version</label>
+                  <select id="exportPlanSelect" style="width: 100%;">
+                    <option value="">Select...</option>
+                    <option value="v0">v0 (Original)</option>
+                    <option value="v1">v1 (Updated)</option>
+                  </select>
+                </div>
+                <div class="file-input-group" style="flex: 2; min-width: 200px;">
+                  <label for="exportWorkGroupSelect">Work Group Set (CSV only)</label>
+                  <select id="exportWorkGroupSelect" style="width: 100%;">
+                    <option value="">Select Work Group...</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="secondary-button" onclick="downloadSettingsForecastExport()">📥 Export Forecast JSON</button>
+                <button class="secondary-button" onclick="downloadSettingsExcelExport()">Export upload-template CSV</button>
+              </div>
+            </div>
+
+</details>
           <div class="preview-section-label">Standard Jobs <span>Grouped by discipline · Select a row to edit</span></div>
           <div id="forecastPreviewJobList" class="preview-job-list"></div>
         </div>
@@ -498,7 +520,7 @@
         <div class="forecast-card">
           <h4>Quick actions</h4>
           <div class="forecast-action-list">
-            <button type="button" class="group-action-button" onclick="exportSjnLifetimeTargetDataFile()">Export Prior Submissions</button>
+
             <button type="button" class="group-action-button" onclick="triggerBaselineImport()">Import Prior Submissions</button>
             <input type="file" id="baselineFileInput" accept="application/json" class="is-hidden" onchange="handleBaselineImport(event)">
             <button type="button" class="group-action-button" onclick="clearAllBaselines()">Clear All Prior Submissions</button>
@@ -806,39 +828,9 @@
 
         <div class="settings-section">
           <h3>Data Management</h3>
-          <p class="helper-text">Import and export forecast data and comments.</p>
+          <p class="helper-text">Import saved forecast data and comments. Reports and data backups are in Exports in the left menu.</p>
 
           <div class="settings-data-actions">
-            <div class="data-action-group">
-              <h4>Forecast Export</h4>
-              <div class="export-selectors" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-                <div class="file-input-group" style="flex: 1; min-width: 120px;">
-                  <label for="exportFySelect">Financial Year</label>
-                  <select id="exportFySelect" style="width: 100%;">
-                    <option value="">Select FY...</option>
-                  </select>
-                </div>
-                <div class="file-input-group" style="flex: 1; min-width: 100px;">
-                  <label for="exportPlanSelect">Plan Version</label>
-                  <select id="exportPlanSelect" style="width: 100%;">
-                    <option value="">Select...</option>
-                    <option value="v0">v0 (Original)</option>
-                    <option value="v1">v1 (Updated)</option>
-                  </select>
-                </div>
-                <div class="file-input-group" style="flex: 2; min-width: 200px;">
-                  <label for="exportWorkGroupSelect">Work Group</label>
-                  <select id="exportWorkGroupSelect" style="width: 100%;">
-                    <option value="">Select Work Group...</option>
-                  </select>
-                </div>
-              </div>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="secondary-button" onclick="downloadSettingsForecastExport()">📥 Export Forecast JSON</button>
-                <button class="secondary-button" onclick="downloadSettingsExcelExport()">📊 Export Excel Template</button>
-              </div>
-            </div>
-
             <div class="data-action-group" style="margin-top: 16px;">
               <h4>Forecast Import</h4>
               <button class="secondary-button" onclick="triggerForecastFileUpload()">📤 Import Forecast</button>
@@ -847,13 +839,13 @@
 
             <div class="data-action-group" style="margin-top: 16px;">
               <h4>Comments</h4>
-              <button class="secondary-button" onclick="downloadComments()">📥 Export Comments</button>
+
               <button class="secondary-button" onclick="triggerCommentFileUpload()">📤 Import Comments</button>
               <input type="file" id="commentFileInput" accept="application/json" class="is-hidden" onchange="loadCommentFile(event)">
             </div>
           </div>
 
-          <p class="helper-text" style="margin-top: 16px;"><strong>Tip:</strong> Export data as backup or to transfer between systems.</p>
+          <p class="helper-text" style="margin-top: 16px;"><strong>Tip:</strong> Saved data backups are in Exports; forecast files are in Forecast Builder.</p>
         </div>
 
         <div class="settings-section">
@@ -918,5 +910,7 @@
   <script src="review-enhancements.js"></script>
   <script src="app.js"></script>
   <script src="settings.js"></script>
+  <script src="exports-data.js"></script>
+  <script src="exports-ui.js"></script>
 </body>
 </html>

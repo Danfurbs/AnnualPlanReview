@@ -56,6 +56,29 @@ const server = http.createServer(async (req, res) => {
     await page.evaluate(() => window.aprReady);
     assert.equal(await page.locator('#dashboard-accordion-data').evaluate(el => el.open), true, 'Missing Work Done opens uploads');
     assert.equal(await page.locator('#dashboard-accordion-filters').evaluate(el => el.open), true, 'Filters start open');
+    await page.evaluate(() => closeStageModal());
+    const header = page.locator('#dashboardPage .top-bar');
+    const headerToggle = page.locator('#dashboardHeaderToggle');
+    for (const width of [1440, 768, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const expandedHeight = (await header.boundingBox()).height;
+      await headerToggle.click();
+      assert.equal(await headerToggle.getAttribute('aria-expanded'), 'false');
+      assert.equal(await page.locator('#dashboardHeaderDetails').isVisible(), false);
+      assert.equal(await page.locator('#dashboardSidebarToggle').isVisible(), true);
+      assert.ok((await header.boundingBox()).height < expandedHeight, 'collapsed top bar saves space');
+      await page.waitForFunction(() => Math.abs(parseFloat(document.getElementById('dashboardPage').style.getPropertyValue('--dashboard-header-height')) - document.querySelector('#dashboardPage .top-bar').getBoundingClientRect().height) < 1);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+      await headerToggle.press('Enter');
+      assert.equal(await page.locator('#dashboardHeaderDetails').isVisible(), true);
+    }
+    await headerToggle.click();
+    await page.reload();
+    await page.evaluate(() => window.aprReady);
+    await page.evaluate(() => closeStageModal());
+    assert.equal(await headerToggle.getAttribute('aria-expanded'), 'false', 'collapsed choice survives reload');
+    await headerToggle.click();
+    await page.setViewportSize({ width: 1440, height: 1000 });
     fixture.group = await page.evaluate(() => [...window.workGroupSets.keys()][0]);
     await page.evaluate(group => {
       requiresContextSelection = false;
@@ -138,7 +161,7 @@ const server = http.createServer(async (req, res) => {
     assert.equal(await page.locator('#dashboard-accordion-data').evaluate(el => el.open), true);
     assert.equal(await page.locator('#dashboard-accordion-filters').evaluate(el => el.open), true);
     // Every original control has one live instance after the layout move.
-    for (const id of ['reviewStageButton', 'dashboardPlanVersion', 'reportingPeriodSelect', 'wgFilter', 'engineerFilter', 'groupFilter', 'reviewStatusFilter', 'varianceFilter', 'hideZeroVolume', 'search', 'aprRefreshShared', 'aprStartReview', 'commentExportType']) {
+    for (const id of ['reviewStageButton', 'dashboardPlanVersion', 'reportingPeriodSelect', 'wgFilter', 'engineerFilter', 'groupFilter', 'reviewStatusFilter', 'varianceFilter', 'hideZeroVolume', 'search', 'aprRefreshShared', 'aprStartReview', 'exportsCommentType']) {
       assert.equal(await page.locator('#' + id).count(), 1, id);
     }
     const savedContext = await page.evaluate(() => ({

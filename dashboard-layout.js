@@ -46,7 +46,7 @@
   [
     ['data', 'Data & uploads'], ['filters', 'Filters'],
     ['overview', 'Review overview'], ['workdone', 'Work Done activity'],
-    ['comments', 'Review & exports'], ['manage', 'Manage']
+    ['comments', 'Comments & review'], ['manage', 'Manage']
   ].forEach(([key, title]) => {
     const accordion = make('details', 'dashboard-sidebar-section');
     accordion.id = 'dashboard-accordion-' + key;
@@ -73,6 +73,10 @@
   close.classList.add('dashboard-sidebar-close');
   sidebarHead.append(sectionLabel, close);
   sidebar.append(sidebarHead, panels);
+  const exportsButton = button('Exports', () => window.APRExports.open());
+  exportsButton.id = 'dashboardExports';
+  exportsButton.classList.add('dashboard-exports-button');
+  sidebarHead.after(exportsButton);
   const main = make('main', 'dashboard-main');
   const toolbar = make('div', 'dashboard-job-toolbar');
   const searchGroup = $('search').closest('.control-group');
@@ -121,6 +125,27 @@
   sections.data.prepend(actions.querySelector('[onclick="openModal()"]'));
   actions.append($('saveStateIndicator'));
   header.querySelector('.subtitle').remove();
+  context.id = 'dashboardHeaderDetails';
+  const compactContext = make('span', 'dashboard-compact-context');
+  compactContext.hidden = true;
+  header.querySelector('.top-bar-title > div:last-child').append(compactContext);
+  let headerExpanded = true;
+  const headerToggle = button('Collapse top bar', () => setHeaderExpanded(!headerExpanded));
+  headerToggle.id = 'dashboardHeaderToggle';
+  headerToggle.setAttribute('aria-controls', context.id);
+  actions.append(headerToggle);
+  function setHeaderExpanded(value) {
+    headerExpanded = value;
+    header.classList.toggle('is-collapsed', !value);
+    context.hidden = !value;
+    compactContext.hidden = value;
+    headerToggle.textContent = value ? 'Collapse top bar' : 'Expand top bar';
+    headerToggle.setAttribute('aria-expanded', String(value));
+    try { localStorage.setItem('aprDashboardHeaderCollapsedV1', String(!value)); } catch {}
+    measureHeader();
+  }
+  try { headerExpanded = localStorage.getItem('aprDashboardHeaderCollapsedV1') !== 'true'; } catch {}
+  setHeaderExpanded(headerExpanded);
   // The live data summary replaces the old, repeated reporting-context paragraph.
   $('reportingContext').hidden = true;
   function setExpanded(value) {
@@ -151,6 +176,7 @@
     openSection,
     update(c) {
       $('reviewStageButton').textContent = `${c.year} · ${c.stage} · ${c.deliveryUnit === 'all' ? 'All delivery units' : c.deliveryUnit}`;
+      compactContext.textContent = `${$('reviewStageButton').textContent} · ${c.cutoff === null ? 'Reporting period not selected' : `Work Done through P${c.cutoff}`}`;
       const problem = c.error || (!c.file ? 'Upload Work Done for this session to see completed-period reporting.' : c.cutoff === null ? 'Select the completed reporting period to calculate projected delivery.' : '');
       if (c.error) count.textContent = 'Reporting unavailable';
       notice.textContent = problem;

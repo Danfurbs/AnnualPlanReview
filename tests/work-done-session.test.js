@@ -22,6 +22,7 @@ function uploadHarness() {
     loadWorkOrderAmendmentsAsync: async () => true,
     applyStoredWorkOrderCorrections() {},
     setWorkDoneUploadState: (...args) => state.statuses.push(args),
+    closeModal: () => { state.closed = true; },
     runInChunks: async (rows, handler) => rows.forEach(handler),
     updateWorkGroupFilterOptions() {}, render() {}
   });
@@ -36,10 +37,13 @@ test('real upload path reapplies corrections, isolates FYs and retains data on i
   const first = h.session.get('FY27').data;
   assert.equal(first.get('123456').periods.P1, 9);
   assert.equal(first.get('123456').workOrders[0].originalUnits, 5);
+  assert.equal(h.state.closed, true);
+  h.state.closed = false;
   h.state.rows[0]['Units Complete'] = -1;
   await h.upload();
   assert.equal(h.session.get('FY27').data, first);
   assert.equal(h.state.statuses.at(-1)[0], 'error');
+  assert.equal(h.state.closed, false);
   h.state.rows[0]['Units Complete'] = 2;
   h.state.selected = 'FY28';
   await h.upload();

@@ -1874,6 +1874,7 @@
       if (!file || workDoneUploadInProgress) return;
       workDoneUploadInProgress = true;
       const uploadSerial = ++workDoneUploadSerial;
+      let uploadComplete = false;
       setWorkDoneUploadState('working', 'Reading workbook…', 'Large reports can take a minute. Please keep this window open.');
       try {
         const selectedYear = getSelectedWorkDoneYear();
@@ -2001,6 +2002,7 @@
         setWorkDoneUploadState('success', 'Upload complete', `${matched.toLocaleString()} valid rows loaded for ${selectedYear}, for this session only.`);
         const input = document.getElementById('wFile');
         if (input) input.value = '';
+        uploadComplete = true;
       } catch(err) {
         console.error(err);
         setWorkDoneUploadState('error', 'Upload not completed', err?.message || 'The report could not be loaded. The current session data was not replaced.');
@@ -2008,6 +2010,7 @@
         workDoneUploadInProgress = false;
         const button = document.getElementById('uploadWorkDoneButton');
         if (button) button.disabled = !document.getElementById('wFile')?.files?.[0];
+        if (uploadComplete) closeModal();
       }
     }
 
@@ -4764,6 +4767,58 @@
           updateWorkGroupFilterOptions(); renderPreservingScroll();
           if (window.forecastLoadError || window.workOrderCorrectionsError) throw new Error(window.forecastLoadError || window.workOrderCorrectionsError);
         } finally { aprRefreshing = false; window.APRFeatures.context(); }
+      }
+    };
+
+    window.APRExportSource = {
+      defaults() {
+        const group = document.getElementById('wgFilter')?.value || 'all';
+        const engineer = document.getElementById('engineerFilter')?.value || 'all';
+        const customGroup = getAllGroups().find(item => item.id === document.getElementById('groupFilter')?.value);
+        return {
+          year: currentFinancialYear, stage: currentReviewStage, cutoff: getEffectiveForecastCutoffPeriod(),
+          du: currentDeliveryUnit || 'all', scale: group !== 'all' ? 'workgroup' : engineer !== 'all' ? 'engineer' : 'du',
+          target: group !== 'all' ? group : engineer,
+          filters: { search: document.getElementById('search')?.value || '', members: customGroup?.jobNumbers,
+            review: document.getElementById('reviewStatusFilter')?.value || 'all', variance: document.getElementById('varianceFilter')?.value || 'all', hideZero: Boolean(document.getElementById('hideZeroVolume')?.checked) }
+        };
+      },
+      async capture(year, stage, cutoff) {
+        if (window.APRReview.hasDrafts()) throw new Error('Save or discard your edits before exporting.');
+        const connected = Boolean(window.isApiEnabled?.());
+        const results = await Promise.all([
+          connected ? window.loadForecastFromApi(year, 'v0') : getForecastSnapshotAsync(year, 'v0'),
+          connected ? window.loadForecastFromApi(year, 'v1') : getForecastSnapshotAsync(year, 'v1'),
+          connected ? window.loadJobCommentsFromApi() : structuredClone(commentStore),
+          connected ? window.loadReviewsFromApi() : structuredClone(reviewStore)
+        ]);
+        if (connected && results.some(result => !result)) throw new Error('Shared data could not be read. Retry before exporting.');
+        const entry = window.WorkDoneSession.get(year);
+        const correctionsReady = !entry || await loadWorkOrderAmendmentsAsync();
+        if (window.APRReview.hasDrafts()) throw new Error('Save or discard your edits before exporting.');
+        const done = structuredClone(entry?.data || new Map());
+        if (correctionsReady) applyStoredWorkOrderCorrections(done);
+        return {
+          year, stage, cutoff, v0: structuredClone(results[0]?.data || new Map()), v1: structuredClone(results[1]?.data || new Map()),
+          comments: structuredClone(results[2] || {}), reviews: structuredClone(results[3] || {}), done,
+          hasWorkDone: Boolean(entry), file: entry?.fileName || 'Not uploaded', uploadedAt: entry?.uploadedAt || '',
+          capturedAt: new Date().toISOString(), correctionsError: correctionsReady ? '' : window.workOrderCorrectionsError || 'Work Order corrections unavailable',
+          catalogue: structuredClone(window.stdJobs), amendments: structuredClone(workOrderAmendments), groupCodes: [...window.workGroupSets.keys()],
+          normalise: normalizeWorkGroupSet, organisation: window.getOrganisationForWorkGroup,
+          commentOrganisation: window.getCommentOrganisation, commentScope: window.commentMatchesOrganisationScope,
+          groupDescription: code => window.workGroupSets.get(code) || code
+        };
+      },
+      async backup(kind) {
+        if (window.APRReview.hasDrafts()) throw new Error('Save or discard edits before downloading saved data.');
+        if (kind === 'comments') {
+          const data = window.isApiEnabled?.() ? await window.loadJobCommentsFromApi() : structuredClone(commentStore);
+          if (!data) throw new Error('Comments could not be read.');
+          return data;
+        }
+        const data = window.isApiEnabled?.() ? await window.loadBaselinesFromApi() : Object.fromEntries(loadSjnLifetimeTargetData());
+        if (!data) throw new Error('Prior submissions could not be read.');
+        return data;
       }
     };
 

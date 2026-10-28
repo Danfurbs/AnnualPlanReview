@@ -7,7 +7,7 @@ const PUBLIC_ASSETS = new Set([
   'forecast-model.js', 'forecast-storage.js', 'forecast-state.js',
   'forecast-builder-data.js', 'future-work-import.js', 'work-done-session.js',
   'forecast-builder-actions.js', 'forecast-builder-preview.js',
-  'dashboard-layout.js', 'review-enhancements.js', 'baseline-storage.js', 'baseline-page.js', 'app.js', 'settings.js'
+  'dashboard-layout.js', 'review-enhancements.js', 'exports-data.js', 'exports-ui.js', 'baseline-storage.js', 'baseline-page.js', 'app.js', 'settings.js'
 ]);
 function publicAsset(urlPath) {
   return urlPath === '/' ? 'index.html' : PUBLIC_ASSETS.has(urlPath.slice(1)) ? urlPath.slice(1) : null;
