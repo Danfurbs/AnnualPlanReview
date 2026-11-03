@@ -5,6 +5,7 @@
   const number = value => Number(value || 0);
   const jobKey = value => String(value).padStart(6, '0');
   function* build(input, scope, filters = {}, report = null) {
+    const planReport = ['v0', 'v1', 'rf'].includes(report);
     const wants = id => !report || report === id || report === 'top10' && id === 'performance';
     const aliases = new Map(), organisations = new Map();
     const normalise = value => { if (!aliases.has(value)) aliases.set(value, input.normalise ? input.normalise(value) : value); return aliases.get(value); };
@@ -28,17 +29,17 @@
       if (scope.scale === 'workgroup') return code === normalise(scope.target);
       return true;
     };
-    const available = input.cutoff !== null && (input.cutoff === 0 || input.hasWorkDone) && !input.correctionsError;
+    const available = (report === 'rf' ? input.hasWorkDone && Number.isInteger(input.cutoff) && input.cutoff >= 1 && input.cutoff <= 13 : input.cutoff !== null && (input.cutoff === 0 || input.hasWorkDone)) && !input.correctionsError;
     const rag = (forecast, projected) => {
       if (projected === null) return 'Unavailable';
       const ratio = forecast ? Math.abs(projected - forecast) / Math.abs(forecast) : projected ? Infinity : 0;
       return ratio >= 0.5 ? 'Red' : ratio >= 0.1 ? 'Amber' : 'Green';
     };
-    const datasets = { performance: [], periods: [], comparison: [], comments: [], orders: [], coverage: [], reviews: [], top10: [] };
+    const datasets = { v0: [], v1: [], rf: [], performance: [], periods: [], comparison: [], comments: [], orders: [], coverage: [], reviews: [], top10: [] };
     const eligibleJobs = new Set();
     const coverage = new Map();
     (input.groupCodes || []).filter(allowed).forEach(code => coverage.set(code, { original: new Set(), latest: new Set() }));
-    const all = new Set([...v0.keys(), ...v1.keys(), ...done.keys(), ...comments.keys()]);
+    const all = new Set([...(planReport ? catalogue.keys() : []), ...v0.keys(), ...v1.keys(), ...done.keys(), ...comments.keys()]);
     let processed = 0;
     for (const sjn of [...all].sort()) {
       if (processed++ % 25 === 0) yield;
@@ -53,7 +54,7 @@
         if (code) return allowed(code);
         return scope.scale === 'du' && (scope.du === 'all' || org?.deliveryUnit?.id === scope.du);
       });
-      if (!codes.length && !scopedComments.length) continue;
+      if (!planReport && !codes.length && !scopedComments.length) continue;
       const record = input.reviews?.[sjn]?.[input.year]?.[input.stage];
       const reviewed = record === true || Boolean(record?.reviewedAt);
       const base = { 'Standard Job No': sjn, Description: meta.desc || '', Discipline: meta.disc || '', Unit: meta.unit || 'Unit not specified' };
@@ -78,16 +79,34 @@
       }
       const projected = available ? projectedTotal : null;
       const status = rag(latestTotal, projected);
-      if (filters.search && ![sjn, meta.desc, meta.disc].some(value => String(value || '').toLowerCase().includes(filters.search.toLowerCase()))) continue;
-      if (memberSet && !memberSet.has(sjn)) continue;
-      if (filters.review === 'reviewed' && !reviewed || filters.review === 'needsreview' && reviewed) continue;
-      if (filters.hideZero && !latestTotal && !reportedTotal) continue;
       const variance = available ? projectedTotal - latestTotal : null;
-      if (filters.variance && filters.variance !== 'all') {
-        const match = { good: status === 'Green', warning: status === 'Amber', bad: status === 'Red', over: variance > 0, under: variance < 0, variance: variance !== null && variance !== 0 };
-        if (!match[filters.variance]) continue;
+      if (!planReport) {
+        if (filters.search && ![sjn, meta.desc, meta.disc].some(value => String(value || '').toLowerCase().includes(filters.search.toLowerCase()))) continue;
+        if (memberSet && !memberSet.has(sjn)) continue;
+        if (filters.review === 'reviewed' && !reviewed || filters.review === 'needsreview' && reviewed) continue;
+        if (filters.hideZero && !latestTotal && !reportedTotal) continue;
+        if (filters.variance && filters.variance !== 'all') {
+          const match = { good: status === 'Green', warning: status === 'Amber', bad: status === 'Red', over: variance > 0, under: variance < 0, variance: variance !== null && variance !== 0 };
+          if (!match[filters.variance]) continue;
+        }
       }
       eligibleJobs.add(sjn);
+      if (planReport) {
+        const hasOriginal = codes.some(code => periods.some(p => Object.hasOwn(original[code] || {}, p)));
+        const hasLatest = hasOriginal || codes.some(code => periods.some(p => Object.hasOwn(overrides[code] || {}, p)));
+        const hasValues = report === 'v0' ? hasOriginal : report === 'v1' ? hasLatest : codes.length > 0 && available;
+        const row = { Discipline: base.Discipline, 'MNT Code': meta.mnt || '', 'Standard Job No': sjn, Description: base.Description, Unit: base.Unit };
+        for (const p of periods) {
+          row[p] = !hasValues ? null : codes.reduce((sum, code) => {
+            const before = number(original[code]?.[p]);
+            const latest = Object.hasOwn(overrides[code] || {}, p) ? number(overrides[code][p]) : before;
+            return sum + (report === 'v0' ? before : report === 'rf' && Number(p.slice(1)) <= input.cutoff ? number(workDone[code]?.[p]) : latest);
+          }, 0);
+        }
+        row['Full year total'] = !hasValues ? null : periods.reduce((sum, p) => sum + row[p], 0);
+        row.Comments = scopedComments.filter(entry => report !== 'rf' || entry.rf === input.stage).map(entry => `[${entry.rf || 'No stage'} / ${entry.category || 'General'}] ${entry.text || ''}`).join('\n');
+        datasets[report].push(row);
+      }
       if (codes.length) {
         const ownership = { 'Delivery Units': [...new Set(codes.map(code => organisation(code)?.deliveryUnit?.name || 'Unassigned'))].join(', '), Engineers: [...new Set(codes.map(code => organisation(code)?.engineer?.name || 'Unassigned'))].join(', '), 'Work Group Sets': codes.join(', ') };
         if (wants('performance')) datasets.performance.push({ ...base, ...ownership, 'Original plan V0': originalTotal, 'Latest forecast': latestTotal, 'Completed Work Done': available ? completed : null, 'Projected full year': projected, 'Variance vs latest': variance, 'Variance %': available && latestTotal ? variance / Math.abs(latestTotal) : null, 'Percentage note': available && !latestTotal && projected ? 'Nonzero projection against zero forecast' : '', RAG: status, 'V1 updated cells': changed, 'Review status': reviewed ? 'Reviewed' : 'Not reviewed' });
@@ -104,10 +123,13 @@
         const org = input.commentOrganisation(entry);
         datasets.comments.push({ 'Standard Job Number': sjn, Description: base.Description, Unit: base.Unit, 'Financial Year': input.year, 'Review Stage': entry.rf || '', 'Comment Type': entry.category || 'General', Comment: entry.text || '', 'Delivery Unit ID': org?.deliveryUnit?.id || '', 'Delivery Unit': org?.deliveryUnit?.name || '', Engineer: org?.engineer?.name || '', 'Work Group Set': normalise(entry.filteredWorkGroup || ''), 'Root Cause': entry.rootCause || '', 'Corrective Action': entry.correctiveAction || '', Owner: entry.owner || '', 'Due Date': entry.dueDate || '', 'Evidence Links': (entry.evidenceLinks || []).join('\n') });
       });
-      if (wants('orders')) (done.get(sjn)?.workOrders || []).filter(order => allowed(normalise(order.workGroup))).filter(order => filters.orders !== 'corrected' || order.correctionStatus === 'active' || order.isAmended || order.correctionMatchIssue && order.hasSavedCorrection).forEach(order => {
+      const jobOrders = done.get(sjn)?.workOrders || [];
+      const flags = !wants('orders') ? [] : input.orderFlags ? input.orderFlags(jobOrders) : jobOrders.map(order => order.correctionMatchIssue ? [order.correctionMatchIssue] : order.correctionStatus === 'active' || order.isAmended ? ['Correction awaiting ELLIPSE'] : !order.correctionResolved && Number(order.units) === 0 && order.period ? ['Zero units in closed period'] : []);
+      if (wants('orders')) jobOrders.forEach((order, index) => {
+        if (!allowed(normalise(order.workGroup)) || filters.orders === 'corrected' && !flags[index].length) return;
         const org = organisation(normalise(order.workGroup));
         const saved = input.amendments?.[order.correctionId || order.id];
-        datasets.orders.push({ ...base, 'Delivery Unit': org?.deliveryUnit?.name || '', Engineer: org?.engineer?.name || '', 'Work Group Set': normalise(order.workGroup), 'Work Order': order.number || '', 'Order description': order.description || '', 'Order type': order.workOrderType || '', 'Closed period': order.period || '', 'Closed date': order.closedDate || '', 'Original units': number(order.originalUnits), 'Corrected units': number(order.units), Difference: number(order.units) - number(order.originalUnits), 'Review status': order.correctionResolved ? 'Resolved in ELLIPSE' : order.correctionStatus === 'active' ? 'Awaiting ELLIPSE correction' : order.correctionMatchIssue || 'No active correction', Corrected: order.isAmended ? 'Yes' : 'No', 'Correction saved at': saved?.updatedAt || '', 'Resolved at': saved?.resolvedAt || '', 'Correction reason': saved?.reason || '' });
+        datasets.orders.push({ ...base, 'Delivery Unit': org?.deliveryUnit?.name || '', Engineer: org?.engineer?.name || '', 'Work Group Set': normalise(order.workGroup), 'Work Order': order.number || '', 'Order description': order.description || '', 'Order type': order.workOrderType || '', 'Closed period': order.period || '', 'Closed date': order.closedDate || '', 'Original units': number(order.originalUnits), 'Corrected units': number(order.units), Difference: number(order.units) - number(order.originalUnits), 'Data errors': flags[index].join('; '), 'Review status': order.correctionResolved ? 'Resolved in ELLIPSE' : order.correctionStatus === 'active' ? 'Awaiting ELLIPSE correction' : order.correctionMatchIssue || 'No active correction', Corrected: order.isAmended ? 'Yes' : 'No', 'Correction saved at': saved?.updatedAt || '', 'Resolved at': saved?.resolvedAt || '', 'Correction reason': saved?.reason || '' });
       });
     }
     // Missing rows do not prove that ELLIPSE has been corrected. Keep identified active corrections outstanding.

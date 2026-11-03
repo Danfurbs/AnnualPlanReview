@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { prepare } = require('../exports-data');
 const { prepareAsync } = require('../exports-data');
+const { ordered } = require('../export-workbook');
+const layout = require('../export-layout');
 const orgs = {
   A: { engineer: { id: 'e1', name: 'Engineer one' }, deliveryUnit: { id: 'du1', name: 'DU one' } },
   B: { engineer: { id: 'e2', name: 'Engineer two' }, deliveryUnit: { id: 'du1', name: 'DU one' } },
@@ -18,6 +20,63 @@ function fixture(changes = {}) {
     normalise: code => code === 'Alias A' ? 'A' : code,
     organisation: code => orgs[code], commentOrganisation: entry => orgs[entry.filteredWorkGroup], groupDescription: code => code, ...changes };
 }
+
+test('V0, V1 and RF plans aggregate only the chosen ownership and preserve zero overrides', () => {
+  const scope = { du: 'du1', scale: 'engineer', target: 'e1' };
+  const v0 = prepare(fixture(), scope, {}, 'v0').datasets.v0;
+  const v1 = prepare(fixture(), scope, {}, 'v1').datasets.v1;
+  const rf = prepare(fixture(), scope, {}, 'rf').datasets.rf;
+  assert.equal(v0.length, 2);
+  assert.deepEqual([v0[0].P1, v0[0].P2, v0[0]['Full year total']], [10, 20, 30]);
+  assert.deepEqual([v1[0].P1, v1[0].P2, v1[0]['Full year total']], [10, 0, 10]);
+  assert.deepEqual([rf[0].P1, rf[0].P2, rf[0]['Full year total']], [8, 0, 8]);
+  assert.match(rf[0].Comments, /=literal text/);
+  assert.doesNotMatch(rf[0].Comments, /B comment/);
+  const du = prepare(fixture(), { du: 'du1', scale: 'du' }, {}, 'v1').datasets.v1;
+  assert.equal(du[0]['Full year total'], 15);
+  assert.equal(prepare(fixture({ cutoff: null }), scope, {}, 'rf').datasets.rf[0].P1, null);
+  for (const changes of [{ cutoff: 0 }, { hasWorkDone: false }, { cutoff: null }, { cutoff: 14 }, { cutoff: 1.5 }]) {
+    const report = prepare(fixture(changes), scope, {}, 'rf');
+    assert.equal(report.available, false);
+    assert.equal(report.datasets.rf[0]['Full year total'], null);
+  }
+  assert.equal(prepare(fixture({ cutoff: 13 }), scope, {}, 'rf').datasets.rf[0]['Full year total'], 1007);
+  assert.equal(prepare(fixture({ stage: 'RF3' }), scope, {}, 'rf').datasets.rf[0].Comments, '');
+});
+
+test('plan versions retain every catalogue job and keep absent forecasts blank', () => {
+  const input = fixture();
+  input.done.set('000003', { wgs: { A: { P1: 9 } } });
+  const scope = { du: 'du1', scale: 'workgroup', target: 'A' };
+  for (const version of ['v0', 'v1', 'rf']) {
+    const rows = prepare(input, scope, { hideZero: true, search: 'no match', members: ['999999'], review: 'needsreview', variance: 'bad' }, version).datasets[version];
+    assert.deepEqual(rows.map(row => row['Standard Job No']), ['000001','000002','000003']);
+    assert.equal(rows[1].P1, null);
+    assert.equal(rows[1]['Full year total'], null);
+    if (version !== 'rf') assert.equal(rows[2].P1, null);
+  }
+  assert.deepEqual(prepare(input, scope, {}, 'rf').datasets.rf.map(row => row['Standard Job No']), ['000001', '000002', '000003']);
+});
+
+test('data error exports include source flags and matching issues without saved amendments', () => {
+  const input = fixture();
+  input.done.get('000001').workOrders.push(
+    { number: 'ZERO', workGroup: 'A', period: 'P1', units: 0 },
+    { number: 'DUPLICATE', workGroup: 'A', units: 4, correctionMatchIssue: 'Duplicate rows' },
+    { number: 'RESOLVED', workGroup: 'A', period: 'P1', units: 0, correctionResolved: true },
+    { number: 'OTHER DU', workGroup: 'C', period: 'P1', units: 0 });
+  const rows = prepare(input, { du: 'du1', scale: 'workgroup', target: 'A' }, { orders: 'corrected' }, 'orders').datasets.orders;
+  assert.deepEqual(rows.map(row => row['Work Order']), ['WO1', 'ZERO', 'DUPLICATE']);
+  assert.match(rows[1]['Data errors'], /Zero units/);
+  assert.match(rows[2]['Data errors'], /Duplicate rows/);
+});
+
+test('reference ordering keeps MNT sequence and appends new jobs without losing them', () => {
+  const rows = ordered(['009001', '999999', '009113', '009112'].map(job => ({ 'Standard Job No': job, Discipline: 'PWAY' })), layout);
+  assert.deepEqual(rows.map(row => row['Standard Job No']), ['009112', '009113', '009001', '999999']);
+  assert.equal(rows[0]['MNT Code'], 'MNT004');
+  assert.equal(new Set(layout.map(row => row[0])).size, layout.length);
+});
 test('report scopes isolate DU, Engineer and Work Group Set with sparse zero inheritance', () => {
   const input = fixture();
   const du = prepare(input, { du: 'du1', scale: 'du' }).datasets;

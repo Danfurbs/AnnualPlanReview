@@ -3,14 +3,11 @@
   const $ = id => document.getElementById(id);
   const esc = value => window.escapeHtml(String(value ?? ''));
   const reports = [
-    ['performance', 'SJN performance', 'Original plan, latest forecast, completed Work Done, full-year outcome, variance and review status.'],
-    ['periods', 'Performance by period', 'One row per SJN, Work Group Set and period, with V1 updates clearly identified.'],
-    ['comparison', 'Forecast comparison', 'Original V0 against the complete latest forecast, with period changes and explicit V1 markers.'],
-    ['comments', 'Comments', 'Review commentary and existing actions, scoped by current organisational ownership.'],
-    ['orders', 'Work Orders', 'Outstanding corrections awaiting ELLIPSE, or all uploaded orders with their resolution status.'],
-    ['coverage', 'Work Group coverage', 'Unique SJNs with forecast evidence per Work Group Set. Compare financial years if needed.'],
-    ['reviews', 'Review progress', 'Reviewed and outstanding SJNs for the selected review stage.'],
-    ['top10', 'Top 10 variance brief', 'Largest variances in this scope. Unit rankings are separated by measurement unit.']
+    ['v0', 'V0', 'Original P1–P13 plan, in the reference job order with annual totals and comments.'],
+    ['v1', 'V1', 'Latest full P1–P13 forecast: saved V1 amendments with V0 inherited where unchanged.'],
+    ['rf', 'RF review plan', 'Corrected Work Done through the cutoff plus remaining forecast, using current saved figures. RF stage selects review status and commentary; it is not a historical snapshot.'],
+    ['orders', 'Work Order data errors', 'Outstanding corrections, source data flags and matching issues awaiting review. Confirmed ELLIPSE resolutions are excluded.'],
+    ['comments', 'Comments', 'Review commentary and actions, scoped by current organisational ownership.']
   ];
   let defaults, snapshot, busy = false;
   const reportCache = new Map();
@@ -22,11 +19,11 @@
     <div class="modal-header"><div><h2 id="exportsTitle">Exports</h2><p class="helper-text">Choose a report, set its scope, then preview or download.</p></div><button type="button" class="close" aria-label="Close exports">&times;</button></div>
     <details class="exports-settings"><summary id="exportsContextSummary">Reporting context</summary><div class="exports-context">
       <label>Financial year<select id="exportsYear"></select></label>
-      <label>Review stage<select id="exportsStage"></select></label>
-      <label>Work Done through<select id="exportsCutoff"><option value="">Not selected</option>${Array.from({length:14},(_,i)=>`<option value="${i}">P${i}${i === 0 ? ' — no completed periods' : ''}</option>`).join('')}</select></label>
+      <label>Work Done through (required for RF review)<select id="exportsCutoff"><option value="">Select completed period…</option>${Array.from({length:13},(_,i)=>`<option value="${i+1}">P${i+1}</option>`).join('')}</select></label>
       <label>Delivery Unit<select id="exportsDU"></select></label>
     </div>
-    <label class="exports-filter-choice"><input type="checkbox" id="exportsKeepFilters" checked> Keep dashboard job filters (search, SJN group, review status, variance and zero volume)</label>
+    <label class="exports-filter-choice"><input type="checkbox" id="exportsKeepFilters" checked> Keep dashboard job filters for Comments and Work Order data errors</label>
+    <p class="helper-text">V0, V1 and RF review plan always include every standard job. Their scope selects the figures and comments; dashboard job filters do not hide rows.</p>
     <p id="exportsFilterNote" class="helper-text"></p><button type="button" id="exportsRefresh" class="group-action-button">Reload saved data</button>
 
     </details><p id="exportsSource" class="helper-text"></p><p id="exportsStatus" role="status" aria-live="polite"></p><div class="exports-section-heading"><h3>Choose a report</h3></div>
@@ -34,17 +31,14 @@
     <div class="exports-report-list">${reports.map(([id,title,description])=>`<details class="exports-report" data-report="${id}"><summary><span>${title}</span><span data-count></span></summary><div class="exports-report-body"><p class="helper-text">${description}</p>
       <div class="exports-report-options"><label>Scope<select data-scale aria-label="${title} scope"><option value="du">Entire selected DU</option><option value="engineer">Engineer</option><option value="workgroup">Work Group Set</option></select></label><label data-target-label>Selection<select data-target aria-label="${title} selection"></select></label>
       ${id === 'comments' ? '<label>Comment type<select id="exportsCommentType"><option value="all">All types</option></select></label><label>Comment review stage<select id="exportsCommentStage"><option value="all">All stages</option></select></label>' : ''}
-      ${id === 'orders' ? '<label>Orders<select id="exportsOrderMode"><option value="corrected">Outstanding corrections only</option><option value="all">All uploaded orders (including resolved)</option></select></label>' : ''}
-      ${id === 'top10' ? '<label>Rank by<select id="exportsRank"><option value="units">Units (per unit type)</option><option value="percent">Percentage</option></select></label>' : ''}
-      ${id === 'coverage' ? '<label>Additional financial years<select id="exportsCoverageYears" multiple size="2"></select></label>' : ''}</div>
-      <div class="exports-report-actions"><button type="button" class="group-action-button" data-preview>Preview</button><button type="button" class="primary-button" data-download>Download Excel</button>${id==='top10'?'<button type="button" class="group-action-button" id="exportsPrintBrief">Print / save PDF</button>':''}</div></div></details>`).join('')}</div>
+      ${id === 'rf' ? '<label>RF stage<select id="exportsStage"></select></label><p class="helper-text">Requires Work Done loaded for the selected financial year and a completed period (P1–P13) set in Reporting context above. Confirm that the file includes all Work Done through that period.</p>' : ''}
+      </div><div class="exports-report-actions"><button type="button" class="group-action-button" data-preview>Preview</button><button type="button" class="primary-button" data-download>Download Excel</button></div></div></details>`).join('')}</div>
     <details class="exports-backups"><summary>Saved data backups (JSON)</summary><p>For restoring or transferring saved data. These downloads contain <strong>all saved financial years and Delivery Units</strong> and ignore report filters. They are not a full database backup and do not include session Work Done.</p><button type="button" class="group-action-button" data-backup="comments">Download all saved comments</button><button type="button" class="group-action-button" data-backup="baselines">Download all prior submissions</button></details>
-    <p class="helper-text">Forecast CSV / JSON and upload-template exports remain in <button type="button" class="group-action-button" id="exportsOpenBuilder">Forecast Builder</button>.</p>
+    <p class="helper-text">Import-compatible forecast backups and data-transfer downloads remain in <button type="button" class="group-action-button" id="exportsOpenBuilder">Forecast Builder</button>.</p>
     <section id="exportsPreview" class="exports-preview" hidden><h3 id="exportsPreviewTitle"></h3><p id="exportsPreviewScope"></p><div id="exportsPreviewRows" class="apr-table-scroll"></div></section>
   </div>`;
   document.body.append(modal);
   const cards = () => [...modal.querySelectorAll('[data-report]')];
-  const cardFor = id => cards().find(card => card.dataset.report === id);
   const selection = (select, items, value) => {
     select.innerHTML = items.map(item => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('');
     select.value = items.some(item => item.id === value) ? value : items[0]?.id || '';
@@ -52,7 +46,7 @@
   const scope = card => ({ du: $('exportsDU').value, scale: card.querySelector('[data-scale]').value, target: card.querySelector('[data-target]').value });
   const scopeLabel = card => {
     const value = scope(card);
-    return `${$('exportsDU').selectedOptions[0]?.textContent} · ${value.scale === 'du' ? 'Entire selection' : card.querySelector('[data-target]').selectedOptions[0]?.textContent || 'No selection'}`;
+    return `Delivery Unit: ${$('exportsDU').selectedOptions[0]?.textContent} · ${value.scale === 'du' ? 'Entire DU selection' : (value.scale === 'engineer' ? 'Engineer: ' : 'Work Group Set: ') + (card.querySelector('[data-target]').selectedOptions[0]?.textContent || 'No selection')}`;
   };
   function targets(card, preferred) {
     const du = $('exportsDU').value, scale = card.querySelector('[data-scale]').value;
@@ -65,7 +59,7 @@
     card.querySelector('[data-scale] option[value="du"]').textContent = du === 'all' ? 'All Delivery Units' : 'Entire selected DU';
   }
   function filters() {
-    return { ...($('exportsKeepFilters').checked ? defaults.filters : {}), commentType: $('exportsCommentType').value, commentStage: $('exportsCommentStage').value, orders: $('exportsOrderMode').value, rank: $('exportsRank').value };
+    return { ...($('exportsKeepFilters').checked ? defaults.filters : {}), commentType: $('exportsCommentType').value, commentStage: $('exportsCommentStage').value, orders: 'corrected' };
   }
   async function result(card, source = snapshot) {
     if (!source) return null;
@@ -79,7 +73,7 @@
     }
     const prepared = await reportCache.get(key);
     let rows = prepared.datasets[card.dataset.report];
-    return { rows, available: prepared.available };
+    return { rows: ['v0','v1','rf'].includes(card.dataset.report) ? window.APRExportWorkbook.ordered(rows, window.APRExportLayout) : rows, available: prepared.available };
   }
   function updateCounts() {
     reportCache.clear();
@@ -103,33 +97,41 @@
     } catch (error) { $('exportsStatus').textContent = error.message; $('exportsSource').textContent = ''; }
     finally { setBusy(false); }
   }
-  function sheet(rows) {
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Status: 'No matching records in this scope' }]);
-    const headings = Object.keys(rows[0] || {Status:''});
-    ws['!cols'] = headings.map(heading => ({wch: /description|comment|reason|context|value/i.test(heading) ? 45 : /job no/i.test(heading) ? 18 : Math.max(14, Math.min(30, heading.length + 2))}));
-    if (rows.length) ws['!autofilter'] = { ref: ws['!ref'] };
-    rows.forEach((row, index) => headings.forEach((heading, column) => {
-      const cell = ws[XLSX.utils.encode_cell({ r: index + 1, c: column })];
-      if (cell?.t === 'n') cell.z = heading === 'Variance %' ? '0.0%' : /count|updated cells/i.test(heading) ? '#,##0' : '#,##0.0';
-    }));
-    return ws;
+  const sheet = rows => window.APRExportWorkbook.tableSheet(XLSX, rows);
+  function planContext(card) {
+    const id = card.dataset.report;
+    return { title: reports.find(([key]) => key === id)[1], year: snapshot.year,
+      scope: scopeLabel(card), stage: snapshot.stage, cutoff: snapshot.cutoff, rf: id === 'rf',
+      filters: 'All standard jobs — dashboard job filters ignored',
+      basis: id === 'v0' ? 'Original saved V0 plan. No Work Done included.' : id === 'v1' ? 'Current saved V1 amendments over V0; explicit zero replaces V0. No Work Done included.' : 'Current corrected Work Done through P' + snapshot.cutoff + ', then current V1 forecast with V0 inheritance. Not a historical RF snapshot.',
+      capturedAt: snapshot.capturedAt, file: snapshot.file, uploadedAt: snapshot.uploadedAt };
+  }
+  function validateRF(card) {
+    if (card.dataset.report !== 'rf') return;
+    if (!snapshot.hasWorkDone) throw new Error('Upload Work Done for the selected financial year before previewing or exporting an RF review plan.');
+    if (!Number.isInteger(snapshot.cutoff) || snapshot.cutoff < 1 || snapshot.cutoff > 13) {
+      modal.querySelector('.exports-settings').open = true;
+      throw new Error('Select a Work Done cutoff (P1–P13) in Reporting context to confirm where the uploaded Work Done goes up to.');
+    }
+    if (snapshot.correctionsError) throw new Error(snapshot.correctionsError);
   }
   async function preview(card, printing = false) {
     if (busy) return false;
-    if (!snapshot) await refresh();
+    if (!snapshot || card.dataset.report === 'rf') await refresh();
     if (!snapshot) return false;
     setBusy(true);
     $('exportsStatus').textContent = 'Preparing report…';
     try {
+      validateRF(card);
       const data = await result(card);
       card.querySelector('[data-count]').textContent = data.rows.length.toLocaleString()+' rows';
-      $('exportsStatus').textContent = data.available ? 'Preview ready.' : 'Preview ready. Performance is unavailable until a cutoff and Work Done are available.';
+      $('exportsStatus').textContent = card.dataset.report !== 'rf' || data.available ? 'Preview ready.' : 'Preview ready. RF plan values are unavailable until a cutoff and Work Done are available.';
       if (!data) throw new Error('Refresh report data before previewing.');
       const title = reports.find(([id])=>id===card.dataset.report)[1];
-      const headings = data.rows.length && card.dataset.report === 'top10' ? ['Standard Job No','Description','Unit','Latest forecast','Projected full year','Variance vs latest','Variance %','RAG'] : Object.keys(data.rows[0] || {});
+      const headings = Object.keys(data.rows[0] || {});
       $('exportsPreviewTitle').textContent = title;
       $('exportsPreviewScope').textContent = `${snapshot.year} · ${snapshot.stage} · Work Done through ${snapshot.cutoff === null ? 'not selected' : 'P'+snapshot.cutoff} · ${scopeLabel(card)} · ${data.rows.length} rows${!printing && data.rows.length > 20 ? ' (first 20 shown)' : ''}`;
-      $('exportsPreviewRows').innerHTML = headings.length ? `<table><thead><tr>${headings.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${(printing ? data.rows : data.rows.slice(0,20)).map(row=>`<tr>${headings.map(h=>`<td>${esc(row[h] === null ? 'Unavailable' : h === 'Variance %' ? (row[h]*100).toFixed(1)+'%' : row[h])}</td>`).join('')}</tr>`).join('')}</tbody></table>` : card.dataset.report === 'orders' && filters().orders === 'corrected' ? '<p>No outstanding Work Order corrections in this selection. Confirmed ELLIPSE resolutions are excluded.</p>' : '<p>No matching records in this scope.</p>';
+      $('exportsPreviewRows').innerHTML = headings.length ? `<table><thead><tr>${headings.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${(printing ? data.rows : data.rows.slice(0,20)).map(row=>`<tr>${headings.map(h=>`<td>${esc(row[h] === null ? 'Unavailable' : h === 'Variance %' ? (row[h]*100).toFixed(1)+'%' : row[h])}</td>`).join('')}</tr>`).join('')}</tbody></table>` : card.dataset.report === 'orders' && filters().orders === 'corrected' ? '<p>No outstanding Work Order data errors or corrections in this selection. Confirmed ELLIPSE resolutions are excluded.</p>' : '<p>No matching records in this scope.</p>';
       $('exportsPreview').hidden = false;
       $('exportsPreview').scrollIntoView({block:'nearest'});
       return true;
@@ -142,6 +144,7 @@
     if (!snapshot) return;
     setBusy(true);
     try {
+      validateRF(card);
       const workbook = XLSX.utils.book_new();
       const notes = [
         ['Generated at', snapshot.capturedAt], ['Financial Year', snapshot.year], ['Review stage', snapshot.stage],
@@ -150,32 +153,24 @@
         ['Latest forecast', 'Explicit V1 period values over V0; absent V1 inherits V0, zero overrides V0.'], ['Projected outcome', 'Corrected Work Done through cutoff plus latest forecast after cutoff.'],
         ['Units', 'Unit types are kept separate. No mixed-unit grand total.'], ['Empty numeric cells', 'Unavailable or no original value; zero is a real numeric zero.'],
         ['Work Order correction lifecycle', 'Outstanding corrections exclude confirmed ELLIPSE resolutions. Identified active corrections missing from the current upload remain outstanding; their source units are unavailable. Corrections are shared across uploads rather than FY-specific.'],
-        ['Job filters', $('exportsKeepFilters').checked ? $('exportsFilterNote').textContent : 'Cleared for this export']
+        ['Job filters', ['v0','v1','rf'].includes(card.dataset.report) ? 'All standard jobs — dashboard job filters ignored' : $('exportsKeepFilters').checked ? $('exportsFilterNote').textContent : 'Cleared for this export']
       ];
       let count = 0;
       {
         const id = card.dataset.report;
-        if ((id === 'orders' && !snapshot.hasWorkDone) || (snapshot.correctionsError && ['orders','performance','periods','top10'].includes(id))) throw new Error(snapshot.correctionsError || 'Upload Work Done for this financial year before exporting Work Orders.');
+        if ((id === 'orders' && !snapshot.hasWorkDone) || (snapshot.correctionsError && ['orders','rf'].includes(id))) throw new Error(snapshot.correctionsError || 'Upload Work Done for this financial year before exporting Work Orders.');
         $('exportsStatus').textContent = 'Preparing '+reports.find(([key])=>key===id)[1]+'…';
         let data = await result(card);
         data = { ...data, rows: [...data.rows] };
-        if (id === 'coverage') {
-          const years = [...$('exportsCoverageYears').selectedOptions].map(option=>option.value).filter(year=>year !== snapshot.year);
-          for (const year of years) {
-            const extra = await window.APRExportSource.capture(year, snapshot.stage, null);
-            data.rows.push(...(await result(card, extra)).rows);
-            notes.push([`Coverage ${year} read at`, extra.capturedAt]);
-          }
-        }
         count += data.rows.length;
         const title = reports.find(([key])=>key===id)[1];
-        XLSX.utils.book_append_sheet(workbook, sheet(data.rows), title.slice(0,31));
+        if (id === 'rf' && !data.available) throw new Error('Select a Work Done cutoff and upload Work Done for this financial year before exporting an RF review plan.');
+        XLSX.utils.book_append_sheet(workbook, ['v0','v1','rf'].includes(id) ? window.APRExportWorkbook.planSheet(XLSX, data.rows, planContext(card), window.APRExportLayout) : sheet(data.rows), title.slice(0,31));
         notes.push([`${title} scope`, scopeLabel(card)], [`${title} row count`, data.rows.length]);
         if (id === 'comments') notes.push(['Comment type / stage', `${filters().commentType} / ${filters().commentStage}`]);
-        if (id === 'orders') notes.push(['Work Order selection', filters().orders]);
-        if (id === 'top10') notes.push(['Ranking', filters().rank === 'units' ? 'Absolute units, top 10 per unit type' : 'Absolute percentage; nonzero delivery against zero forecast ranks first']);
+        if (id === 'orders') notes.push(['Work Order selection', 'Outstanding corrections and data errors only']);
       }
-      if (!count) throw new Error(card.dataset.report === 'orders' && filters().orders === 'corrected' ? 'No outstanding Work Order corrections in this selection. Confirmed ELLIPSE resolutions are excluded.' : 'No matching records. Adjust the scope or filters and try again.');
+      if (!count) throw new Error(card.dataset.report === 'orders' && filters().orders === 'corrected' ? 'No outstanding Work Order data errors or corrections in this selection. Confirmed ELLIPSE resolutions are excluded.' : 'No matching records. Adjust the scope or filters and try again.');
       XLSX.utils.book_append_sheet(workbook, sheet(notes.map(([Setting,Value])=>({Setting,Value}))), 'About');
       const slug = value => String(value).replace(/[^a-z0-9-]+/gi,'-');
       const filenameScope = scopeLabel(card);
@@ -195,13 +190,11 @@
     selection($('exportsYear'), (window.getFinancialYearOptions?.() || window.DEFAULT_FINANCIAL_YEARS).map(id=>({id,name:id})), defaults.year);
     selection($('exportsStage'), [...new Set([defaults.stage,...window.REVIEW_STAGES].filter(Boolean))].map(id=>({id,name:id})), defaults.stage);
     selection($('exportsDU'), [{id:'all',name:'All Delivery Units'},...window.getDeliveryUnits()], defaults.du);
-    selection($('exportsCoverageYears'), (window.getFinancialYearOptions?.() || window.DEFAULT_FINANCIAL_YEARS).map(id=>({id,name:id})), '');
-    [...$('exportsCoverageYears').options].forEach(option=>option.selected=false);
     selection($('exportsCommentType'), ['all','General','RF3','RF6','RF9','RF11','IME'].map(id=>({id,name:id === 'all' ? 'All types' : id})), 'all');
     selection($('exportsCommentStage'), ['all',...window.REVIEW_STAGES].map(id=>({id,name:id === 'all' ? 'All stages' : id})), 'all');
     $('exportsCutoff').value = defaults.cutoff === null ? '' : String(defaults.cutoff);
     $('exportsKeepFilters').checked = true;
-    const activeFilters = [defaults.filters.search && `Search: ${defaults.filters.search}`, defaults.filters.members && 'Selected SJN group', defaults.filters.review !== 'all' && `Review status: ${defaults.filters.review === 'needsreview' ? 'Needs review' : 'Reviewed'}`, defaults.filters.variance !== 'all' && `Variance: ${document.getElementById('varianceFilter').selectedOptions[0].textContent}`, defaults.filters.hideZero && 'Zero volume hidden'].filter(Boolean);
+    const activeFilters = [defaults.filters.search && `Search: ${defaults.filters.search}`, defaults.filters.members && `SJN group: ${defaults.filters.groupName || 'Selected group'}`, defaults.filters.review !== 'all' && `Review status: ${defaults.filters.review === 'needsreview' ? 'Needs review' : 'Reviewed'}`, defaults.filters.variance !== 'all' && `Variance: ${document.getElementById('varianceFilter').selectedOptions[0].textContent}`, defaults.filters.hideZero && 'Zero volume hidden'].filter(Boolean);
     $('exportsFilterNote').textContent = activeFilters.length ? activeFilters.join(' · ') : 'No additional job filters. The scope selectors control Engineer and Work Group Set.';
     cards().forEach(card=>{card.querySelector('[data-scale]').value=defaults.scale; targets(card,defaults.target);});
     modal.classList.add('open');
@@ -221,21 +214,8 @@
   modal.addEventListener('click',event=>{if(event.target===modal)close();});
   $('exportsDU').onchange=()=>{cards().forEach(card=>targets(card));updateCounts();};
   ['exportsYear','exportsStage','exportsCutoff'].forEach(id=>$(id).onchange=()=>{snapshot=null;updateCounts();});
-  ['exportsKeepFilters','exportsCommentType','exportsCommentStage','exportsOrderMode','exportsRank','exportsCoverageYears'].forEach(id=>$(id).onchange=updateCounts);
+  ['exportsKeepFilters','exportsCommentType','exportsCommentStage'].forEach(id=>$(id).onchange=updateCounts);
   $('exportsRefresh').onclick=refresh;
-  $('exportsPrintBrief').onclick=async()=>{
-    if(busy)return;
-    await refresh();
-    if(!snapshot)return;
-    setBusy(true);
-    try {
-      const data = await result(cardFor('top10'));
-      if(snapshot.correctionsError || !data.available){$('exportsStatus').textContent=snapshot.correctionsError || 'Select a reporting cutoff and upload Work Done before printing performance.';return;}
-      if(!data.rows.length){$('exportsStatus').textContent='No nonzero variances in this scope.';return;}
-    } catch(error) { $('exportsStatus').textContent=error.message; return; }
-    finally { setBusy(false); }
-    if(await preview(cardFor('top10'),true))window.print();
-  };
   $('exportsOpenBuilder').onclick=()=>{close();window.openForecastBuilderPreview();};
   modal.querySelectorAll('[data-backup]').forEach(button=>button.onclick=async()=>{
     if(busy)return;setBusy(true);

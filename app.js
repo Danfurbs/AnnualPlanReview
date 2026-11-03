@@ -4831,7 +4831,7 @@
           year: currentFinancialYear, stage: currentReviewStage, cutoff: getEffectiveForecastCutoffPeriod(),
           du: currentDeliveryUnit || 'all', scale: group !== 'all' ? 'workgroup' : engineer !== 'all' ? 'engineer' : 'du',
           target: group !== 'all' ? group : engineer,
-          filters: { search: document.getElementById('search')?.value || '', members: customGroup?.jobNumbers,
+          filters: { search: document.getElementById('search')?.value || '', members: customGroup?.jobNumbers, groupName: customGroup?.name,
             review: document.getElementById('reviewStatusFilter')?.value || 'all', variance: document.getElementById('varianceFilter')?.value || 'all', hideZero: Boolean(document.getElementById('hideZeroVolume')?.checked) }
         };
       },
@@ -4867,7 +4867,8 @@
           catalogue: structuredClone(window.stdJobs), amendments: structuredClone(workOrderAmendments), groupCodes: [...window.workGroupSets.keys()],
           normalise, organisation: code => organisations.get(normalise(code)),
           commentOrganisation: window.getCommentOrganisation, commentScope: window.commentMatchesOrganisationScope,
-          groupDescription: code => window.workGroupSets.get(code) || code
+          groupDescription: code => window.workGroupSets.get(code) || code,
+          orderFlags: orders => { const stats = getWorkOrderStats(orders); return orders.map(order => getWorkOrderFlags(order, stats)); }
         };
       },
       async backup(kind) {
