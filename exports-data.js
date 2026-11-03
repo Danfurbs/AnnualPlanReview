@@ -104,7 +104,14 @@
           }, 0);
         }
         row['Full year total'] = !hasValues ? null : periods.reduce((sum, p) => sum + row[p], 0);
+        if (report === 'rf') {
+          row['Latest forecast'] = hasValues ? latestTotal : null;
+          row.RAG = hasValues ? rag(latestTotal, row['Full year total']) : 'Unavailable';
+        }
         row.Comments = scopedComments.filter(entry => report !== 'rf' || entry.rf === input.stage).map(entry => `[${entry.rf || 'No stage'} / ${entry.category || 'General'}] ${entry.text || ''}`).join('\n');
+        if (report === 'rf' && filters.previousRF && /^RF\d+$/.test(filters.previousRF) && Number(filters.previousRF.slice(2)) < Number(input.stage.slice(2))) {
+          row['Previous RF Comments'] = scopedComments.filter(entry => entry.rf === filters.previousRF).map(entry => `[${entry.rf} / ${entry.category || 'General'}] ${entry.text || ''}`).join('\n');
+        }
         datasets[report].push(row);
       }
       if (codes.length) {

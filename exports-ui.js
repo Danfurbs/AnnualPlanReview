@@ -31,7 +31,7 @@
     <div class="exports-report-list">${reports.map(([id,title,description])=>`<details class="exports-report" data-report="${id}"><summary><span>${title}</span><span data-count></span></summary><div class="exports-report-body"><p class="helper-text">${description}</p>
       <div class="exports-report-options"><label>Scope<select data-scale aria-label="${title} scope"><option value="du">Entire selected DU</option><option value="engineer">Engineer</option><option value="workgroup">Work Group Set</option></select></label><label data-target-label>Selection<select data-target aria-label="${title} selection"></select></label>
       ${id === 'comments' ? '<label>Comment type<select id="exportsCommentType"><option value="all">All types</option></select></label><label>Comment review stage<select id="exportsCommentStage"><option value="all">All stages</option></select></label>' : ''}
-      ${id === 'rf' ? '<label>RF stage<select id="exportsStage"></select></label><p class="helper-text">Requires Work Done loaded for the selected financial year and a completed period (P1–P13) set in Reporting context above. Confirm that the file includes all Work Done through that period.</p>' : ''}
+      ${id === 'rf' ? '<label>RF stage<select id="exportsStage"></select></label><label><span><input type="checkbox" id="exportsIncludePreviousRF"> Include previous RF comments</span></label><label id="exportsPreviousRFLabel" hidden>Previous RF stage<select id="exportsPreviousRF"></select></label><p id="exportsPreviousRFNote" class="helper-text"></p><p class="helper-text">Requires Work Done loaded for the selected financial year and a completed period (P1–P13) set in Reporting context above. Confirm that the file includes all Work Done through that period.</p>' : ''}
       </div><div class="exports-report-actions"><button type="button" class="group-action-button" data-preview>Preview</button><button type="button" class="primary-button" data-download>Download Excel</button></div></div></details>`).join('')}</div>
     <details class="exports-backups"><summary>Saved data backups (JSON)</summary><p>For restoring or transferring saved data. These downloads contain <strong>all saved financial years and Delivery Units</strong> and ignore report filters. They are not a full database backup and do not include session Work Done.</p><button type="button" class="group-action-button" data-backup="comments">Download all saved comments</button><button type="button" class="group-action-button" data-backup="baselines">Download all prior submissions</button></details>
     <p class="helper-text">Import-compatible forecast backups and data-transfer downloads remain in <button type="button" class="group-action-button" id="exportsOpenBuilder">Forecast Builder</button>.</p>
@@ -59,7 +59,16 @@
     card.querySelector('[data-scale] option[value="du"]').textContent = du === 'all' ? 'All Delivery Units' : 'Entire selected DU';
   }
   function filters() {
-    return { ...($('exportsKeepFilters').checked ? defaults.filters : {}), commentType: $('exportsCommentType').value, commentStage: $('exportsCommentStage').value, orders: 'corrected' };
+    return { ...($('exportsKeepFilters').checked ? defaults.filters : {}), commentType: $('exportsCommentType').value, commentStage: $('exportsCommentStage').value, orders: 'corrected', previousRF: $('exportsIncludePreviousRF').checked ? $('exportsPreviousRF').value : '' };
+  }
+  function previousRFOptions() {
+    const stages = window.REVIEW_STAGES.filter(stage => Number(stage.slice(2)) < Number($('exportsStage').value.slice(2)));
+    selection($('exportsPreviousRF'), stages.map(id => ({ id, name: id })), stages.includes($('exportsPreviousRF').value) ? $('exportsPreviousRF').value : stages.at(-1));
+    if (!stages.length) $('exportsIncludePreviousRF').checked = false;
+    $('exportsIncludePreviousRF').disabled = busy || !stages.length;
+    $('exportsPreviousRFLabel').hidden = !$('exportsIncludePreviousRF').checked;
+    $('exportsPreviousRF').disabled = busy || !$('exportsIncludePreviousRF').checked;
+    $('exportsPreviousRFNote').textContent = stages.length ? '' : 'No earlier RF stage is available for this review.';
   }
   async function result(card, source = snapshot) {
     if (!source) return null;
@@ -84,6 +93,7 @@
   function setBusy(value) {
     busy = value;
     modal.querySelectorAll('button:not(.close), select, input').forEach(control => { control.disabled = value; });
+    previousRFOptions();
   }
   async function refresh() {
     if (busy) return;
@@ -104,7 +114,7 @@
       scope: scopeLabel(card), stage: snapshot.stage, cutoff: snapshot.cutoff, rf: id === 'rf',
       filters: 'All standard jobs — dashboard job filters ignored',
       basis: id === 'v0' ? 'Original saved V0 plan. No Work Done included.' : id === 'v1' ? 'Current saved V1 amendments over V0; explicit zero replaces V0. No Work Done included.' : 'Current corrected Work Done through P' + snapshot.cutoff + ', then current V1 forecast with V0 inheritance. Not a historical RF snapshot.',
-      capturedAt: snapshot.capturedAt, file: snapshot.file, uploadedAt: snapshot.uploadedAt };
+      capturedAt: snapshot.capturedAt, file: snapshot.file, uploadedAt: snapshot.uploadedAt, previousRF: id === 'rf' ? filters().previousRF : '' };
   }
   function validateRF(card) {
     if (card.dataset.report !== 'rf') return;
@@ -169,6 +179,7 @@
         notes.push([`${title} scope`, scopeLabel(card)], [`${title} row count`, data.rows.length]);
         if (id === 'comments') notes.push(['Comment type / stage', `${filters().commentType} / ${filters().commentStage}`]);
         if (id === 'orders') notes.push(['Work Order selection', 'Outstanding corrections and data errors only']);
+        if (id === 'rf') notes.push(['Previous RF comments', filters().previousRF || 'Not included'], ['Total RAG', 'Absolute variance of projected full year versus latest full-year forecast: Green <10%, Amber 10% to <50%, Red >=50%; nonzero projection against zero forecast is Red.']);
       }
       if (!count) throw new Error(card.dataset.report === 'orders' && filters().orders === 'corrected' ? 'No outstanding Work Order data errors or corrections in this selection. Confirmed ELLIPSE resolutions are excluded.' : 'No matching records. Adjust the scope or filters and try again.');
       XLSX.utils.book_append_sheet(workbook, sheet(notes.map(([Setting,Value])=>({Setting,Value}))), 'About');
@@ -189,6 +200,8 @@
     directory = [...window.workGroupSets].map(([id,name])=>({id,name:name+' ('+id+')',du:owners.get(id)}));
     selection($('exportsYear'), (window.getFinancialYearOptions?.() || window.DEFAULT_FINANCIAL_YEARS).map(id=>({id,name:id})), defaults.year);
     selection($('exportsStage'), [...new Set([defaults.stage,...window.REVIEW_STAGES].filter(Boolean))].map(id=>({id,name:id})), defaults.stage);
+    $('exportsIncludePreviousRF').checked = false;
+    previousRFOptions();
     selection($('exportsDU'), [{id:'all',name:'All Delivery Units'},...window.getDeliveryUnits()], defaults.du);
     selection($('exportsCommentType'), ['all','General','RF3','RF6','RF9','RF11','IME'].map(id=>({id,name:id === 'all' ? 'All types' : id})), 'all');
     selection($('exportsCommentStage'), ['all',...window.REVIEW_STAGES].map(id=>({id,name:id === 'all' ? 'All stages' : id})), 'all');
@@ -213,7 +226,8 @@
   modal.querySelector('.close').onclick=close;
   modal.addEventListener('click',event=>{if(event.target===modal)close();});
   $('exportsDU').onchange=()=>{cards().forEach(card=>targets(card));updateCounts();};
-  ['exportsYear','exportsStage','exportsCutoff'].forEach(id=>$(id).onchange=()=>{snapshot=null;updateCounts();});
+  ['exportsYear','exportsStage','exportsCutoff'].forEach(id=>$(id).onchange=()=>{previousRFOptions();snapshot=null;updateCounts();});
+  ['exportsIncludePreviousRF','exportsPreviousRF'].forEach(id=>$(id).onchange=()=>{previousRFOptions();updateCounts();});
   ['exportsKeepFilters','exportsCommentType','exportsCommentStage'].forEach(id=>$(id).onchange=updateCounts);
   $('exportsRefresh').onclick=refresh;
   $('exportsOpenBuilder').onclick=()=>{close();window.openForecastBuilderPreview();};

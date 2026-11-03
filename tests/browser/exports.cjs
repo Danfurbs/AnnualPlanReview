@@ -104,7 +104,7 @@ const server = http.createServer(async (req, res) => {
 
     await page.waitForFunction(() => window.XLSX?.utils);
     const commentDU = await page.evaluate(group => encodeCommentDeliveryUnit(getOrganisationForWorkGroup(group).deliveryUnit.id), fixture.group);
-    fixture.comments = {'009001':[{fy:'FY27',rf:'RF9',category:'General',text:'=This is text',filteredWorkGroup:fixture.group,deliveryUnit:commentDU}]};
+    fixture.comments = {'009001':[{fy:'FY27',rf:'RF9',category:'General',text:'=This is text',filteredWorkGroup:fixture.group,deliveryUnit:commentDU},{fy:'FY27',rf:'RF6',category:'General',text:'Earlier RF6 note',filteredWorkGroup:fixture.group,deliveryUnit:commentDU},{fy:'FY27',rf:'RF3',category:'General',text:'Earlier RF3 note',filteredWorkGroup:fixture.group,deliveryUnit:commentDU}]};
     await page.evaluate(() => {
       window.savedBooks = [];
       XLSX.writeFile = (book, name) => {
@@ -179,6 +179,34 @@ const server = http.createServer(async (req, res) => {
       assert.match(output.first.B8.v,/Work Done file: private-work-done.xlsx.*Uploaded:/);
       assert.equal(output.rows['RF review plan'].find(row=>row['Standard Job No.']==='009001')['FY27 Comments'].includes('=This is text'),stage==='RF9');
     }
+    await page.selectOption('#exportsStage','RF9');
+    await page.locator('#exportsIncludePreviousRF').check();
+    assert.deepEqual(await page.locator('#exportsPreviousRF option').evaluateAll(els=>els.map(el=>el.value)),['RF3','RF6']);
+    await page.selectOption('#exportsPreviousRF','RF6');
+    output=await download('rf');
+    const reviewRow=output.rows['RF review plan'].find(row=>row['Standard Job No.']==='009001');
+    assert.match(reviewRow['Previous RF Comments'],/Earlier RF6 note/);
+    assert.doesNotMatch(reviewRow['Previous RF Comments'],/RF3 note|This is text/);
+    assert.match(reviewRow['FY27 Comments'],/=This is text/);
+    assert.equal(output.first.W12.v,'Previous RF Comments');
+    assert.match(output.first.B5.v,/Previous RF comments: RF6/);
+    assert.equal(output.first.H12.s.fgColor.rgb,'9DC3E6');
+    assert.equal(output.first.I12.s.fgColor.rgb,'FFFF00');
+    assert.match(output.first.H11.v,/Work Done/);
+    assert.match(output.first.I11.v,/Forecast/);
+    const jobCell=Object.entries(output.first).find(([address,cell])=>/^D\d+$/.test(address)&&cell.v==='009001')[0];
+    assert.equal(output.first['U'+jobCell.slice(1)].s.fgColor.rgb,'C6EFCE');
+    await page.selectOption('#exportsPreviousRF','RF3');
+    const previous3=await download('rf');
+    assert.match(previous3.rows['RF review plan'].find(row=>row['Standard Job No.']==='009001')['Previous RF Comments'],/Earlier RF3 note/);
+    await page.selectOption('#exportsStage','RF3');
+    assert.equal(await page.locator('#exportsIncludePreviousRF').isChecked(),false);
+    assert.equal(await page.locator('#exportsIncludePreviousRF').isDisabled(),true);
+    const firstReview=await download('rf');
+    assert.equal(firstReview.first.W12,undefined);
+    await page.selectOption('#exportsStage','RF9');
+    await page.locator('#exportsIncludePreviousRF').check();
+    await page.selectOption('#exportsPreviousRF','RF6');
     fs.writeFileSync(path.join(repo,'.cache/export-rf.xlsx'),Buffer.from(output.encoded,'base64'));
     const comments=page.locator('[data-report="comments"]');
     await openReport('comments');

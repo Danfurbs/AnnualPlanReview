@@ -58,6 +58,28 @@ test('plan versions retain every catalogue job and keep absent forecasts blank',
   assert.deepEqual(prepare(input, scope, {}, 'rf').datasets.rf.map(row => row['Standard Job No']), ['000001', '000002', '000003']);
 });
 
+test('RF RAG uses latest forecast and previous comments retain FY and ownership scope', () => {
+  const input = fixture({ stage: 'RF9' });
+  input.comments['000001'].push({ fy: 'FY26', rf: 'RF6', text: 'Wrong year', filteredWorkGroup: 'A' }, { fy: 'FY27', rf: 'RF9', text: 'Current review', filteredWorkGroup: 'A' });
+  const scope = { du: 'du1', scale: 'engineer', target: 'e1' };
+  const row = prepare(input, scope, { previousRF: 'RF6' }, 'rf').datasets.rf[0];
+  assert.equal(row.RAG, 'Amber');
+  assert.equal(row['Latest forecast'], 10);
+  assert.match(row.Comments, /Current review/);
+  assert.doesNotMatch(row.Comments, /literal/);
+  assert.match(row['Previous RF Comments'], /=literal text/);
+  assert.doesNotMatch(row['Previous RF Comments'], /Wrong year|B comment|Current review/);
+  assert.equal(prepare(input, scope, {}, 'rf').datasets.rf[0]['Previous RF Comments'], undefined);
+  assert.equal(prepare(input, scope, { previousRF: 'RF11' }, 'rf').datasets.rf[0]['Previous RF Comments'], undefined);
+  for (const [done, expected] of [[10, 'Green'], [11, 'Amber'], [15, 'Red']]) {
+    input.done.get('000001').wgs.A.P1 = done;
+    assert.equal(prepare(input, scope, {}, 'rf').datasets.rf[0].RAG, expected);
+  }
+  input.v0.get('000001').wgs.A = { P1: 0 };
+  assert.equal(prepare(input, scope, {}, 'rf').datasets.rf[0].RAG, 'Red');
+  assert.equal(prepare(input, scope, {}, 'rf').datasets.rf[1].RAG, 'Unavailable');
+});
+
 test('data error exports include source flags and matching issues without saved amendments', () => {
   const input = fixture();
   input.done.get('000001').workOrders.push(
