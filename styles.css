@@ -1818,20 +1818,31 @@
 .preview-job-expanded { margin-top: 10px; padding-top: 10px; }
 .preview-grid-scroll { padding-bottom: 7px; }
 .preview-grid-scroll::-webkit-scrollbar { height: 10px; }
-.preview-wgs-grid { width: 100%; min-width: 1190px; table-layout: fixed; }
-.preview-wgs-grid th, .preview-wgs-grid td { padding: 5px 3px; }
-.preview-wgs-name-column { width: 155px; }
-.preview-period-column { width: 54px; }
-.preview-total-column { width: 64px; }
+.preview-wgs-grid { width: 100%; min-width: 1440px; table-layout: fixed; }
+.preview-wgs-grid th, .preview-wgs-grid td { padding: 8px 4px; vertical-align: middle; }
+.preview-wgs-grid thead th { padding-block: 9px; color: #475569; font-size: 11px; font-weight: 650; }
+.preview-wgs-name-column { width: 180px; }
+.preview-period-column { width: 70px; }
+.preview-total-column { width: 88px; }
 .preview-comment-column { width: auto; }
 .preview-wgs-grid thead th:first-child, .preview-wgs-grid tbody th { position: sticky; left: 0; z-index: 2; }
 .preview-wgs-grid thead th:first-child { z-index: 3; }
-.preview-wgs-grid input { width: 48px; padding: 6px 3px; text-align: right; }
-.preview-wgs-grid textarea { width: 100%; min-width: 142px; min-height: 42px; padding: 6px; resize: vertical; }
+.preview-wgs-grid input { width: 100%; min-width: 0; height: 34px; padding: 6px 5px; background: #fff; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; appearance: textfield; -moz-appearance: textfield; }
+.preview-wgs-grid input::-webkit-inner-spin-button, .preview-wgs-grid input::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
+.preview-wgs-grid textarea { display: block; width: 100%; min-width: 0; min-height: 48px; padding: 8px 10px; border: 1px solid #cbd5e0; border-radius: 6px; background: #fff; color: #334155; font: inherit; font-size: 12px; line-height: 1.5; resize: vertical; }
+.preview-wgs-grid input:focus, .preview-wgs-grid textarea:focus { border-color: #3b82f6; outline: 2px solid #dbeafe; outline-offset: 1px; }
+.preview-wgs-grid .preview-row-total { padding-inline: 8px; background: #f8fafc; color: #0f172a; font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .preview-wgs-grid tbody th small { margin: 2px 0; max-width: 150px; }
 .preview-wgs-grid tbody th .preview-reasons { display: none; }
 .preview-context-toggle { display: inline-block; margin-top: 4px; padding: 4px 7px; }
-.preview-job-footer { position: sticky; bottom: 0; z-index: 4; margin: 8px -12px -10px; padding: 8px 12px; border-top: 1px solid #e2e8f0; background: #fff; }
+.preview-job-footer { position: sticky; bottom: 0; z-index: 4; justify-content: space-between; margin: 8px -12px -10px; padding: 10px 12px; border-top: 1px solid #e2e8f0; background: #fff; }
+.preview-edit-actions, .preview-save-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.preview-save-actions { margin-left: auto; }
+.preview-job-card .preview-job-actions button, .preview-job-footer button, .preview-history-controls > button, .preview-profile button { min-height: 34px; padding: 7px 11px; font-size: 12px; line-height: 1.4; }
+.preview-job-footer button:disabled { opacity: .45; cursor: default; }
+.preview-job-save-message { margin-left: 0; padding-inline: 6px; font-size: 11px; }
+.preview-job-card .preview-clear-wgs { border-color: transparent; border-radius: 5px; background: transparent; color: #94a3b8; font-weight: 500; }
+.preview-job-card .preview-clear-wgs:hover { border-color: #fecaca; background: #fff1f2; color: #b91c1c; }
 .preview-profile { margin-top: 10px; padding: 10px; }
 .preview-chart-wrap { height: 210px; margin-top: 8px; }
 @media (max-width: 900px) {
@@ -1866,7 +1877,9 @@
 }
 
 /* Planning actions stay outside the period scroller. */
-.preview-history-controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; min-width: 0; }
+.preview-history-controls { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0 2px; min-width: 0; }
+.preview-history-controls > button { border: 1px solid #dbe3ef; background: #f8fafc; color: #475569; font-weight: 500; }
+.preview-history-controls > button[aria-expanded="true"] { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
 .preview-history-controls .preview-planning-context { flex-basis: 100%; min-width: 0; }
 .preview-bulk-actions { margin-bottom: 16px; min-width: 0; }
 .preview-bulk-actions > summary { cursor: pointer; font-weight: 700; }

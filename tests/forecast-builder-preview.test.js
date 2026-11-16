@@ -109,7 +109,7 @@ test('expanded grid exposes a visible contained horizontal scrollbar and per-WGS
   assert.match(source, /<col class="preview-comment-column">/);
   assert.match(css, /\.preview-grid-scroll\s*\{[^}]*overflow-x:\s*scroll[^}]*scrollbar-gutter:\s*stable/s);
   assert.match(css, /\.preview-grid-scroll::\-webkit-scrollbar\s*\{[^}]*height:\s*14px/s);
-  assert.match(css, /\.preview-wgs-grid\s*\{[^}]*width:\s*100%[^}]*min-width:\s*1190px/s);
+  assert.match(css, /\.preview-wgs-grid\s*\{[^}]*width:\s*100%[^}]*min-width:\s*1440px/s);
   assert.match(css, /\.preview-comment-column\s*\{[^}]*width:\s*auto/s);
   assert.match(css, /\.preview-wgs-grid textarea\s*\{[^}]*width:\s*100%/s);
 });
