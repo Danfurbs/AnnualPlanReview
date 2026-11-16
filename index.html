@@ -350,11 +350,12 @@
         <div class="preview-sidebar-controls">
           <label for="forecastPreviewEngineerSearch">Engineers</label>
           <input type="search" id="forecastPreviewEngineerSearch" placeholder="Search engineer…">
-          <div class="preview-filter-tabs" role="group" aria-label="Forecast status filter">
+            <div class="preview-filter-tabs" role="group" aria-label="Review status filter">
             <button type="button" class="active" data-preview-filter="all">All</button>
-            <button type="button" data-preview-filter="not-forecasted">Not Forecasted</button>
-            <button type="button" data-preview-filter="forecasted">Forecasted</button>
+              <button type="button" data-preview-filter="not-forecasted">To review</button>
+              <button type="button" data-preview-filter="forecasted">Complete</button>
           </div>
+            <p class="preview-status-help">With volume counts saved forecasts. Reviewed counts jobs marked complete, including zero-volume jobs.</p>
           <details class="preview-evidence-upload">
             <summary><span>Work Done evidence</span><span class="preview-evidence-count" id="forecastPreviewEvidenceCount">Optional</span></summary>
             <p>Add the same Work Done report used by the main-page upload, one year at a time. You can keep several years loaded together; nothing is uploaded or saved.</p>
@@ -380,7 +381,7 @@
               <span class="preview-eyebrow">Selected engineer</span>
               <h2 id="forecastPreviewEngineerTitle">Engineer</h2>
               <div class="preview-progress-summary">
-                <span id="forecastPreviewProgressText">0 of 0 Standard Jobs forecasted</span>
+                <span id="forecastPreviewProgressText">0 of 0 jobs reviewed</span>
                 <div class="preview-progress-track"><span id="forecastPreviewProgressBar"></span></div>
               </div>
             </div>
@@ -437,6 +438,11 @@
 
 </details>
           <div class="preview-section-label">Standard Jobs <span>Grouped by discipline · Select a row to edit</span></div>
+          <div class="preview-sjn-tools">
+            <label for="forecastPreviewSjnSearch">Find a job<input id="forecastPreviewSjnSearch" type="search" placeholder="SJN or description" autocomplete="off"></label>
+            <label for="forecastPreviewSjnFilter">Show<select id="forecastPreviewSjnFilter"><option value="all">All jobs</option><option value="needs-review">Awaiting review</option><option value="with-volume">With forecast volume</option><option value="zero-history">Zero volume with historical activity</option><option value="complete">Complete</option></select></label>
+            <span id="forecastPreviewSjnCount" role="status" aria-live="polite"></span>
+          </div>
           <div id="forecastPreviewJobList" class="preview-job-list"></div>
         </div>
       </main>

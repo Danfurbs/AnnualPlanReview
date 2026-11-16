@@ -732,7 +732,12 @@ async function getForecastSnapshotAsync(year, planVersion) {
   if (cached) return cached;
 
   // Try GitHub or library
-  return await loadForecastFromLibraryAsync(year, planVersion);
+  const library = await loadForecastFromLibraryAsync(year, planVersion);
+  if (library) return library;
+  if (!window.isApiEnabled?.() && localStorage.getItem(getForecastStorageKey(year, planVersion)) === null && !window.GITHUB_FORECAST_URLS?.[year]?.[planVersion]) {
+    return { data: new Map(), rowCount: 0, savedAt: null };
+  }
+  return null;
 }
 
 /**

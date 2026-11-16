@@ -42,6 +42,10 @@ const server = http.createServer((req, res) => {
     });
     const jobCard = page.locator('[data-expand-card]').filter({ has: page.locator(`[data-expand-job="${Number(fixture.job)}"]`) });
     await page.locator(`[data-engineer-id="${fixture.engineer}"]`).click();
+    const engineerCard = page.locator(`[data-engineer-id="${fixture.engineer}"]`);
+    assert.equal(await engineerCard.getAttribute('data-status'), 'amber', 'volume awaiting review is in progress');
+    assert.match(await engineerCard.getAttribute('aria-label'), /1 of 1 jobs with forecast volume.*0 of 1 reviewed/);
+    assert.equal(await engineerCard.getAttribute('aria-pressed'), 'true');
     assert.equal(await jobCard.locator('.preview-job-total strong').innerText(), '4', 'SJN total excludes other Engineers and DUs');
     const otherEngineer = await page.evaluate(b => getEngineerForWorkGroup(b).id, fixture.b);
     await page.locator(`[data-engineer-id="${otherEngineer}"]`).click();
@@ -55,6 +59,13 @@ const server = http.createServer((req, res) => {
       await closeForecastBuilderPreview(); await openForecastBuilderPreview();
     }, fixture);
     assert.equal(await jobCard.locator('.preview-job-total strong').innerText(), '0', 'zero for this Engineer stays zero when others have volume');
+    assert.equal(await engineerCard.getAttribute('data-status'), 'red', 'another Engineer volume does not change this Engineer RAG');
+    await jobCard.locator('[data-job-number]').click();
+    assert.equal(await engineerCard.getAttribute('data-status'), 'green', 'reviewed zero-volume jobs can be complete');
+    assert.match(await engineerCard.getAttribute('aria-label'), /0 of 1 jobs with forecast volume.*1 of 1 reviewed/);
+    assert.equal(await jobCard.locator('[data-job-number]').innerText(), '✓ Complete');
+    await jobCard.locator('[data-job-number]').click();
+    assert.equal(await engineerCard.getAttribute('data-status'), 'red', 'reopening review resets RAG');
     await page.evaluate(async () => { await window.smokeSeed(); await closeForecastBuilderPreview(); await openForecastBuilderPreview(); });
     await page.locator('[data-expand-job]').first().click();
     assert.equal(await jobCard.locator('.preview-job-total strong').innerText(), '4', 'expanded and collapsed totals use the same Engineer scope');

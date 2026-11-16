@@ -1,16 +1,13 @@
 /** Parse and patch Future Work reports without mutating application state. */
 (function initialiseFutureWorkImport(root, factory) {
-  const api = factory();
+  const api = factory(typeof module === 'object' && module.exports ? require('./forecast-model') : root.ForecastModel);
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.FutureWorkImport = api;
-})(typeof window !== 'undefined' ? window : globalThis, function futureWorkImportFactory() {
+})(typeof window !== 'undefined' ? window : globalThis, function futureWorkImportFactory(model) {
   const PERIOD_RE = /\bP(0?[1-9]|1[0-9])\b/i;
   const COMMENT = 'forecast via future work report';
   const text = value => String(value ?? '').trim();
-  const normalizeJob = value => {
-    const match = text(value).match(/^(?:\D*?)(\d+)/);
-    return match ? match[1].replace(/^0+(?=\d)/, '').padStart(6, '0') : '';
-  };
+  const normalizeJob = model.extractJobNumber;
   const canonicalPeriod = value => {
     const match = text(value).match(PERIOD_RE);
     return match ? `P${Number(match[1]).toString().padStart(2, '0')}` : '';
@@ -125,9 +122,10 @@
         const raw = row[column.index];
         const valueText = text(raw);
         if (!valueText || /^[-–—]$/.test(valueText)) return;
-        const value = typeof raw === 'number' ? raw : Number(valueText.replace(/,/g, ''));
-        if (!Number.isFinite(value) || value < 0) {
-          result.errors.push(`Row ${sourceRow} ${column.period}: ${value < 0 ? 'negative' : 'malformed'} Units Required value “${valueText}”.`);
+        let value;
+        try { value = model.parseCell(typeof raw === 'number' ? raw : valueText.replace(/,/g, '')); }
+        catch {
+          result.errors.push(`Row ${sourceRow} ${column.period}: ${Number(valueText.replace(/,/g, '')) < 0 ? 'negative' : 'malformed'} Units Required value "${valueText}".`);
           return;
         }
         recognised = true;
@@ -152,16 +150,7 @@
 
   // Older plans use descriptions as keys; newer imports use catalogue codes.
   // Merge matching aliases per period, with the canonical code taking priority.
-  function readWorkGroupForecast(job, workGroup, resolve = value => value) {
-    const identity = value => text(resolve(value) || value).toUpperCase();
-    const target = identity(workGroup);
-    const keys = [...new Set([...Object.keys(job?.wgs || {}), ...Object.keys(job?.comments || {})])]
-      .filter(key => identity(key) === target)
-      .sort((a, b) => Number(text(a).toUpperCase() === target) - Number(text(b).toUpperCase() === target));
-    const periods = Object.assign({}, ...keys.map(key => job?.wgs?.[key] || {}));
-    const comments = [...new Set(keys.map(key => text(job?.comments?.[key])).filter(Boolean))];
-    return { keys, periods, comment: comments.join('\n') };
-  }
+  const readWorkGroupForecast = model.readWorkGroupForecast;
 
   function patchForecastSnapshot(source, values, options = {}) {
     const patched = new Map(Array.from(source || [], ([key, value]) => [key, clone(value)]));
@@ -185,5 +174,5 @@
     });
     return { data: patched, affected };
   }
-  return { COMMENT, normalizeJob, decodeHeadings, parseFutureWorkWorkbook, appendImportComment, readWorkGroupForecast, patchForecastSnapshot };
+  return { COMMENT, normalizeJob, decodeHeadings, parseFutureWorkWorkbook, appendImportComment, readWorkGroupForecast, scopedAnnualTotal: model.scopedAnnualTotal, patchForecastSnapshot };
 });

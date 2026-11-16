@@ -3,10 +3,10 @@
  * This module discovers planning candidates without writing forecast data.
  */
 (function exposeForecastBuilderData(root, factory) {
-  const api = factory();
+  const api = factory(typeof module !== 'undefined' && module.exports ? require('./forecast-model') : root.ForecastModel);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) Object.assign(root, api);
-})(typeof window !== 'undefined' ? window : globalThis, function createForecastBuilderData() {
+})(typeof window !== 'undefined' ? window : globalThis, function createForecastBuilderData(model) {
   const REASONS = Object.freeze({
     RECENT_FORECAST: 'recent forecast',
     RECENT_WORK_DONE: 'recent Work Done',
@@ -23,18 +23,24 @@
     return [1, 2, 3].map(offset => `FY${String(value - offset).padStart(width, '0')}`);
   }
 
+  function summarizeForecastProgress(jobs, volumeForJob) {
+    const total = jobs.length;
+    const reviewed = jobs.filter(job => job.forecasted).length;
+    const withVolume = jobs.filter(job => volumeForJob(job) > 0).length;
+    const status = !total ? 'neutral' : reviewed === total ? 'green' : (reviewed || withVolume) ? 'amber' : 'red';
+    const label = { neutral: 'No jobs', red: 'Not started', amber: 'In progress', green: 'Complete' }[status];
+    return { total, reviewed, withVolume, remaining: total - reviewed, percent: total ? reviewed / total * 100 : 0, status, label };
+  }
+
   function entries(source) {
     if (source instanceof Map) return Array.from(source.entries());
     return Object.entries(source || {});
   }
 
-  function normalizeJobNumber(value) {
-    const text = String(value || '').trim();
-    return /^\d+$/.test(text) ? String(Number(text)) : text;
-  }
+  const normalizeJobNumber = model.normalizeJobNumber;
 
   function resolveCode(value, resolveWorkGroupCode) {
-    return (resolveWorkGroupCode?.(value) || String(value || '').trim()).toUpperCase();
+    return model.workGroupIdentity(value, resolveWorkGroupCode);
   }
 
   function hasVolume(periods) {
@@ -235,7 +241,7 @@
   }
 
   return {
-    REASONS, getPlanningHistoryYears, getStandardJobsForEngineer,
+    REASONS, getPlanningHistoryYears, summarizeForecastProgress, getStandardJobsForEngineer,
     getWorkGroupSetsForStandardJob, canRemoveManuallyAddedStandardJob, normalizeJobNumber,
     getWorkDoneCoverage, getPlanningContext, copyPlanningProfile, buildTemporaryWorkDoneEvidence
   };

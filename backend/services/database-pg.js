@@ -253,16 +253,16 @@ class DatabaseServicePG {
    * @param {string} planVersion
    * @returns {Object} - Structured forecast data
    */
-  async getForecastData(fiscalYear, planVersion) {
+  async getForecastData(fiscalYear, planVersion, connection = this.pool) {
     await this.ready;
-    const forecastsResult = await this.pool.query(
+    const forecastsResult = await connection.query(
       `SELECT * FROM forecasts
        WHERE fiscal_year = $1 AND plan_version = $2
        ORDER BY job_number, work_group, period`,
       [fiscalYear, planVersion]
     );
 
-    const commentsResult = await this.pool.query(
+    const commentsResult = await connection.query(
       `SELECT * FROM forecast_comments
        WHERE fiscal_year = $1 AND plan_version = $2`,
       [fiscalYear, planVersion]
@@ -310,6 +310,21 @@ class DatabaseServicePG {
     });
 
     return data;
+  }
+
+  async getForecastSnapshot(fiscalYear, planVersion) {
+    await this.ready;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const data = await this.getForecastData(fiscalYear, planVersion, client);
+      const result = await client.query('SELECT revision FROM revisions WHERE scope = $1 AND data_key = $2', ['forecast', `${fiscalYear}:${planVersion}`]);
+      await client.query('COMMIT');
+      return { data, revision: result.rows[0]?.revision || 0 };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
   }
 
   /**

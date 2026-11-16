@@ -92,8 +92,7 @@ function createForecastRoutes(db) {
           error: 'Invalid fiscal year or plan version format'
         });
       }
-      const data = await db.getForecastData(fiscalYear, planVersion);
-      const revision = await db.getRevision('forecast', `${fiscalYear}:${planVersion}`);
+      const { data, revision } = await db.getForecastSnapshot(fiscalYear, planVersion);
 
       res.json({
         success: true,

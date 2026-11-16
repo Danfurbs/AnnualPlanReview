@@ -3,7 +3,7 @@ const test = require('node:test');
 const {
   REASONS, getPlanningHistoryYears, getStandardJobsForEngineer,
   getWorkGroupSetsForStandardJob, canRemoveManuallyAddedStandardJob,
-  getPlanningContext, copyPlanningProfile, buildTemporaryWorkDoneEvidence
+  getPlanningContext, copyPlanningProfile, buildTemporaryWorkDoneEvidence, summarizeForecastProgress
 } = require('../forecast-builder-data');
 
 const engineers = [
@@ -16,6 +16,27 @@ const base = {
 };
 const job = (workGroup, periods = {}, comment = '') => ({
   wgs: { [workGroup]: periods }, comments: comment ? { [workGroup]: comment } : {}
+});
+
+test('Engineer RAG distinguishes no volume, uploaded forecasts, partial review and fully reviewed zero-volume plans', () => {
+  const summarize = jobs => summarizeForecastProgress(jobs, item => item.volume || 0);
+  assert.deepEqual(summarize([]), { total: 0, reviewed: 0, withVolume: 0, remaining: 0, percent: 0, status: 'neutral', label: 'No jobs' });
+  const untouched = [{ forecasted: false }, { forecasted: false }];
+  assert.equal(summarize(untouched).status, 'red');
+  const uploaded = summarize([{ forecasted: false, volume: 12 }, { forecasted: false, volume: 5 }]);
+  assert.equal(uploaded.status, 'amber');
+  assert.equal(uploaded.withVolume, 2);
+  assert.equal(uploaded.reviewed, 0);
+  assert.equal(uploaded.remaining, 2);
+  const partial = summarize([{ forecasted: true, volume: 0 }, { forecasted: false, volume: 0 }]);
+  assert.equal(partial.status, 'amber');
+  assert.equal(partial.percent, 50);
+  assert.equal(partial.withVolume, 0);
+  const complete = summarize([{ forecasted: true, volume: 0 }, { forecasted: true, volume: 0 }]);
+  assert.equal(complete.status, 'green');
+  assert.equal(complete.reviewed, 2);
+  assert.equal(complete.remaining, 0);
+  assert.equal(complete.percent, 100);
 });
 
 test('derives the three-year planning window without hard-coded production years', () => {

@@ -84,6 +84,12 @@ API status polling is a connectivity check, not live cross-device synchronisatio
 
 ## Forecast Builder
 
+Engineer cards distinguish saved volume from manual completion. A dirty job offers **Save and mark complete**; completion is recorded only after a successful forecast save. When connected, planning flags require server confirmation. Later edits do not reset completion flags.
+
+SJN search accepts padded or unpadded numbers and descriptions. Filters cover jobs awaiting review, jobs with volume, completed jobs and zero-volume jobs with recent historical activity. Annual changes exceeding 50% against the previous FY's final forecast are advisory only and use the selected Engineer's WG sets. A zero prior-year baseline has no percentage comparison. Future Work import summaries roll up reported units by discipline.
+
+Forecast imports and maintenance require a successfully loaded current snapshot. Confirmed empty plans are valid; failed reads cannot be used as empty plans. Forecast values, comments and revision are read together within a consistent database snapshot. Job saves merge independent WG/period edits and ask before replacing overlapping changes.
+
 Future Work uploads use the standard report's Detail tab (headings on row 6). Units Required are summed by Standard Job Number & Desc, Work Group Set and Completed Period Number (1–13), resolving WG set descriptions to catalogue codes. Hours, backlog units and rows without an assigned forecast period are excluded. Only reported forecast cells are replaced; explicit zero is retained. Period Summary remains supported for older reports without Detail.
 
 The new Engineer → Standard Job → Work Group Set Builder now includes historical Planning Context, individual/aggregate profile charts, Show all history, Undo/Redo/Discard, Future Work import, V0 CSV/JSON export and full V0 CSV/Excel/JSON replacement. Its maintenance controls clear all V0 in the selected DU, one selected Engineer or one selected Work Group Set, after typed confirmation. Other DUs, V1, historical FYs and review/planning flags are retained. Exceptional rows follow current ownership for scope; adding them to a workspace does not transfer ownership.

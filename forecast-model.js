@@ -1,6 +1,28 @@
 /* Shared forecast editing and reporting rules; no storage or UI side effects. */
 (function (root) {
   const periods = Array.from({ length: 13 }, (_, i) => `P${i + 1}`);
+  const text = value => String(value ?? '').trim();
+  const normalizeJobNumber = value => /^\d+$/.test(text(value)) ? text(value).replace(/^0+(?=\d)/, '') : text(value);
+  const extractJobNumber = value => {
+    const match = text(value).match(/^(?:\D*?)(\d+)/);
+    return match ? normalizeJobNumber(match[1]).padStart(6, '0') : '';
+  };
+  const workGroupIdentity = (value, resolve = item => item) => text(resolve(value) || value).toUpperCase();
+  function readWorkGroupForecast(job, workGroup, resolve) {
+    const target = workGroupIdentity(workGroup, resolve);
+    const keys = [...new Set([...Object.keys(job?.wgs || {}), ...Object.keys(job?.comments || {})])]
+      .filter(key => workGroupIdentity(key, resolve) === target)
+      .sort((a, b) => Number(text(a).toUpperCase() === target) - Number(text(b).toUpperCase() === target));
+    const values = Object.assign({}, ...keys.map(key => job?.wgs?.[key] || {}));
+    const comments = [...new Set(keys.map(key => text(job?.comments?.[key])).filter(Boolean))];
+    return { keys, periods: values, comment: comments.join('\n') };
+  }
+  function scopedAnnualTotal(job, workGroups, resolve) {
+    return [...new Set(Array.from(workGroups || [], code => workGroupIdentity(code, resolve)))].reduce((total, code) => {
+      const row = readWorkGroupForecast(job, code, resolve);
+      return total + periods.reduce((sum, period) => sum + (Number(row.periods[period]) || 0), 0);
+    }, 0);
+  }
   function parseCell(value) {
     if (value === undefined || value === null || String(value).trim() === '') return undefined;
     const number = Number(value);
@@ -49,7 +71,7 @@
     }
     return { value: draft, conflicts: [path] };
   }
-  const api = { periods, parseCell, applyPeriodEdits, performance, movement, equal, mergeChanges };
+  const api = { periods, normalizeJobNumber, extractJobNumber, workGroupIdentity, readWorkGroupForecast, scopedAnnualTotal, parseCell, applyPeriodEdits, performance, movement, equal, mergeChanges };
   if (typeof module !== 'undefined') module.exports = api;
   if (root) root.ForecastModel = api;
 })(typeof window === 'undefined' ? null : window);

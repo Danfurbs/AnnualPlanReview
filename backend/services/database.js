@@ -369,6 +369,13 @@ class DatabaseService {
    * @param {string} planVersion
    * @returns {Object} - Structured forecast data
    */
+  getForecastSnapshot(fiscalYear, planVersion) {
+    return this.db.transaction(() => ({
+      data: this.getForecastData(fiscalYear, planVersion),
+      revision: this.getRevision('forecast', `${fiscalYear}:${planVersion}`)
+    }))();
+  }
+
   getForecastData(fiscalYear, planVersion) {
     const forecasts = this.stmts.getForecastsByYear.all(fiscalYear, planVersion);
     const comments = this.stmts.getForecastComments.all(fiscalYear, planVersion);
