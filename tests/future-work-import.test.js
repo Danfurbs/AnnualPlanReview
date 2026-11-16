@@ -9,6 +9,86 @@ const headings = periods => [
   ['Work Group Set', 'Standard Job Number & Desc', ...periods.flatMap(period => [period, ''])],
   ['', '', ...periods.flatMap(() => ['Units Required', 'Hours Required'])]
 ];
+const detailHeadings = ['Route', 'IMDM', 'Discipline', 'Engineer', 'Work Group Set', 'Work Group',
+  'Cost Centre Code & Desc', 'MNT Code & Desc', 'Project Code & Description', 'Asset Number',
+  'Asset Desc 1', 'Asset Desc 2', 'Structured Plant Number', 'ELR', 'Mileage From', 'Mileage To',
+  'SRS Code & Description', 'MST Task Number', 'MST Description Line 1', 'MST Description Line 2',
+  'Deleted?', 'Projected MST Date', 'MST Frequency', 'Work Order No', 'Work Order Desc',
+  'Standard Job Unit of Work Code & Desc', 'Component Code & Desc', 'Component Modifier Code & Desc',
+  'Track ID', 'Extended Text', 'Planned Start Date', 'Required Finish Date', 'Hours Required',
+  'Defect Code & Desc', 'Standard Job Number & Desc', 'Units Required', 'Account Code',
+  'Projected MST Date', 'Planned Start Date', 'Required Finish Date', 'Backlog Hours Required',
+  'Backlog Units Required', 'Completed Period Number', 'Completed Week Number'];
+const detailRow = (workGroup, job, period, units) => {
+  const row = Array(44).fill('');
+  row[4] = workGroup; row[5] = 'Different individual work group'; row[20] = 'Y';
+  row[23] = '0'; row[32] = 900; row[34] = job; row[35] = units;
+  row[40] = 800; row[41] = 700; row[42] = period; row[43] = 20;
+  return row;
+};
+const detailWorkbook = rows => ({ Sheets: { Detail: { rows: [[], ['Selected Parameters: report'], [], [], [], detailHeadings, ...rows] } } });
+
+test('standard report Detail at row 6 sums units by job, WG set and completed period, ignoring summaries and hours', () => {
+  const book = detailWorkbook([
+    detailRow('Track team', '1234 - Renew rail', 5, 2.5),
+    detailRow('WGA', '001234 - Renew rail', '05', '1,200.25'),
+    detailRow('WGB', '1234 - Renew rail', 5, 4),
+    detailRow('WGA', '9999 - Inspect', 6, 3),
+    detailRow('WGA', '1234 - Renew rail', 'P13', 0)
+  ]);
+  book.Sheets['Period Summary'] = { rows: [...headings(['P01']), ['WGA', '1234', 999999, 0]] };
+  const result = parseFutureWorkWorkbook(book, options);
+  assert.equal(result.sourceSheet, 'Detail');
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.periods, ['P05', 'P06', 'P13']);
+  assert.deepEqual(result.values, [
+    { jobNumber: '001234', workGroup: 'WGA', period: 'P5', value: 1202.75 },
+    { jobNumber: '001234', workGroup: 'WGB', period: 'P5', value: 4 },
+    { jobNumber: '009999', workGroup: 'WGA', period: 'P6', value: 3 },
+    { jobNumber: '001234', workGroup: 'WGA', period: 'P13', value: 0 }
+  ]);
+  assert.deepEqual(result.totals, { P05: 1206.75, P06: 3, P13: 0 });
+  assert.equal(result.recognisedRows, 5);
+  assert.equal(result.aggregatedRows, 1);
+  assert.equal(result.duplicateRows, 0, 'repeated scheduled tasks are expected detail records');
+  const patched = patchForecastSnapshot(new Map(), result.values).data;
+  assert.deepEqual(patched.get('001234').wgs.WGA, { P5: 1202.75, P13: 0 });
+  assert.equal(patched.get('001234').periods.P5, 1206.75);
+});
+
+test('Detail supports every forecast period, excludes unassigned backlog, and leaves blank units absent', () => {
+  const rows = Array.from({ length: 13 }, (_, i) => detailRow('WGA', '1234 desc', i + 1, i));
+  rows.push(...['', '-', 0].map(period => detailRow('WGA', '1234 desc', period, 100)));
+  rows.push(...['', '-', ' '].map(units => detailRow('WGB', '1234 desc', 1, units)));
+  const result = parseFutureWorkWorkbook(detailWorkbook(rows), options);
+  assert.equal(result.values.length, 13);
+  assert.equal(result.values[12].period, 'P13');
+  assert.equal(result.values[0].value, 0);
+  assert.equal(result.ignoredRows, 6);
+  assert.deepEqual(result.errors, []);
+  assert.match(result.warnings[0], /3 Detail row.*no forecast period/);
+});
+
+test('Detail validates periods and units with actual worksheet row numbers and excludes unknown catalogue rows', () => {
+  const result = parseFutureWorkWorkbook(detailWorkbook([
+    detailRow('WGA', '1234', 14, 1), detailRow('WGA', '1234', 1, -2),
+    detailRow('WGA', '1234', 2, 'bad'), detailRow('NOPE', '1234', 1, 5),
+    detailRow('WGA', '777', 1, 5), detailRow('WGA', '1234', 'week 5', 1)
+  ]), options);
+  assert.equal(result.values.length, 0);
+  assert.equal(result.errors.length, 4);
+  assert.match(result.errors[0], /Row 7.*Completed Period Number/);
+  assert.match(result.errors[1], /Row 8 P01.*negative/);
+  assert.match(result.errors[2], /Row 9 P02.*malformed/);
+  assert.equal(result.exceptions.length, 2);
+  assert.equal(result.exceptions[0].row, 10);
+});
+
+test('invalid Detail blocks rather than silently falling back to Period Summary', () => {
+  const book = workbook([...headings(['P01']), ['WGA', '1234', 99, 0]]);
+  book.Sheets.Detail = { rows: [['Work Group Set', 'Units Required']] };
+  assert.match(parseFutureWorkWorkbook(book, options).errors[0], /Missing required headings in Detail/);
+});
 
 test('requires Period Summary and required multi-row headings', () => {
   assert.match(parseFutureWorkWorkbook({ Sheets: {} }, options).errors[0], /Period Summary/);

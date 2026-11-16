@@ -101,21 +101,27 @@ const server = http.createServer((req, res) => {
     await clear('#forecastPreviewClearAll');
     saved = await read(); assert.equal(saved.wgs[fixture.a], undefined); assert.equal(saved.wgs[fixture.b], undefined); assert.equal(saved.wgs[fixture.c].P1, 6);
     await assertOtherPlans();
-    // Exercise Future Work confirmation with a deterministic parsed report;
-    // workbook parsing has its own fixtures in future-work-import.test.js.
+    // Exercise the real Detail parser through file selection and confirmation.
     await page.evaluate(async ({ job, a }) => {
       await window.smokeSeed(); await closeForecastBuilderPreview(); await openForecastBuilderPreview();
-      window.XLSX = { read: () => ({}) };
-      window.smokeParse = window.FutureWorkImport.parseFutureWorkWorkbook;
-      window.FutureWorkImport.parseFutureWorkWorkbook = () => ({ values: [{ jobNumber: job.padStart(6, '0'), workGroup: a, period: 'P1', value: 0 }], periods: ['P01'], totals: { P01: 0 }, warnings: [], exceptions: [], errors: [], recognisedRows: 1, ignoredRows: 0 });
+      window.XLSX = {
+        read: buffer => ({ Sheets: { Detail: JSON.parse(new TextDecoder().decode(buffer)) } }),
+        utils: { sheet_to_json: sheet => sheet }
+      };
     }, fixture);
     if (!await page.locator('[data-grid-wgs]').count()) await page.locator('[data-expand-job]').first().click();
     input = page.locator(`[data-grid-wgs="${fixture.a}"][data-period="P1"]`);
     await input.fill('12');
     const reviewFutureWork = async () => {
       await page.locator('#forecastPreviewFutureWork').click();
-      await page.setInputFiles('#forecastPreviewFutureWorkFile', { name: 'future.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from('fixture') });
+      const rows = [[], ['Selected Parameters: report'], [], [], [],
+        ['Work Group Set', 'Standard Job Number & Desc', 'Units Required', 'Hours Required', 'Backlog Units Required', 'Completed Period Number'],
+        [fixture.a, `${fixture.job} - Inspection`, 0, 900, 800, 1],
+        [fixture.a, `${fixture.job} - Inspection`, 2, 900, 800, 5],
+        [fixture.a, `${fixture.job} - Inspection`, 3, 900, 800, 5]];
+      await page.setInputFiles('#forecastPreviewFutureWorkFile', { name: 'future.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(JSON.stringify(rows)) });
       await page.waitForFunction(() => !document.getElementById('forecastPreviewFutureWorkConfirm').disabled);
+      assert.match(await page.locator('#forecastPreviewFutureWorkReview').textContent(), /Source worksheetDetail/);
     };
     await reviewFutureWork();
     await page.locator('#forecastPreviewFutureWorkConfirm').click();
@@ -127,8 +133,8 @@ const server = http.createServer((req, res) => {
     await page.locator('#forecastPreviewFutureWorkConfirm').click();
     await page.waitForFunction(({job,a}) => getForecastSnapshot('FY27', 'v0').data.get(job).wgs[a].P1 === 0 && !document.getElementById('forecastBuilderPreviewPage').inert, fixture);
     assert.equal((await read()).wgs[fixture.c].P1, 6);
+    assert.equal((await read()).wgs[fixture.a].P5, 5, 'scheduled units aggregate by WG set and period');
     assert.equal(await page.evaluate(() => localStorage.getItem('aprForecastPlanningMetadataV1')), metadataBefore);
-    await page.evaluate(() => { window.FutureWorkImport.parseFutureWorkWorkbook = window.smokeParse; });
     // Export the selected DU and round-trip a V0 JSON replacement through UI.
     await page.evaluate(async () => { await window.smokeSeed(); await closeForecastBuilderPreview(); await openForecastBuilderPreview(); });
     if (!await page.locator('.preview-bulk-actions').evaluate(el => el.open)) await page.locator('.preview-bulk-actions > summary').click();

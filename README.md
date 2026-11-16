@@ -84,6 +84,8 @@ API status polling is a connectivity check, not live cross-device synchronisatio
 
 ## Forecast Builder
 
+Future Work uploads use the standard report's Detail tab (headings on row 6). Units Required are summed by Standard Job Number & Desc, Work Group Set and Completed Period Number (1–13), resolving WG set descriptions to catalogue codes. Hours, backlog units and rows without an assigned forecast period are excluded. Only reported forecast cells are replaced; explicit zero is retained. Period Summary remains supported for older reports without Detail.
+
 The new Engineer → Standard Job → Work Group Set Builder now includes historical Planning Context, individual/aggregate profile charts, Show all history, Undo/Redo/Discard, Future Work import, V0 CSV/JSON export and full V0 CSV/Excel/JSON replacement. Its maintenance controls clear all V0 in the selected DU, one selected Engineer or one selected Work Group Set, after typed confirmation. Other DUs, V1, historical FYs and review/planning flags are retained. Exceptional rows follow current ownership for scope; adding them to a workspace does not transfer ownership.
 
 The Engineer → Standard Job Builder is now the V0 planning interface. Bulk V1 editing/copying/import controls have been removed. Review a Standard Job and edit individual Work Group periods for V1; blank means inherit V0, zero means an explicit override. Resetting V1 keeps forecast comments, including comment-only records on database reload.

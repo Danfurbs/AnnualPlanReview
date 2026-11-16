@@ -47,28 +47,55 @@
     return null;
   }
 
+  function decodeDetailHeadings(rows) {
+    for (let headerRow = 0; headerRow < Math.min(rows.length, 20); headerRow += 1) {
+      const headings = rows[headerRow].map(value => text(value).replace(/\s+/g, ' ').toLowerCase());
+      const workGroup = headings.indexOf('work group set');
+      const job = headings.findIndex(value => /^(standard job number & desc|standard job no)$/.test(value));
+      const units = headings.indexOf('units required');
+      const period = headings.indexOf('completed period number');
+      if ([workGroup, job, units, period].every(index => index >= 0)) return { headerRow, workGroup, job, units, period };
+    }
+    return null;
+  }
+
   function parseFutureWorkWorkbook(workbook, options = {}) {
-    const result = { fileName: options.fileName || '', periods: [], values: [], recognisedRows: 0, ignoredRows: 0, duplicateRows: 0, totals: {}, warnings: [], errors: [], exceptions: [] };
-    const sheet = workbook?.Sheets?.['Period Summary'];
-    if (!sheet) { result.errors.push('Missing required worksheet “Period Summary”.'); return result; }
+    const result = { fileName: options.fileName || '', sourceSheet: '', periods: [], values: [], recognisedRows: 0, ignoredRows: 0, duplicateRows: 0, aggregatedRows: 0, totals: {}, warnings: [], errors: [], exceptions: [] };
+    // Detail is authoritative when present. Summary-only reports remain supported.
+    const sheetNames = Object.keys(workbook?.Sheets || {});
+    result.sourceSheet = sheetNames.find(name => text(name).toLowerCase() === 'detail')
+      || sheetNames.find(name => text(name).toLowerCase() === 'period summary') || '';
+    const sheet = workbook?.Sheets?.[result.sourceSheet];
+    if (!sheet) { result.errors.push('Missing required worksheet "Detail" (or legacy "Period Summary").'); return result; }
+    const isDetail = text(result.sourceSheet).toLowerCase() === 'detail';
     const xlsx = options.XLSX || (typeof window !== 'undefined' && window.XLSX);
     if (!xlsx?.utils?.sheet_to_json) { result.errors.push('The XLSX reader is unavailable.'); return result; }
-    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
-    const decoded = decodeHeadings(rows);
-    if (!decoded) { result.errors.push('Missing required headings: Work Group Set, Standard Job Number & Desc, and at least one P01–P13 Units Required column.'); return result; }
-    const unsupported = decoded.unitColumns.filter(column => Number(column.period.slice(1)) > 13);
+    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: true });
+    const decoded = isDetail ? decodeDetailHeadings(rows) : decodeHeadings(rows);
+    if (!decoded) {
+      result.errors.push(isDetail
+        ? 'Missing required headings in Detail: Work Group Set, Standard Job Number & Desc, Units Required, and Completed Period Number.'
+        : 'Missing required headings: Work Group Set, Standard Job Number & Desc, and at least one P01-P13 Units Required column.');
+      return result;
+    }
+    const unsupported = (decoded.unitColumns || []).filter(column => Number(column.period.slice(1)) > 13);
     if (unsupported.length) result.errors.push(`Unsupported period column(s): ${unsupported.map(x => x.period).join(', ')}.`);
-    const columns = decoded.unitColumns.filter(column => Number(column.period.slice(1)) <= 13);
+    const columns = (decoded.unitColumns || []).filter(column => Number(column.period.slice(1)) <= 13);
     result.periods = [...new Set(columns.map(column => column.period))].sort();
     const activeJobs = new Set(Array.from(options.activeJobs || [], normalizeJob));
     const activeWorkGroups = new Set(Array.from(options.activeWorkGroups || [], value => text(value).toUpperCase()));
     const resolve = options.resolveWorkGroupCode || (value => text(value).toUpperCase());
+    const resolvedWorkGroups = new Map();
+    const detectedPeriods = new Set(result.periods);
+    let unassignedRows = 0;
     const aggregated = new Map();
     rows.slice(decoded.headerRow + 1).forEach((row, offset) => {
       const sourceRow = decoded.headerRow + offset + 2;
       if (row.every(value => !text(value))) return;
       const job = normalizeJob(row[decoded.job]);
-      const workGroup = text(resolve(row[decoded.workGroup])).toUpperCase();
+      const rawWorkGroup = text(row[decoded.workGroup]);
+      if (!resolvedWorkGroups.has(rawWorkGroup)) resolvedWorkGroups.set(rawWorkGroup, text(resolve(rawWorkGroup)).toUpperCase());
+      const workGroup = resolvedWorkGroups.get(rawWorkGroup);
       const unknownJob = !job || (activeJobs.size && !activeJobs.has(job));
       const unknownWgs = !workGroup || (activeWorkGroups.size && !activeWorkGroups.has(workGroup));
       if (unknownJob || unknownWgs) {
@@ -76,8 +103,25 @@
         result.exceptions.push({ row: sourceRow, job: job || text(row[decoded.job]), workGroup: workGroup || text(row[decoded.workGroup]), reasons: [unknownJob ? 'Unknown Standard Job' : '', unknownWgs ? 'Unknown Work Group Set' : ''].filter(Boolean) });
         return;
       }
+      let rowColumns = columns;
+      if (isDetail) {
+        const rawPeriod = text(row[decoded.period]);
+        // Backlog and undated rows have no forecast period. Never assign them
+        // using week numbers or dates, which would change the report's profile.
+        if (!rawPeriod || rawPeriod === '-' || /^0+$/.test(rawPeriod)) {
+          result.ignoredRows += 1; unassignedRows += 1; return;
+        }
+        const match = rawPeriod.match(/^(?:P)?(0?[1-9]|1[0-3])$/i);
+        if (!match) {
+          result.errors.push(`Row ${sourceRow}: invalid Completed Period Number "${rawPeriod}"; expected 1-13.`);
+          result.ignoredRows += 1; return;
+        }
+        const period = `P${Number(match[1]).toString().padStart(2, '0')}`;
+        detectedPeriods.add(period);
+        rowColumns = [{ index: decoded.units, period }];
+      }
       let recognised = false;
-      columns.forEach(column => {
+      rowColumns.forEach(column => {
         const raw = row[column.index];
         const valueText = text(raw);
         if (!valueText || /^[-–—]$/.test(valueText)) return;
@@ -89,14 +133,19 @@
         recognised = true;
         const storagePeriod = `P${Number(column.period.slice(1))}`;
         const key = `${job}|${workGroup}|${storagePeriod}`;
-        if (aggregated.has(key)) result.duplicateRows += 1;
+        if (aggregated.has(key)) {
+          if (isDetail) result.aggregatedRows += 1;
+          else result.duplicateRows += 1;
+        }
         aggregated.set(key, (aggregated.get(key) || 0) + value);
       });
       if (recognised) result.recognisedRows += 1; else result.ignoredRows += 1;
     });
+    result.periods = [...detectedPeriods].sort();
     result.values = Array.from(aggregated, ([key, value]) => { const [jobNumber, workGroup, period] = key.split('|'); return { jobNumber, workGroup, period, value }; });
     result.values.forEach(item => { const displayPeriod = `P${Number(item.period.slice(1)).toString().padStart(2, '0')}`; result.totals[displayPeriod] = (result.totals[displayPeriod] || 0) + item.value; });
     if (result.duplicateRows) result.warnings.push(`${result.duplicateRows} duplicate value(s) were aggregated.`);
+    if (unassignedRows) result.warnings.push(`${unassignedRows} Detail row(s) have no forecast period (blank, dash, or backlog period 0) and were excluded.`);
     if (result.exceptions.length) result.warnings.push(`${result.exceptions.length} row(s) contain unknown catalogue values and will be excluded.`);
     return result;
   }
