@@ -8,9 +8,9 @@ const root = path.resolve(__dirname, '..');
 
 function loadPreviewContext() {
   const engineers = [
-    { id: 'du-a-1', name: 'A One', deliveryUnitId: 'du-a' },
-    { id: 'du-a-2', name: 'A Two', deliveryUnitId: 'du-a' },
-    { id: 'du-b-1', name: 'B One', deliveryUnitId: 'du-b' }
+    { id: 'du-a-1', name: 'A One', deliveryUnitId: 'du-a', workGroupSets: ['WGA', 'WGA', 'WGB'] },
+    { id: 'du-a-2', name: 'A Two', deliveryUnitId: 'du-a', workGroupSets: ['WGC'] },
+    { id: 'du-b-1', name: 'B One', deliveryUnitId: 'du-b', workGroupSets: ['WGD'] }
   ];
   let deliveryUnit = 'du-a';
   const document = {
@@ -19,6 +19,8 @@ function loadPreviewContext() {
     querySelectorAll() { return []; }
   };
   const window = {
+    FutureWorkImport: require('../future-work-import'),
+    resolveWorkGroupCode: value => value === 'Old A description' ? 'WGA' : value,
     getCurrentDeliveryUnitId: () => deliveryUnit,
     getEngineersForDeliveryUnit: id => engineers.filter(engineer => engineer.deliveryUnitId === id),
     normalizeJobNumber: value => String(Number(value)),
@@ -48,6 +50,20 @@ test('preview requires a concrete Delivery Unit rather than treating all as a gl
   assert.deepEqual(Array.from(fixture.context.getScopedEngineers()), []);
   fixture.setDeliveryUnit('');
   assert.deepEqual(Array.from(fixture.context.getScopedEngineers()), []);
+});
+
+test('SJN annual totals count only the selected Engineer, deduplicate aliases, and ignore job-wide totals', () => {
+  const fixture = loadPreviewContext();
+  const stored = { periods: { P1: 9999 }, wgs: {
+    'Old A description': { P1: 90, P2: 2 }, WGA: { P1: 0, P13: 3 },
+    WGB: { P1: 4 }, WGC: { P1: 7 }, WGD: { P1: 100 }
+  } };
+  assert.equal(fixture.context.getEngineerJobTotal(stored, 'du-a-1'), 9);
+  assert.equal(fixture.context.getEngineerJobTotal(stored, 'du-a-2'), 7);
+  assert.equal(fixture.context.getEngineerJobTotal(stored, 'du-b-1'), 0);
+  assert.equal(fixture.context.getEngineerJobTotal({ wgs: { WGC: { P1: 7 } } }, 'du-a-1'), 0);
+  fixture.setDeliveryUnit('du-b');
+  assert.equal(fixture.context.getEngineerJobTotal(stored, 'du-b-1'), 100);
 });
 
 test('all preview engineer operations use the central scoped helper', () => {

@@ -42,7 +42,22 @@ const server = http.createServer((req, res) => {
     });
     const jobCard = page.locator('[data-expand-card]').filter({ has: page.locator(`[data-expand-job="${Number(fixture.job)}"]`) });
     await page.locator(`[data-engineer-id="${fixture.engineer}"]`).click();
+    assert.equal(await jobCard.locator('.preview-job-total strong').innerText(), '4', 'SJN total excludes other Engineers and DUs');
+    const otherEngineer = await page.evaluate(b => getEngineerForWorkGroup(b).id, fixture.b);
+    await page.locator(`[data-engineer-id="${otherEngineer}"]`).click();
+    assert.equal(await jobCard.locator('.preview-job-total strong').innerText(), '5', 'SJN total follows Engineer selection');
+    await page.locator(`[data-engineer-id="${fixture.engineer}"]`).click();
+    await page.evaluate(async ({ job, a }) => {
+      const snapshot = getForecastSnapshot('FY27', 'v0').data;
+      snapshot.get(job).wgs[a].P1 = 0;
+      snapshot.get(job).periods.P1 = 11;
+      await saveForecastToStorageAsync(snapshot, snapshot.size, 'FY27', 'v0');
+      await closeForecastBuilderPreview(); await openForecastBuilderPreview();
+    }, fixture);
+    assert.equal(await jobCard.locator('.preview-job-total strong').innerText(), '0', 'zero for this Engineer stays zero when others have volume');
+    await page.evaluate(async () => { await window.smokeSeed(); await closeForecastBuilderPreview(); await openForecastBuilderPreview(); });
     await page.locator('[data-expand-job]').first().click();
+    assert.equal(await jobCard.locator('.preview-job-total strong').innerText(), '4', 'expanded and collapsed totals use the same Engineer scope');
     let input = page.locator(`[data-grid-wgs="${fixture.a}"][data-period="P1"]`);
     await input.fill('12');
     await page.locator('[data-undo-job]').first().click();
