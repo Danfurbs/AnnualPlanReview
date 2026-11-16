@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseFutureWorkWorkbook, patchForecastSnapshot, normalizeJob, appendImportComment } = require('../future-work-import');
+const { parseFutureWorkWorkbook, patchForecastSnapshot, normalizeJob, appendImportComment, readWorkGroupForecast } = require('../future-work-import');
 
 const XLSX = { utils: { sheet_to_json: sheet => sheet.rows } };
 const workbook = rows => ({ Sheets: { 'Period Summary': { rows } } });
@@ -125,6 +125,42 @@ test('job extraction and exact comment rules', () => {
   assert.equal(appendImportComment(''), 'forecast via future work report');
   assert.equal(appendImportComment('Existing'), 'Existing\nforecast via future work report');
   assert.equal(appendImportComment('Existing\n forecast via future work report '), 'Existing\n forecast via future work report ');
+});
+
+test('import merges WG description aliases into the code while retaining unreported periods and comments', () => {
+  const original = new Map([['001234', {
+    wgs: { 'Track team': { P1: 4, P2: 7 }, WGB: { P1: 3 } },
+    comments: { 'Track team': 'Existing note', WGB: 'Keep other WG' }
+  }]]);
+  const { data } = patchForecastSnapshot(original, [
+    { jobNumber: '001234', workGroup: 'WGA', period: 'P1', value: 0 },
+    { jobNumber: '001234', workGroup: 'WGA', period: 'P5', value: 35.2 }
+  ], options);
+  const patched = data.get('001234');
+  assert.deepEqual(patched.wgs.WGA, { P1: 0, P2: 7, P5: 35.2 });
+  assert.equal(patched.wgs['Track team'], undefined);
+  assert.equal(patched.comments['Track team'], undefined);
+  assert.equal(patched.comments.WGA, 'Existing note\nforecast via future work report');
+  assert.equal(patched.comments.WGB, 'Keep other WG');
+  assert.deepEqual(patched.periods, { P1: 3, P2: 7, P5: 35.2 });
+  assert.deepEqual(original.get('001234').wgs['Track team'], { P1: 4, P2: 7 });
+});
+
+test('already imported code values display ahead of older description values regardless of key order', () => {
+  for (const wgs of [
+    { 'Track team': { P1: 4, P2: 7 }, WGA: { P1: 0, P5: 35.2 } },
+    { WGA: { P1: 0, P5: 35.2 }, 'Track team': { P1: 4, P2: 7 } }
+  ]) {
+    const job = { wgs, comments: { 'Track team': 'Existing note', WGA: 'forecast via future work report' } };
+    const row = readWorkGroupForecast(job, 'WGA', options.resolveWorkGroupCode);
+    assert.deepEqual(row.periods, { P1: 0, P2: 7, P5: 35.2 });
+    assert.equal(row.comment, 'Existing note\nforecast via future work report');
+    const { data } = patchForecastSnapshot(new Map([['001234', job]]), [
+      { jobNumber: '001234', workGroup: 'WGA', period: 'P6', value: 2 }
+    ], options);
+    assert.deepEqual(data.get('001234').wgs, { WGA: { P1: 0, P2: 7, P5: 35.2, P6: 2 } });
+    assert.deepEqual(data.get('001234').periods, { P1: 0, P2: 7, P5: 35.2, P6: 2 });
+  }
 });
 
 test('patch replaces only reported cells, preserves other jobs/WGS, applies zero, and recalculates aggregate', () => {

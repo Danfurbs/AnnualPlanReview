@@ -74,7 +74,7 @@ const server = http.createServer((req, res) => {
     await page.waitForFunction(() => window.smokeCharts.at(-1).data.datasets.length > 2);
     // Copy explicit V1 zero into the current draft, without saving automatically.
     await page.locator(`[data-copy-context="forecast"][data-copy-year="FY26"][data-copy-wgs="${fixture.a}"]`).click();
-    assert.equal(await input.inputValue(), '');
+    assert.equal(await input.inputValue(), '0');
     saved = await page.evaluate(job => getForecastSnapshot('FY27', 'v0').data.get(job), fixture.job);
     assert.equal(saved.wgs[fixture.a].P1, 12);
     page.once('dialog', dialog => dialog.accept());
@@ -134,7 +134,34 @@ const server = http.createServer((req, res) => {
     await page.waitForFunction(({job,a}) => getForecastSnapshot('FY27', 'v0').data.get(job).wgs[a].P1 === 0 && !document.getElementById('forecastBuilderPreviewPage').inert, fixture);
     assert.equal((await read()).wgs[fixture.c].P1, 6);
     assert.equal((await read()).wgs[fixture.a].P5, 5, 'scheduled units aggregate by WG set and period');
+    assert.equal(await page.locator(`[data-grid-wgs="${fixture.a}"][data-period="P5"]`).inputValue(), '5');
+    assert.equal(await input.inputValue(), '0', 'imported zero is visible');
     assert.equal(await page.evaluate(() => localStorage.getItem('aprForecastPlanningMetadataV1')), metadataBefore);
+    // Recover imports saved alongside legacy description keys, then reimport.
+    const legacyDescription = await page.evaluate(async ({ job, a }) => {
+      const snapshot = getForecastSnapshot('FY27', 'v0').data;
+      const stored = snapshot.get(job), description = workGroupSets.get(a);
+      stored.wgs[description] = { P1: 4, P2: 7 };
+      stored.wgs[a] = { P1: 0, P5: 35.2 };
+      stored.comments[description] = 'Keep legacy comment';
+      await saveForecastToStorageAsync(snapshot, snapshot.size, 'FY27', 'v0');
+      await closeForecastBuilderPreview(); await openForecastBuilderPreview();
+      return description;
+    }, fixture);
+    if (!await page.locator('[data-grid-wgs]').count()) await page.locator('[data-expand-job]').first().click();
+    const periodInput = p => page.locator(`[data-grid-wgs="${fixture.a}"][data-period="${p}"]`);
+    assert.equal(await periodInput('P1').inputValue(), '0');
+    assert.equal(await periodInput('P2').inputValue(), '7');
+    assert.equal(await periodInput('P5').inputValue(), '35.2', 'previously hidden import is recovered without reuploading');
+    await reviewFutureWork();
+    await page.locator('#forecastPreviewFutureWorkConfirm').click();
+    await page.waitForFunction(() => !document.getElementById('forecastBuilderPreviewPage').inert);
+    saved = await read();
+    assert.equal(saved.wgs[legacyDescription], undefined, 'description alias is consolidated into the WG code');
+    assert.equal(saved.wgs[fixture.a].P2, 7, 'unreported period is preserved');
+    assert.equal(saved.periods.P1, 11, 'legacy aliases do not double count totals');
+    assert.equal(await periodInput('P5').inputValue(), '5');
+    assert.match(saved.comments[fixture.a], /Keep legacy comment/);
     // Export the selected DU and round-trip a V0 JSON replacement through UI.
     await page.evaluate(async () => { await window.smokeSeed(); await closeForecastBuilderPreview(); await openForecastBuilderPreview(); });
     if (!await page.locator('.preview-bulk-actions').evaluate(el => el.open)) await page.locator('.preview-bulk-actions > summary').click();

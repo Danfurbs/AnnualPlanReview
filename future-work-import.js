@@ -150,17 +150,30 @@
     return result;
   }
 
-  function patchForecastSnapshot(source, values) {
+  // Older plans use descriptions as keys; newer imports use catalogue codes.
+  // Merge matching aliases per period, with the canonical code taking priority.
+  function readWorkGroupForecast(job, workGroup, resolve = value => value) {
+    const identity = value => text(resolve(value) || value).toUpperCase();
+    const target = identity(workGroup);
+    const keys = [...new Set([...Object.keys(job?.wgs || {}), ...Object.keys(job?.comments || {})])]
+      .filter(key => identity(key) === target)
+      .sort((a, b) => Number(text(a).toUpperCase() === target) - Number(text(b).toUpperCase() === target));
+    const periods = Object.assign({}, ...keys.map(key => job?.wgs?.[key] || {}));
+    const comments = [...new Set(keys.map(key => text(job?.comments?.[key])).filter(Boolean))];
+    return { keys, periods, comment: comments.join('\n') };
+  }
+
+  function patchForecastSnapshot(source, values, options = {}) {
     const patched = new Map(Array.from(source || [], ([key, value]) => [key, clone(value)]));
     const affected = new Set();
     values.forEach(item => {
       let key = Array.from(patched.keys()).find(candidate => normalizeJob(candidate) === item.jobNumber) || item.jobNumber;
       const job = patched.get(key) || { periods: {}, wgs: {}, comments: {} };
       job.wgs ||= {}; job.comments ||= {};
-      const wgsKey = Object.keys(job.wgs).find(candidate => text(candidate).toUpperCase() === item.workGroup) || item.workGroup;
-      job.wgs[wgsKey] = { ...(job.wgs[wgsKey] || {}), [item.period]: item.value };
-      const commentKey = Object.keys(job.comments).find(candidate => text(candidate).toUpperCase() === item.workGroup) || item.workGroup;
-      job.comments[commentKey] = appendImportComment(job.comments[commentKey]);
+      const existing = readWorkGroupForecast(job, item.workGroup, options.resolveWorkGroupCode);
+      existing.keys.forEach(alias => { delete job.wgs[alias]; delete job.comments[alias]; });
+      job.wgs[item.workGroup] = { ...existing.periods, [item.period]: item.value };
+      job.comments[item.workGroup] = appendImportComment(existing.comment);
       patched.set(key, job); affected.add(`${item.jobNumber}|${item.workGroup}`);
     });
     new Set(values.map(item => item.jobNumber)).forEach(jobNumber => {
@@ -172,5 +185,5 @@
     });
     return { data: patched, affected };
   }
-  return { COMMENT, normalizeJob, decodeHeadings, parseFutureWorkWorkbook, appendImportComment, patchForecastSnapshot };
+  return { COMMENT, normalizeJob, decodeHeadings, parseFutureWorkWorkbook, appendImportComment, readWorkGroupForecast, patchForecastSnapshot };
 });
