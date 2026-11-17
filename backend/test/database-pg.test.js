@@ -36,6 +36,32 @@ function serviceWithClient(handler) {
   return { service, calls, wasReleased: () => released };
 }
 
+test('PostgreSQL batches source evidence with the forecast transaction and restores it', async () => {
+  const sources = { WG: { mst: { P2: 10 }, waif: { P2: 14 }, applied: { P2: 10 } } };
+  const fixture = serviceWithClient(sql => ({ rows: sql.includes('SELECT revision') ? [{ revision: 0 }] : [] }));
+  await fixture.service.saveAllForecasts({ '009144': { wgs: { WG: { P2: 10 } }, sources } }, 'FY27', 'v0', 0);
+  const insert = fixture.calls.find(call => call.sql.startsWith('INSERT INTO forecast_sources'));
+  assert.deepEqual(insert.params, [['009144'], ['FY27'], ['v0'], [JSON.stringify(sources)]]);
+  assert.ok(fixture.calls.indexOf(insert) < fixture.calls.findIndex(call => call.sql === 'COMMIT'));
+  fixture.service.pool.query = async sql => ({ rows: sql.includes('FROM forecast_sources')
+    ? [{ job_number: '009144', data_json: JSON.stringify(sources) }]
+    : sql.includes('FROM forecasts') ? [{ job_number: '009144', work_group: 'WG', period: 'P2', value: '10' }] : [] });
+  const result = await fixture.service.getForecastData('FY27', 'v0');
+  assert.deepEqual(result['009144'].sources, sources);
+  assert.equal(result['009144'].wgs.WG.P2, 10);
+});
+
+test('a source write failure rolls back PostgreSQL forecast replacement', async () => {
+  const fixture = serviceWithClient(sql => {
+    if (sql.includes('SELECT revision')) return { rows: [{ revision: 0 }] };
+    if (sql.startsWith('INSERT INTO forecast_sources')) throw new Error('source failed');
+    return { rows: [] };
+  });
+  await assert.rejects(fixture.service.saveAllForecasts({ '009144': { wgs: { WG: {} }, sources: { WG: {} } } }, 'FY27', 'v0', 0), /source failed/);
+  assert.equal(fixture.calls.some(call => call.sql === 'ROLLBACK'), true);
+  assert.equal(fixture.calls.some(call => call.sql === 'COMMIT'), false);
+});
+
 test('stale forecast replacement rolls back before deleting snapshot rows', async () => {
   const fixture = serviceWithClient(sql => {
     if (sql.includes('SELECT revision')) return { rows: [{ revision: 4 }] };
@@ -80,7 +106,7 @@ test('standard-job V0 save checks revision before replacing only that job', asyn
   const data = { wgs: { WG1: { P1: 0, P2: 4 }, WG2: { P1: 2 } }, comments: { WG2: 'Current-year V0 note' } };
   assert.equal(await fixture.service.saveForecast('9005', 'FY28', 'v0', data, 7), 8);
   const deletes = fixture.calls.filter(call => call.sql.startsWith('DELETE FROM forecast'));
-  assert.equal(deletes.length, 2);
+  assert.equal(deletes.length, 3);
   assert.equal(deletes.every(call => call.params[0] === '9005' && call.params[1] === 'FY28' && call.params[2] === 'v0'), true);
   assert.equal(fixture.calls.some(call => call.sql === 'COMMIT'), true);
 });

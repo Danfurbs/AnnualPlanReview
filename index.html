@@ -386,7 +386,8 @@
               </div>
             </div>
             <div class="preview-engineer-actions">
-              <button type="button" class="group-action-button" id="forecastPreviewFutureWork">Upload Future Work report</button>
+              <button type="button" class="group-action-button" id="forecastPreviewFutureWork">Upload MST forecast</button>
+              <button type="button" class="group-action-button" id="forecastPreviewWaif">Upload WAIF forecast</button>
               <button type="button" class="group-action-button" id="forecastPreviewPrevious">← Previous Engineer</button>
               <button type="button" class="group-action-button" id="forecastPreviewNext">Next Engineer →</button>
               <button type="button" class="primary-button" id="forecastPreviewAddJob">+ Add Standard Job</button>
@@ -449,11 +450,23 @@
     </div>
   </div>
 
+  <div class="modal" id="forecastPreviewWaifModal" role="dialog" aria-modal="true" aria-labelledby="forecastPreviewWaifTitle">
+    <div class="modal-content preview-future-work-modal">
+      <div class="modal-header"><div><span class="preview-eyebrow">Historical total prediction</span><h2 id="forecastPreviewWaifTitle">Upload WAIF forecast</h2></div><button class="close" type="button" id="forecastPreviewWaifClose" aria-label="Close">&times;</button></div>
+      <div class="preview-modal-body">
+        <p>Import Power BI average volumes into the selected FY, using Work Order Closed Period (1-13). Where MST is zero or missing, the prediction becomes the forecast. Where both have volume, retain MST and review the comparison in the job card. Existing manual adjustments are retained.</p>
+        <label for="forecastPreviewWaifFile">Power BI export (.csv)</label><input id="forecastPreviewWaifFile" type="file" accept=".csv">
+        <div id="forecastPreviewWaifReview" class="future-work-review" role="status" aria-live="polite">Choose a CSV to review.</div>
+      </div>
+      <div class="modal-actions"><button type="button" class="group-action-button" id="forecastPreviewWaifCancel">Cancel</button><button type="button" class="primary-button" id="forecastPreviewWaifConfirm" disabled>Import WAIF forecast</button></div>
+    </div>
+  </div>
+
   <div class="modal" id="forecastPreviewFutureWorkModal" role="dialog" aria-modal="true" aria-labelledby="forecastPreviewFutureWorkTitle">
     <div class="modal-content preview-future-work-modal">
-      <div class="modal-header"><div><span class="preview-eyebrow">Future Work import</span><h2 id="forecastPreviewFutureWorkTitle">Review Future Work report</h2><p class="helper-text"><strong>Only matching reported periods will be replaced.</strong> Unreported periods, jobs, and Work Group Sets remain unchanged.</p></div><button class="close" type="button" id="forecastPreviewFutureWorkClose" aria-label="Close">×</button></div>
+      <div class="modal-header"><div><span class="preview-eyebrow">MST forecast import</span><h2 id="forecastPreviewFutureWorkTitle">Review MST forecast</h2><p class="helper-text"><strong>Only matching reported periods will be replaced.</strong> Unreported periods, jobs, and Work Group Sets remain unchanged.</p></div><button class="close" type="button" id="forecastPreviewFutureWorkClose" aria-label="Close">×</button></div>
       <div class="preview-modal-body">
-        <label for="forecastPreviewFutureWorkFile">Future Work report (.xlsx or .xls)</label><input id="forecastPreviewFutureWorkFile" type="file" accept=".xlsx,.xls">
+        <label for="forecastPreviewFutureWorkFile">MST forecast — Future Work report (.xlsx or .xls)</label><input id="forecastPreviewFutureWorkFile" type="file" accept=".xlsx,.xls">
         <p class="helper-text">The Detail tab is used to sum Units Required for each Standard Job and Work Group Set by Completed Period Number (1–13).</p>
         <div id="forecastPreviewFutureWorkReview" class="future-work-review" role="status" aria-live="polite">Choose a report to parse and review locally. Nothing is saved until you confirm.</div>
       </div>
@@ -908,6 +921,7 @@
   <script src="forecast-state.js"></script>
   <script src="forecast-builder-data.js"></script>
   <script src="future-work-import.js"></script>
+  <script src="waif-forecast-import.js"></script>
   <script src="work-done-session.js"></script>
   <script src="work-order-review.js"></script>
   <script src="forecast-builder-actions.js"></script>

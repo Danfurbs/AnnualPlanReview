@@ -40,6 +40,27 @@ function sqlite() {
   service.ensureSchema(); service.prepareStatements();
   return { db, service };
 }
+
+test('MST and BI sources round-trip with forecasts, isolate years, and clear atomically', () => {
+  const { db, service } = sqlite();
+  try {
+    const sources = { WG: { mst: { P2: 10 }, waif: { P2: 14 }, applied: { P2: 10 } } };
+    const job = { wgs: { WG: { P2: 10 } }, comments: { WG: 'Source comparison' }, sources };
+    service.saveAllForecasts({ '009144': job }, 'FY27', 'v0', 0);
+    assert.deepEqual(service.getForecastSnapshot('FY27', 'v0').data['009144'].sources, sources);
+    assert.deepEqual(service.getForecastByJob('009144', 'FY27', 'v0').sources, sources);
+    service.saveForecast('009144', 'FY28', 'v0', job, 0);
+    const edited = structuredClone(job); edited.wgs.WG.P2 = 12;
+    service.saveForecast('009144', 'FY27', 'v0', edited, 1);
+    assert.equal(service.getForecastByJob('009144', 'FY27', 'v0').wgs.WG.P2, 12);
+    assert.deepEqual(service.getForecastByJob('009144', 'FY27', 'v0').sources, sources);
+    assert.throws(() => service.saveAllForecasts({}, 'FY27', 'v0', 0), /Revision conflict/);
+    assert.deepEqual(service.getForecastByJob('009144', 'FY27', 'v0').sources, sources);
+    service.saveAllForecasts({}, 'FY27', 'v0', 2);
+    assert.deepEqual(service.getForecastData('FY27', 'v0'), {});
+    assert.deepEqual(service.getForecastByJob('009144', 'FY28', 'v0').sources, sources);
+  } finally { db.close(); }
+});
 test('SQLite history is durable, scoped, and committed with both job and bulk saves', () => {
   const { db, service } = sqlite();
   try {

@@ -69,6 +69,18 @@ function validateForecastEntry(jobNumber, forecastData) {
     }
   }
 
+  if (forecastData.sources !== undefined) {
+    if (!isPlainObject(forecastData.sources) || Object.keys(forecastData.sources).length > MAX_WORKGROUPS_PER_JOB) return `Job ${jobNumber}: invalid forecast sources`;
+    for (const [group, evidence] of Object.entries(forecastData.sources)) {
+      if (!Object.hasOwn(forecastData.wgs, group) || !isPlainObject(evidence)) return `Job ${jobNumber}: source must match a Work Group Set`;
+      for (const [name, values] of Object.entries(evidence)) {
+        if (!['mst', 'waif', 'applied'].includes(name)) return `Job ${jobNumber}: invalid source '${name}'`;
+        const error = validatePeriods(values, `Job ${jobNumber} source '${name}'`);
+        if (error) return error;
+      }
+    }
+  }
+
   return null;
 }
 

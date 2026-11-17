@@ -14,6 +14,7 @@ Module._load = originalLoad;
 
 test('SQLite snapshot retains a comment-only job after resetting its numerical overrides', () => {
   const service = Object.create(SQLiteService.prototype);
+  service.db = { prepare: () => ({ all: () => [] }) };
   service.stmts = {
     getForecastsByYear: { all: () => [] },
     getForecastComments: { all: () => [{ job_number: '000123', work_group: 'WG', comment: 'Keep after reset' }] }

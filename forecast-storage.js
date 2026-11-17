@@ -105,7 +105,7 @@ function deepCloneJobEntry(jobEntry) {
     });
   }
 
-  return { periods, wgs, comments, amendments };
+  return { periods, wgs, comments, amendments, ...(jobEntry.sources ? { sources: JSON.parse(JSON.stringify(jobEntry.sources)) } : {}) };
 }
 
 /**

@@ -20,7 +20,7 @@
       for (const key of new Set([...Object.keys(job.wgs), ...Object.keys(job.comments)])) {
         if ((resolve(key) || key) === code) { delete job.wgs[key]; delete job.comments[key]; }
       }
-      if (draft.clearedWorkGroups.has(code)) continue;
+      if (draft.clearedWorkGroups.has(code)) { delete job.sources?.[code]; continue; }
       job.wgs[code] = Object.fromEntries(periods.map(p => {
         const value = model.parseCell(row.periods[p]) ?? 0;
         return [p, value];
@@ -41,7 +41,7 @@
       const old = normalized(before), current = normalized(remote);
       if (clearing) {
         if (!model.equal(old, current)) conflicts.push(`${code} (clear row)`);
-        remote.keys.forEach(key => { delete job.wgs[key]; delete job.comments[key]; });
+        remote.keys.forEach(key => { delete job.wgs[key]; delete job.comments[key]; delete job.sources?.[key]; });
         continue;
       }
       if (model.equal(old, desired)) continue;
@@ -59,7 +59,7 @@
       const job = clone(original);
       let removed = false;
       for (const wg of new Set([...Object.keys(job.wgs || {}), ...Object.keys(job.comments || {})])) {
-        if (includes(wg)) { delete job.wgs?.[wg]; delete job.comments?.[wg]; count++; removed = true; }
+        if (includes(wg)) { delete job.wgs?.[wg]; delete job.comments?.[wg]; delete job.sources?.[wg]; count++; removed = true; }
       }
       if (!removed) result.set(key, job);
       else if (Object.keys(job.wgs || {}).length || Object.keys(job.comments || {}).length) result.set(key, total(job));

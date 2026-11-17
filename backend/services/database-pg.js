@@ -35,6 +35,7 @@ class DatabaseServicePG {
 
   async ensureSchema() {
     await this.pool.query(history.schema);
+    await this.pool.query('CREATE TABLE IF NOT EXISTS forecast_sources (job_number TEXT NOT NULL, fiscal_year TEXT NOT NULL, plan_version TEXT NOT NULL, data_json TEXT NOT NULL, PRIMARY KEY(job_number, fiscal_year, plan_version))');
     await this.pool.query('CREATE TABLE IF NOT EXISTS work_order_amendment_revisions (order_id TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0)');
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS forecasts (
@@ -198,6 +199,8 @@ class DatabaseServicePG {
       const beforeRows = await client.query('SELECT * FROM forecasts WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3', [jobNumber, fiscalYear, planVersion]);
       const beforeComments = await client.query('SELECT * FROM forecast_comments WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3', [jobNumber, fiscalYear, planVersion]);
       const { wgs, comments } = forecastData;
+      await client.query('DELETE FROM forecast_sources WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3', [jobNumber, fiscalYear, planVersion]);
+      if (forecastData.sources) await client.query('INSERT INTO forecast_sources VALUES ($1, $2, $3, $4)', [jobNumber, fiscalYear, planVersion, JSON.stringify(forecastData.sources)]);
 
       // Delete existing forecast data for this job
       await client.query(
@@ -296,6 +299,12 @@ class DatabaseServicePG {
       data[row.job_number].comments[row.work_group] = row.comment;
     });
 
+    const sourcesResult = await connection.query('SELECT * FROM forecast_sources WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
+    for (const row of sourcesResult.rows) {
+      data[row.job_number] ||= { periods: {}, wgs: {}, comments: {} };
+      data[row.job_number].sources = JSON.parse(row.data_json);
+    }
+
     // Calculate period totals for each job
     Object.keys(data).forEach(jobNumber => {
       const job = data[jobNumber];
@@ -367,6 +376,9 @@ class DatabaseServicePG {
     comments.forEach(row => {
       data.comments[row.work_group] = row.comment;
     });
+
+    const source = await this.pool.query('SELECT data_json FROM forecast_sources WHERE job_number = $1 AND fiscal_year = $2 AND plan_version = $3', [jobNumber, fiscalYear, planVersion]);
+    if (source.rows[0]) data.sources = JSON.parse(source.rows[0].data_json);
 
     // Calculate period totals
     Object.values(data.wgs).forEach(wgPeriods => {
@@ -613,6 +625,12 @@ class DatabaseServicePG {
       const beforeComments = await client.query('SELECT * FROM forecast_comments WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
       await client.query('DELETE FROM forecasts WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
       await client.query('DELETE FROM forecast_comments WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
+
+      await client.query('DELETE FROM forecast_sources WHERE fiscal_year = $1 AND plan_version = $2', [fiscalYear, planVersion]);
+      const sources = Object.entries(data).filter(([, entry]) => entry.sources);
+      if (sources.length) await client.query('INSERT INTO forecast_sources SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[])', [
+        sources.map(([number]) => number), sources.map(() => fiscalYear), sources.map(() => planVersion), sources.map(([, entry]) => JSON.stringify(entry.sources))
+      ]);
 
       // Collect all forecast values and comments for batch insert
       const forecastValues = [];

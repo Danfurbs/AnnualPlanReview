@@ -288,7 +288,7 @@
     chart.update('none');
   }
   function renderGrid(job) { const draft = getDraft(job.jobNumber); const rows = Object.entries(draft.rows); return `<div class="preview-job-expanded"><p class="preview-grid-scroll-hint">Enter P1–P13. Paste a row of values to fill consecutive periods.</p><div class="preview-grid-scroll" tabindex="0" aria-label="Work Group Set periods; scroll horizontally for all columns"><table class="preview-wgs-grid"><colgroup><col class="preview-wgs-name-column">${PERIODS.map(() => '<col class="preview-period-column">').join('')}<col class="preview-total-column"><col class="preview-comment-column"></colgroup><thead><tr><th>Work Group Set</th>${PERIODS.map(p => `<th>${p}</th>`).join('')}<th>Total</th><th>Comment</th></tr></thead><tbody>${rows.map(([code, row]) => { const pendingClear = draft.clearedWorkGroups.has(code); return `<tr class="${pendingClear ? 'is-pending-clear' : ''}"><th scope="row"><span class="preview-wgs-heading"><span><strong>${escapeHtml(code)}</strong><small>${escapeHtml(window.workGroupSets?.get(code) || '')}</small></span><button type="button" class="preview-clear-wgs" data-clear-wgs="${escapeHtml(code)}" data-job="${escapeHtml(job.jobNumber)}" title="Clear this Work Group Set forecast when the job is saved" aria-label="Clear ${escapeHtml(code)} forecast for ${escapeHtml(state.selectedYear)}">&times;</button></span><span class="preview-reasons">${row.reasons.map(reason => `<span class="preview-reason">${escapeHtml(reason)}</span>`).join('')}</span>${pendingClear ? '<span class="preview-clear-pending">Will clear on save</span>' : ''}${row.reasons.includes('manually added') ? `<button type="button" class="preview-remove-wgs" data-remove-wgs="${escapeHtml(code)}" data-job="${escapeHtml(job.jobNumber)}">Remove</button>` : ''}</th>${PERIODS.map(p => `<td><input type="number" inputmode="decimal" min="0" step="any" aria-label="${escapeHtml(code)} ${p}" data-grid-job="${escapeHtml(job.jobNumber)}" data-grid-wgs="${escapeHtml(code)}" data-period="${p}" value="${pendingClear ? '' : (row.periods[p] ?? '')}" ${pendingClear ? 'disabled' : ''}></td>`).join('')}<td class="preview-row-total">${pendingClear ? '0' : PERIODS.reduce((n, p) => n + (Number(row.periods[p]) || 0), 0).toLocaleString()}</td><td><textarea data-comment-job="${escapeHtml(job.jobNumber)}" data-comment-wgs="${escapeHtml(code)}" aria-label="Current-year V0 comment for Work Group Set ${escapeHtml(code)}" ${pendingClear ? 'disabled' : ''}>${pendingClear ? '' : escapeHtml(row.comment)}</textarea></td></tr>`; }).join('')}</tbody></table></div><div class="preview-job-footer"><div class="preview-edit-actions"><button type="button" class="group-action-button" data-add-wgs="${escapeHtml(job.jobNumber)}">+ Add Work Group Set</button><button type="button" class="group-action-button" data-undo-job="${escapeHtml(job.jobNumber)}" ${!draft.undo.length ? 'disabled' : ''}>Undo</button><button type="button" class="group-action-button" data-redo-job="${escapeHtml(job.jobNumber)}" ${!draft.redo.length ? 'disabled' : ''}>Redo</button><button type="button" class="group-action-button" data-discard-job="${escapeHtml(job.jobNumber)}" ${!draft.dirty ? 'disabled' : ''}>Discard edits</button></div><div class="preview-save-actions"><span class="preview-job-save-message ${draft.error ? 'is-error' : ''}" role="status">${escapeHtml(draft.error || (draft.dirty ? 'Unsaved changes' : 'Up to date'))}</span><button type="button" class="primary-button" data-save-job="${escapeHtml(job.jobNumber)}" ${!draft.dirty || draft.saving ? 'disabled' : ''}>${draft.saving ? 'Saving…' : 'Save job'}</button></div></div></div>`; }
-  function renderJobList() { const allJobs = getJobs(), jobs = filteredJobs(allJobs), target = byId('forecastPreviewJobList'); if (!target) return; if (byId('forecastPreviewSjnCount')) byId('forecastPreviewSjnCount').textContent = jobs.length + ' of ' + allJobs.length + ' jobs shown'; if (!jobs.length) { target.innerHTML = '<div class="preview-empty forecast-card">' + (allJobs.length ? 'No jobs match your search and filter. Change or clear them to show more jobs.' : 'No Standard Jobs found. Use Add Standard Job for new work.') + '</div>'; return; } target.innerHTML = groupJobs(jobs).map(group => `<section class="preview-discipline-group" aria-labelledby="discipline-${escapeHtml(group.discipline.replace(/\W+/g, '-'))}"><h3 id="discipline-${escapeHtml(group.discipline.replace(/\W+/g, '-'))}">${escapeHtml(group.discipline)}</h3><div class="preview-job-list">${group.jobs.map(job => { const details = job.catalogue || {}, expanded = state.expanded.has(draftKey(job.jobNumber)), stored = getStoredJob(job.jobNumber), total = getEngineerJobTotal(stored), canRemove = window.canRemoveManuallyAddedStandardJob({ ...discoveryOptions(), jobNumber: job.jobNumber }); return `<article class="preview-job-card" data-expand-card="${escapeHtml(job.jobNumber)}"><div class="preview-job-card-main"><button type="button" class="preview-expand-job" data-expand-job="${escapeHtml(job.jobNumber)}" aria-expanded="${expanded}"><span aria-hidden="true">${expanded ? '▾' : '▸'}</span><span class="preview-job-number">${escapeHtml(normalizeJob(job.jobNumber))}</span><span>${escapeHtml(details.description || 'Standard Job')}</span></button><div class="preview-job-actions"><button type="button" class="group-action-button" data-audit-job="${escapeHtml(job.jobNumber)}">Saved history</button><div class="preview-job-total"><span>${escapeHtml(state.selectedYear)} V0 total</span><strong>${total.toLocaleString()}</strong></div>${canRemove ? `<button type="button" class="group-action-button preview-remove-job" data-remove-job="${escapeHtml(job.jobNumber)}">Remove</button>` : ''}<button type="button" class="preview-status-toggle ${job.forecasted ? 'is-forecasted' : ''}" data-job-number="${escapeHtml(job.jobNumber)}" data-forecasted="${job.forecasted}" aria-pressed="${job.forecasted}">${job.forecasted ? '✓ Complete' : (state.drafts.get(draftKey(job.jobNumber))?.dirty ? 'Save and mark complete' : 'Mark complete')}</button></div></div>${renderVolumeAdvisory(job.jobNumber)}<div class="preview-job-meta">${escapeHtml(details.unit || 'Unit not recorded')} · ${job.workGroupCount} Work Group Set${job.workGroupCount === 1 ? '' : 's'}</div><div class="preview-reasons">${job.reasons.map(r => `<span class="preview-reason">${escapeHtml(r)}</span>`).join('')}</div>${expanded ? `${renderGrid(job)}${renderHistoryControls(job.jobNumber)}${renderProfile(job.jobNumber)}` : ''}</article>`; }).join('')}</div></section>`).join(''); window.requestAnimationFrame?.(renderProfileCharts); }
+  function renderJobList() { const allJobs = getJobs(), jobs = filteredJobs(allJobs), target = byId('forecastPreviewJobList'); if (!target) return; if (byId('forecastPreviewSjnCount')) byId('forecastPreviewSjnCount').textContent = jobs.length + ' of ' + allJobs.length + ' jobs shown'; if (!jobs.length) { target.innerHTML = '<div class="preview-empty forecast-card">' + (allJobs.length ? 'No jobs match your search and filter. Change or clear them to show more jobs.' : 'No Standard Jobs found. Use Add Standard Job for new work.') + '</div>'; return; } target.innerHTML = groupJobs(jobs).map(group => `<section class="preview-discipline-group" aria-labelledby="discipline-${escapeHtml(group.discipline.replace(/\W+/g, '-'))}"><h3 id="discipline-${escapeHtml(group.discipline.replace(/\W+/g, '-'))}">${escapeHtml(group.discipline)}</h3><div class="preview-job-list">${group.jobs.map(job => { const details = job.catalogue || {}, expanded = state.expanded.has(draftKey(job.jobNumber)), stored = getStoredJob(job.jobNumber), total = getEngineerJobTotal(stored), canRemove = window.canRemoveManuallyAddedStandardJob({ ...discoveryOptions(), jobNumber: job.jobNumber }); return `<article class="preview-job-card" data-expand-card="${escapeHtml(job.jobNumber)}"><div class="preview-job-card-main"><button type="button" class="preview-expand-job" data-expand-job="${escapeHtml(job.jobNumber)}" aria-expanded="${expanded}"><span aria-hidden="true">${expanded ? '▾' : '▸'}</span><span class="preview-job-number">${escapeHtml(normalizeJob(job.jobNumber))}</span><span>${escapeHtml(details.description || 'Standard Job')}</span></button><div class="preview-job-actions"><button type="button" class="group-action-button" data-audit-job="${escapeHtml(job.jobNumber)}">Saved history</button><div class="preview-job-total"><span>${escapeHtml(state.selectedYear)} V0 total</span><strong>${total.toLocaleString()}</strong></div>${canRemove ? `<button type="button" class="group-action-button preview-remove-job" data-remove-job="${escapeHtml(job.jobNumber)}">Remove</button>` : ''}<button type="button" class="preview-status-toggle ${job.forecasted ? 'is-forecasted' : ''}" data-job-number="${escapeHtml(job.jobNumber)}" data-forecasted="${job.forecasted}" aria-pressed="${job.forecasted}">${job.forecasted ? '✓ Complete' : (state.drafts.get(draftKey(job.jobNumber))?.dirty ? 'Save and mark complete' : 'Mark complete')}</button></div></div>${renderVolumeAdvisory(job.jobNumber)}${renderWaifOverlapFlag(job)}<div class="preview-job-meta">${escapeHtml(details.unit || 'Unit not recorded')} · ${job.workGroupCount} Work Group Set${job.workGroupCount === 1 ? '' : 's'}</div><div class="preview-reasons">${job.reasons.map(r => `<span class="preview-reason">${escapeHtml(r)}</span>`).join('')}</div>${expanded ? `${renderWaifComparison(job)}${renderGrid(job)}${renderHistoryControls(job.jobNumber)}${renderProfile(job.jobNumber)}` : ''}</article>`; }).join('')}</div></section>`).join(''); window.requestAnimationFrame?.(renderProfileCharts); }
   function scrollActiveEngineerIntoView() {
     const list = byId('forecastPreviewEngineerList'), active = list?.querySelector('.active');
     if (!list || !active) return;
@@ -322,6 +322,7 @@
     state.busy = busy;
     byId('forecastBuilderPreviewPage').inert = busy;
     byId('forecastPreviewFutureWorkModal').inert = busy;
+    byId('forecastPreviewWaifModal').inert = busy;
   }
   async function saveJob(jobNumber) {
     if (state.busy) return;
@@ -414,6 +415,7 @@
       if (!rows.length) throw new Error('No saved V0 rows in this scope.');
       if (format === 'json') {
         const data = window.ForecastBuilderActions.importRows(rows, year, value => value);
+        window.WaifForecastImport.restoreSources(data, source, window.resolveWorkGroupCode);
         window.exportForecastFile(year, 'v0', data, data.size);
       } else {
         const headings = Object.keys(rows[0]), escape = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
@@ -428,16 +430,18 @@
     setBusy(true);
     try {
       const year = state.selectedYear;
-      let rows;
+      let rows, evidenceSource;
       if (/\.json$/i.test(file.name)) {
         const payload = JSON.parse(await file.text()), source = payload.forecasts?.[year]?.v0?.data;
         if (!source || typeof source !== 'object' || Array.isArray(source)) throw new Error('Expected a V0 JSON export for the selected FY.');
-        rows = window.ForecastBuilderActions.exportRows(new Map(Object.entries(source)), year);
+        evidenceSource = new Map(Object.entries(source));
+        rows = window.ForecastBuilderActions.exportRows(evidenceSource, year);
       } else {
         const workbook = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
         rows = window.XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' });
       }
       const data = window.ForecastBuilderActions.importRows(rows, year, window.resolveWorkGroupCode);
+      if (evidenceSource) window.WaifForecastImport.restoreSources(data, evidenceSource, window.resolveWorkGroupCode);
       if (window.prompt(`Replace ALL ${year} V0 forecasts and forecast comments across every Engineer and Delivery Unit with ${data.size} jobs from ${file.name}? V1 and other years are retained. Type REPLACE ${year} to confirm.`) !== `REPLACE ${year}`) return;
       await requireForecastSnapshot(year);
       if (!await window.saveForecastToStorageAsync(data, data.size, year, 'v0')) throw new Error('Replacement failed; no confirmed save.');
@@ -556,6 +560,88 @@
   function openWgsModal(job) { state.addWgsJob = job; state.selectedWgs = ''; byId('forecastPreviewWgsSearch').value = ''; byId('forecastPreviewAddWgsMessage').textContent = ''; renderWgsResults(); byId('forecastPreviewAddWgsModal').classList.add('open'); byId('forecastPreviewWgsSearch').focus(); }
   function closeWgsModal() { byId('forecastPreviewAddWgsModal').classList.remove('open'); }
   async function addWgs() { if (!state.selectedWgs) return byId('forecastPreviewAddWgsMessage').textContent = 'Select a Work Group Set.'; const item = { fiscalYear: state.selectedYear, engineerId: state.selectedEngineerId, jobNumber: normalizeJob(state.addWgsJob), workGroup: state.selectedWgs, forecasted: false, manuallyAdded: true }, saved = await persistMetadata(item); state.metadata = [...state.metadata.filter(x => metadataKey(x) !== metadataKey(saved)), saved]; const draft = getDraft(state.addWgsJob); if (!draft.rows[state.selectedWgs]) { const stored = getStoredJob(state.addWgsJob), alias = Object.keys(stored.wgs || {}).find(code => (window.resolveWorkGroupCode?.(code) || code) === state.selectedWgs) || state.selectedWgs; draft.rows[state.selectedWgs] = { periods: Object.fromEntries(PERIODS.map(p => [p, Number(stored.wgs?.[alias]?.[p]) || 0])), comment: String(stored.comments?.[alias] || ''), reasons: ['manually added'] }; } rebuildEngineerJobCache(); closeWgsModal(); renderAll(); }
+  let waifSerial = 0, waifReview = null;
+  function closeWaifModal() {
+    waifSerial++; waifReview = null;
+    byId('forecastPreviewWaifModal').classList.remove('open');
+    byId('forecastPreviewWaifFile').value = '';
+    byId('forecastPreviewWaifConfirm').disabled = true;
+  }
+  function openWaifModal() {
+    closeWaifModal();
+    byId('forecastPreviewWaifReview').textContent = `Choose a CSV for ${state.selectedYear}. Imported values apply across the Work Group Sets in the file.`;
+    byId('forecastPreviewWaifModal').classList.add('open');
+  }
+  function waifSummary(result, source) {
+    let automatic = 0, overlaps = 0, protectedValues = 0;
+    const entries = new Map(Array.from(source, ([key, entry]) => [normalizeJob(key), entry]));
+    result.values.forEach(item => {
+      const entry = entries.get(normalizeJob(item.jobNumber));
+      const row = window.ForecastModel.readWorkGroupForecast(entry, item.workGroup, window.resolveWorkGroupCode);
+      const evidence = entry?.sources?.[item.workGroup];
+      const current = Number(row.periods[item.period]) || 0;
+      const mst = evidence?.mst?.[item.period] ?? current;
+      if (evidence?.applied && Object.hasOwn(evidence.applied, item.period) && current !== evidence.applied[item.period]) protectedValues++;
+      else if (mst > 0 && item.value > 0) overlaps++;
+      else if (!mst) automatic++;
+    });
+    return `${automatic} period values eligible for direct import; ${overlaps} overlaps retain planned volumes; ${protectedValues} manual adjustments retained.`;
+  }
+  async function reviewWaifFile(file) {
+    const serial = ++waifSerial, year = state.selectedYear;
+    waifReview = null; byId('forecastPreviewWaifConfirm').disabled = true;
+    if (!file) return;
+    byId('forecastPreviewWaifReview').textContent = `Reading ${file.name}...`;
+    try {
+      const csv = await file.text();
+      if (serial !== waifSerial || year !== state.selectedYear) return;
+      const result = window.WaifForecastImport.parseCsv(csv, { activeJobs: catalogue().map(job => job.storedJobNumber), activeWorkGroups: window.workGroupSets?.keys() || [], resolveWorkGroupCode: window.resolveWorkGroupCode });
+      waifReview = { ...result, year };
+      const notes = [...result.errors, ...result.warnings, ...result.exceptions];
+      byId('forecastPreviewWaifReview').innerHTML = `<p><strong>${escapeHtml(file.name)}</strong> → ${escapeHtml(year)} V0</p><p>${escapeHtml(result.volumeHeading || '')}</p><p>${result.recognisedRows} recognised rows; ${result.ignoredRows} ignored rows; ${result.values.length} period values. Periods: ${escapeHtml(result.periods.join(', ') || 'none')}.</p><p>${escapeHtml(waifSummary(result, state.v0ForecastsByYear[year] || new Map()))}</p>${notes.length ? `<ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : ''}`;
+      byId('forecastPreviewWaifConfirm').disabled = Boolean(result.errors.length || !result.values.length);
+    } catch (error) {
+      if (serial === waifSerial) { waifReview = null; byId('forecastPreviewWaifReview').textContent = `Could not read CSV: ${error.message}`; }
+    }
+  }
+  async function confirmWaifImport() {
+    const result = waifReview;
+    if (!result || result.errors.length || !result.values.length || state.busy || result.year !== state.selectedYear) return;
+    if (overlappingDraftKeys(result.values).length) return window.Toast?.error('Save or discard unsaved edits in affected Standard Jobs before importing.');
+    setBusy(true);
+    try {
+      const original = (await requireForecastSnapshot(result.year)).data;
+      const patched = window.WaifForecastImport.patchSnapshot(original, result.values, { resolveWorkGroupCode: window.resolveWorkGroupCode });
+      if (!await window.saveForecastToStorageAsync(patched.data, patched.data.size, result.year, 'v0')) throw new Error('V0 save was not confirmed');
+      const jobs = new Set(result.values.map(item => normalizeJob(item.jobNumber)));
+      [...state.drafts.keys()].filter(key => jobs.has(normalizeJob(key.split('|').pop()))).forEach(key => state.drafts.delete(key));
+      closeWaifModal(); await refreshPreview();
+      window.Toast?.success(`WAIF forecast saved. ${waifSummary(result, original)}`);
+    } catch (error) { window.Toast?.error(`WAIF import not saved: ${error.message}. Retry when ready.`); }
+    finally { setBusy(false); }
+  }
+  function renderWaifOverlapFlag(job) {
+    const engineer = getScopedEngineers().find(item => item.id === state.selectedEngineerId);
+    const groups = new Set((engineer?.workGroupSets || []).map(code => window.ForecastModel.workGroupIdentity(code, window.resolveWorkGroupCode)));
+    const count = Object.entries(getStoredJob(job.jobNumber).sources || {}).reduce((total, [code, evidence]) => total + (groups.has(window.ForecastModel.workGroupIdentity(code, window.resolveWorkGroupCode)) ? PERIODS.filter(period => evidence.mst?.[period] > 0 && evidence.waif?.[period] > 0).length : 0), 0);
+    return count ? '<span class="preview-volume-advisory" title="Open this job to compare planned MST with the historical total prediction before agreeing additional work.">' + count + ' MST / BI overlap' + (count === 1 ? '' : 's') + '</span>' : '';
+  }
+  function renderWaifComparison(job) {
+    const stored = getStoredJob(job.jobNumber), engineer = getScopedEngineers().find(item => item.id === state.selectedEngineerId);
+    const groups = new Set((engineer?.workGroupSets || []).map(code => window.ForecastModel.workGroupIdentity(code, window.resolveWorkGroupCode)));
+    const rows = [];
+    Object.entries(stored.sources || {}).forEach(([code, evidence]) => {
+      if (!groups.has(window.ForecastModel.workGroupIdentity(code, window.resolveWorkGroupCode))) return;
+      PERIODS.forEach(period => {
+        if (!Object.hasOwn(evidence.waif || {}, period)) return;
+        const mst = evidence.mst?.[period] || 0, predicted = evidence.waif[period];
+        const current = window.ForecastModel.readWorkGroupForecast(stored, code, window.resolveWorkGroupCode).periods[period] || 0;
+        rows.push(`<tr><th scope="row">${escapeHtml(code)} ${period}</th><td>${mst.toLocaleString()}</td><td>${predicted.toLocaleString()}</td><td>${Math.max(0, predicted - mst).toLocaleString()}</td><td>${current.toLocaleString()}</td><td>${mst > 0 && predicted > 0 ? 'Review overlap' : mst > 0 ? 'MST retained' : 'BI volume used unless manually adjusted'}</td></tr>`);
+      });
+    });
+    return rows.length ? `<details class="forecast-card preview-waif-comparison" open><summary>MST / WAIF source comparison</summary><p>The BI figure predicts total workload. Suggested additional is max(BI − MST, 0), not an automatic addition. Review overlaps, edit final period volumes in the grid, then save and mark the job complete. These source figures show saved values.</p><div class="preview-grid-scroll"><table class="future-work-discipline-totals"><thead><tr><th>Work Group / period</th><th>MST planned</th><th>BI total prediction</th><th>Suggested additional</th><th>Saved forecast</th><th>Treatment</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></details>` : '';
+  }
+
   function closeFutureWorkModal() { state.futureWorkParseSerial += 1; byId('forecastPreviewFutureWorkModal')?.classList.remove('open'); state.futureWorkReview = null; state.futureWorkFileName = ''; if (byId('forecastPreviewFutureWorkFile')) byId('forecastPreviewFutureWorkFile').value = ''; }
   function openFutureWorkModal() { state.futureWorkReview = null; byId('forecastPreviewFutureWorkReview').textContent = 'Choose a report to parse and review locally. Nothing is saved until you confirm.'; byId('forecastPreviewFutureWorkConfirm').disabled = true; byId('forecastPreviewFutureWorkModal').classList.add('open'); }
   function renderFutureWorkReview(result) {
@@ -598,14 +684,14 @@
     setBusy(true);
     try {
       const original = (await requireForecastSnapshot(year)).data;
-      const patched = window.FutureWorkImport.patchForecastSnapshot(original, result.values, { resolveWorkGroupCode: window.resolveWorkGroupCode });
+      const patched = window.WaifForecastImport.patchSnapshot(original, result.values, { source: 'mst', resolveWorkGroupCode: window.resolveWorkGroupCode });
       // The import source comment supplies current-V0 discovery even for an
       // explicit zero. No separate metadata writes or partial rollback needed.
       if (!await window.saveForecastToStorageAsync(patched.data, patched.data.size, year, 'v0')) throw new Error('V0 save was not confirmed.');
       const affectedJobs = new Set(result.values.map(item => normalizeJob(item.jobNumber)));
       Array.from(state.drafts.keys()).filter(key => affectedJobs.has(normalizeJob(key.split('|').pop()))).forEach(key => state.drafts.delete(key));
       closeFutureWorkModal(); await refreshPreview();
-      window.Toast?.success(`Imported ${result.values.length} Future Work period values.`);
+      window.Toast?.success(`Imported ${result.values.length} MST forecast period values.`);
     } catch (error) { window.Toast?.error(`Import not saved: ${error.message}. Drafts retained; retry when ready.`); }
     finally { setBusy(false); }
   }
@@ -628,7 +714,7 @@
         if (!pending) { pending = true; window.requestAnimationFrame(updateHeader); }
       }, { passive: true });
     }
-    byId('forecastPreviewYear')?.addEventListener('change', event => { if (!confirmDiscard()) { event.target.value = state.selectedYear; return; } state.evidenceParseSerial += 1; clearTemporaryEvidence({ render: false, all: true }); state.drafts.clear(); state.expanded.clear(); state.selectedYear = event.target.value; syncEvidenceYearOptions(); refreshPreview(); });
+    byId('forecastPreviewYear')?.addEventListener('change', event => { closeWaifModal(); closeFutureWorkModal(); if (!confirmDiscard()) { event.target.value = state.selectedYear; return; } state.evidenceParseSerial += 1; clearTemporaryEvidence({ render: false, all: true }); state.drafts.clear(); state.expanded.clear(); state.selectedYear = event.target.value; syncEvidenceYearOptions(); refreshPreview(); });
     byId('forecastPreviewEvidenceYear')?.addEventListener('change', () => { state.evidenceParseSerial += 1; byId('forecastPreviewEvidenceFile').value = ''; renderTemporaryEvidenceStatus(); });
     byId('forecastPreviewEngineerSearch')?.addEventListener('input', e => { state.search = e.target.value; renderEngineerList(); });
     byId('forecastPreviewSjnSearch')?.addEventListener('input', event => { state.jobSearch = event.target.value; renderJobList(); });
@@ -647,6 +733,11 @@
     byId('forecastPreviewWgsSearch')?.addEventListener('input', renderWgsResults); byId('forecastPreviewWgsOptions')?.addEventListener('click', e => { const b = e.target.closest('[data-catalogue-wgs]'); if (b && !b.disabled) { state.selectedWgs = b.dataset.catalogueWgs; renderWgsResults(); } });
     byId('forecastPreviewWgsOptions')?.addEventListener('keydown', event => handleListboxKeyboard(event, '[data-catalogue-wgs]', button => { state.selectedWgs = button.dataset.catalogueWgs; renderWgsResults(); }));
     byId('forecastPreviewCloseWgs')?.addEventListener('click', closeWgsModal); byId('forecastPreviewCancelWgs')?.addEventListener('click', closeWgsModal); byId('forecastPreviewConfirmWgs')?.addEventListener('click', () => addWgs().catch(error => window.Toast?.error(error.message)));
+    byId('forecastPreviewWaif')?.addEventListener('click', openWaifModal);
+    byId('forecastPreviewWaifClose')?.addEventListener('click', closeWaifModal);
+    byId('forecastPreviewWaifCancel')?.addEventListener('click', closeWaifModal);
+    byId('forecastPreviewWaifFile')?.addEventListener('change', event => reviewWaifFile(event.target.files?.[0]));
+    byId('forecastPreviewWaifConfirm')?.addEventListener('click', confirmWaifImport);
     byId('forecastPreviewFutureWork')?.addEventListener('click', openFutureWorkModal); byId('forecastPreviewFutureWorkClose')?.addEventListener('click', closeFutureWorkModal); byId('forecastPreviewFutureWorkCancel')?.addEventListener('click', closeFutureWorkModal); byId('forecastPreviewFutureWorkFile')?.addEventListener('change', event => reviewFutureWorkFile(event.target.files?.[0])); byId('forecastPreviewFutureWorkConfirm')?.addEventListener('click', () => confirmFutureWorkImport().catch(error => { window.Toast?.error(error.message); byId('forecastPreviewFutureWorkConfirm').disabled = false; }));
     byId('forecastPreviewEngineerList')?.addEventListener('click', e => { const b = e.target.closest('[data-engineer-id]'); if (b && b.dataset.engineerId !== state.selectedEngineerId && confirmDiscard()) { state.drafts.clear(); state.expanded.clear(); state.selectedEngineerId = b.dataset.engineerId; renderAll(); } });
     byId('forecastPreviewJobList')?.addEventListener('click', async e => { try { const undo = e.target.closest('[data-undo-job]'), redo = e.target.closest('[data-redo-job]'), discard = e.target.closest('[data-discard-job]'), expand = e.target.closest('[data-expand-job]'), status = e.target.closest('[data-job-number]'), save = e.target.closest('[data-save-job]'), add = e.target.closest('[data-add-wgs]'), clear = e.target.closest('[data-clear-wgs]'), remove = e.target.closest('[data-remove-wgs]'), removeJob = e.target.closest('[data-remove-job]'), context = e.target.closest('[data-context-job]'), copy = e.target.closest('[data-copy-context]'), history = e.target.closest('[data-show-history]'), profileStep = e.target.closest('[data-profile-step]'), copyProfile = e.target.closest('[data-copy-profile]'), card = e.target.closest('[data-expand-card]'); if (undo) undoDraft(undo.dataset.undoJob); else if (redo) undoDraft(redo.dataset.redoJob, true); else if (discard) discardJob(discard.dataset.discardJob); else if (expand) toggleExpandedJob(expand.dataset.expandJob); else if (status) await toggleForecasted(status); else if (save) await saveJob(save.dataset.saveJob); else if (add) openWgsModal(add.dataset.addWgs); else if (clear) clearWorkGroupForecast(clear.dataset.job, clear.dataset.clearWgs); else if (removeJob) await removeStandardJob(removeJob.dataset.removeJob); else if (context) await togglePlanningContext(context.dataset.contextJob, context.dataset.contextWgs); else if (copy) copyHistoricalProfile(copy); else if (history) await toggleAllHistory(history.dataset.showHistory); else if (copyProfile) copySelectedProfile(copyProfile.dataset.copyProfile); else if (profileStep) switchProfileWorkGroup(profileStep.dataset.profileJob, Number(profileStep.dataset.profileStep)); else if (remove) { const draft = getDraft(remove.dataset.job), row = draft.rows[remove.dataset.removeWgs]; if (PERIODS.some(p => row.periods[p]) || row.comment.trim()) return window.Toast?.error('This row has V0 data or a comment and cannot be removed.'); const item = { fiscalYear: state.selectedYear, engineerId: state.selectedEngineerId, jobNumber: normalizeJob(remove.dataset.job), workGroup: remove.dataset.removeWgs }; await removeMetadata(item); state.metadata = state.metadata.filter(x => metadataKey(x) !== metadataKey(item)); delete draft.rows[remove.dataset.removeWgs]; rebuildEngineerJobCache(); renderAll(); } else if (card && !e.target.closest('button, input, textarea, select, a, summary, details, .preview-job-expanded, .preview-history-controls, .preview-profile')) toggleExpandedJob(card.dataset.expandCard); } catch (error) { window.Toast?.error(error.message); } });

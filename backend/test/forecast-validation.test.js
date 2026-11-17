@@ -11,6 +11,17 @@ const createForecastRoutes = require('../routes/forecasts');
 Module._load = originalLoad;
 const { validateForecastEntry } = createForecastRoutes;
 
+test('source evidence requires known groups, valid periods and non-negative volumes', () => {
+  const entry = { wgs: { WG: { P2: 10 } }, sources: { WG: { mst: { P2: 10 }, waif: { P2: 14 }, applied: { P2: 10 } } } };
+  assert.equal(validateForecastEntry('009144', entry), null);
+  entry.sources.WG.waif.P2 = -1;
+  assert.match(validateForecastEntry('009144', entry), /non-negative/);
+  entry.sources = { Unknown: { mst: {} } };
+  assert.match(validateForecastEntry('009144', entry), /match a Work Group/);
+  entry.sources = { WG: { invalid: {} } };
+  assert.match(validateForecastEntry('009144', entry), /invalid source/);
+});
+
 test('forecast validation accepts zero and positive values', () => {
   assert.equal(validateForecastEntry('000001', {
     periods: { P1: 0, P2: 2.5 },

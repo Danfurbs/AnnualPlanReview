@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const test = require('node:test');
 const vm = require('node:vm');
 
-function loadForecastStorage(workGroupSets = new Map(), windowOverrides = {}) {
+function loadForecastStorage(workGroupSets = new Map(), windowOverrides = {}, clone = structuredClone) {
   const storage = new Map();
   const window = {
     workGroupSets,
@@ -18,13 +18,23 @@ function loadForecastStorage(workGroupSets = new Map(), windowOverrides = {}) {
     window,
     localStorage: window.localStorage,
     console,
-    structuredClone,
+    structuredClone: clone,
     Map,
     Set
   });
   vm.runInContext(fs.readFileSync('forecast-storage.js', 'utf8'), context);
   return window;
 }
+
+test('historical prediction sources survive fallback cloning and local storage independently', () => {
+  const storage = loadForecastStorage(new Map(), {}, null);
+  const job = { periods: { P2: 6 }, wgs: { WG: { P2: 6 } }, sources: { WG: { mst: { P2: 0 }, waif: { P2: 6 }, applied: { P2: 6 } } } };
+  storage.saveForecastToStorage(new Map([['009144', job]]), 1, 'FY27', 'v0', false);
+  const restored = storage.loadForecastFromStorage('FY27', 'v0').data.get('009144');
+  assert.deepEqual(JSON.parse(JSON.stringify(restored.sources)), job.sources);
+  restored.sources.WG.waif.P2 = 99;
+  assert.equal(job.sources.WG.waif.P2, 6);
+});
 
 test('v1 inherits missing periods but explicitly overrides a period with zero', () => {
   const forecast = loadForecastStorage();

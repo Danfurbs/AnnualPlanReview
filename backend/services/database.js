@@ -41,6 +41,7 @@ class DatabaseService {
 
   ensureSchema() {
     this.db.exec(history.schema);
+    this.db.exec('CREATE TABLE IF NOT EXISTS forecast_sources (job_number TEXT NOT NULL, fiscal_year TEXT NOT NULL, plan_version TEXT NOT NULL, data_json TEXT NOT NULL, PRIMARY KEY(job_number, fiscal_year, plan_version))');
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS forecasts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -337,6 +338,8 @@ class DatabaseService {
       // Delete existing forecast data for this job
       this.stmts.deleteForecastsByJob.run(jobNumber, fiscalYear, planVersion);
       this.stmts.deleteForecastCommentsByJob.run(jobNumber, fiscalYear, planVersion);
+      this.db.prepare('DELETE FROM forecast_sources WHERE job_number = ? AND fiscal_year = ? AND plan_version = ?').run(jobNumber, fiscalYear, planVersion);
+      if (data.sources) this.db.prepare('INSERT INTO forecast_sources VALUES (?, ?, ?, ?)').run(jobNumber, fiscalYear, planVersion, JSON.stringify(data.sources));
 
       // Insert forecast values for each work group and period
       for (const [workGroup, periods] of Object.entries(wgs)) {
@@ -405,6 +408,11 @@ class DatabaseService {
       data[row.job_number].comments[row.work_group] = row.comment;
     });
 
+    for (const row of this.db.prepare('SELECT * FROM forecast_sources WHERE fiscal_year = ? AND plan_version = ?').all(fiscalYear, planVersion)) {
+      data[row.job_number] ||= { periods: {}, wgs: {}, comments: {} };
+      data[row.job_number].sources = JSON.parse(row.data_json);
+    }
+
     // Calculate period totals for each job
     Object.keys(data).forEach(jobNumber => {
       const job = data[jobNumber];
@@ -447,6 +455,9 @@ class DatabaseService {
     comments.forEach(row => {
       data.comments[row.work_group] = row.comment;
     });
+
+    const source = this.db.prepare('SELECT data_json FROM forecast_sources WHERE job_number = ? AND fiscal_year = ? AND plan_version = ?').get(jobNumber, fiscalYear, planVersion);
+    if (source) data.sources = JSON.parse(source.data_json);
 
     // Calculate period totals
     Object.values(data.wgs).forEach(wgPeriods => {
@@ -622,6 +633,11 @@ class DatabaseService {
       const audit = history.forecastEvents(before, forecastData, fiscalYear, planVersion);
       this.stmts.deleteForecastsByVersion.run(fiscalYear, planVersion);
       this.stmts.deleteForecastCommentsByVersion.run(fiscalYear, planVersion);
+      this.db.prepare('DELETE FROM forecast_sources WHERE fiscal_year = ? AND plan_version = ?').run(fiscalYear, planVersion);
+      const insertSource = this.db.prepare('INSERT INTO forecast_sources VALUES (?, ?, ?, ?)');
+      for (const [number, entry] of Object.entries(forecastData)) {
+        if (entry.sources) insertSource.run(number, fiscalYear, planVersion, JSON.stringify(entry.sources));
+      }
       for (const [jobNumber, jobData] of Object.entries(forecastData)) {
         const { wgs, comments } = jobData;
 
