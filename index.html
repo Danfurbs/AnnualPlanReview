@@ -732,6 +732,12 @@
         <button type="button" class="close" onclick="closeWorkGroupPlanEditor()" aria-label="Close">&times;</button>
       </div>
       <p class="helper-text">Blank inherits V0; enter 0 to explicitly forecast zero. Using V0 retains your forecast comments.</p>
+      <div class="wg-plan-work-done-fill">
+        <label for="workGroupPlanWorkDoneThrough">Set completed periods from Work Done, P1 through</label>
+        <select id="workGroupPlanWorkDoneThrough" aria-label="Last completed period to copy from Work Done"></select>
+        <button type="button" class="group-action-button" id="workGroupPlanWorkDoneFill" onclick="fillWorkGroupPlanFromWorkDone()">Use Work Done for selected periods</button>
+        <small id="workGroupPlanWorkDoneMessage" class="helper-text"></small>
+      </div>
       <div id="workGroupPlanEditGrid" class="wg-plan-edit-grid"></div>
       <div class="modal-actions">
         <button type="button" class="danger-button" id="resetWorkGroupPlanEdit" onclick="resetBreakdownPlanV1()" hidden>Use V0 for all periods</button>
