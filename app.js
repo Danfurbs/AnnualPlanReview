@@ -2799,12 +2799,14 @@
         ...rollupFiltered.filter(applyReviewStatusFilter).filter(applyVarianceFilter).filter(applyZeroVolumeFilter)
       ];
       
-      filtered.sort((a,b) => {
-        const aDisplay = getJobDisplayData(a);
-        const bDisplay = getJobDisplayData(b);
-        const av = period==='all' ? Math.abs(aDisplay.tot.v) : Math.abs(aDisplay.periods[period]?.v||0);
-        const bv = period==='all' ? Math.abs(bDisplay.tot.v) : Math.abs(bDisplay.periods[period]?.v||0);
-        return bv - av;
+      // Use the same authoritative job sequence as the RF review workbook.
+      // Never reorder dashboard jobs when their variance or review state changes.
+      const rfOrder = new Map((window.APRExportLayout || []).map(([number], index) => [String(number).padStart(6, '0'), index]));
+      filtered.sort((a, b) => {
+        if (a.isGroupRollup !== b.isGroupRollup) return a.isGroupRollup ? 1 : -1;
+        const ai = rfOrder.get(String(a.jn).padStart(6, '0')) ?? Infinity;
+        const bi = rfOrder.get(String(b.jn).padStart(6, '0')) ?? Infinity;
+        return ai - bi || String(a.jn).localeCompare(String(b.jn)) || String(a.groupId || '').localeCompare(String(b.groupId || ''));
       });
 
       const byDisc = {};
@@ -2840,17 +2842,14 @@
       // Keep dashboard sections in the agreed operational order.
       // ALL remains after the named disciplines, with group rollups always last.
       const disciplineOrder = ['PWAY', 'RT&L', 'W&G', 'Off Track', 'S&T', 'E&P - CS', 'E&P - D', 'ALL', 'Group Rollups'];
+      const rfDisciplineOrder = [...new Set((window.APRExportLayout || []).map(([, discipline]) => discipline))];
       const sortedDisciplines = Object.keys(byDisc).sort((a, b) => {
-        const aIndex = disciplineOrder.indexOf(a);
-        const bIndex = disciplineOrder.indexOf(b);
-        // Both in order list - sort by order
-        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-        // Only a in order list - a comes first
-        if (aIndex !== -1) return -1;
-        // Only b in order list - b comes first
-        if (bIndex !== -1) return 1;
-        // Neither in list - sort alphabetically
-        return a.localeCompare(b);
+        if (a === 'Group Rollups' || b === 'Group Rollups') return a === 'Group Rollups' ? 1 : -1;
+        const aIndex = rfDisciplineOrder.indexOf(a);
+        const bIndex = rfDisciplineOrder.indexOf(b);
+        if (aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? Infinity : aIndex) - (bIndex === -1 ? Infinity : bIndex);
+        const fallbackA = disciplineOrder.indexOf(a), fallbackB = disciplineOrder.indexOf(b);
+        return (fallbackA === -1 ? Infinity : fallbackA) - (fallbackB === -1 ? Infinity : fallbackB) || a.localeCompare(b);
       });
       sortedDisciplines.forEach(disc => {
         const sec = document.createElement('div');
@@ -3365,12 +3364,22 @@
       // Intentionally raw: the reset action is available only when this work group itself has a sparse v1 override.
       const rawV1Job = getReportingForecastJob(getForecastSnapshot(currentFinancialYear, 'v1')?.data, job.jn);
       const hasOverride = Boolean(resolveForecastWorkGroupPeriods(rawV1Job, workGroup));
-      breakdownPlanEditContext = { job, workGroup, edits: {}, raw: { ...(resolveForecastWorkGroupPeriods(rawV1Job, workGroup) || {}) } };
+      breakdownPlanEditContext = { job, workGroup, edits: {}, raw: { ...(resolveForecastWorkGroupPeriods(rawV1Job, workGroup) || {}) }, workDonePeriods, cutoffPeriod };
       document.getElementById('workGroupPlanEditTitle').textContent = window.workGroupSets?.get(workGroup) || workGroup;
       const workDoneCutoffLabel = cutoffPeriod > 0 ? `to P${cutoffPeriod}` : '(no completed periods)';
       document.getElementById('workGroupPlanEditMeta').textContent = `${job.jn} · Plan v1 override · Current Work Done ${workDoneCutoffLabel}: ${isPerformanceAvailable() ? currentWorkDoneTotal.toFixed(1) : 'Unavailable'}`;
       const resetButton = document.getElementById('resetWorkGroupPlanEdit');
       if (resetButton) resetButton.hidden = !hasOverride;
+      const stateLabel = document.getElementById('workGroupPlanV1State');
+      const overrideCount = Object.keys(breakdownPlanEditContext.raw).length;
+      const relatedComments = getJobComments(job.jn);
+      if (stateLabel) {
+        const commentNote = relatedComments.length ? ` There are ${relatedComments.length} comment(s) for this job in the selected FY/DU, which may cover other work groups. Comments do not change forecast volumes.` : '';
+        stateLabel.textContent = overrideCount
+          ? `${overrideCount} saved V1 period override(s) for this work group.${commentNote}`
+          : `No saved V1 period amendments for this work group; the figures currently inherit V0.${commentNote}`;
+        stateLabel.dataset.state = overrideCount ? 'saved' : 'missing';
+      }
       grid.innerHTML = Array.from({ length: 13 }, (_, index) => {
         const period = `P${index + 1}`;
         const value = Number(effectivePeriods[period] || 0);
@@ -3386,6 +3395,19 @@
           <small class="wg-plan-edit-work-done ${isCurrentWorkDonePeriod ? '' : 'is-future'}">Current Work Done: ${!isPerformanceAvailable() ? 'Unavailable' : isCurrentWorkDonePeriod ? workDoneValue.toFixed(1) : '—'}</small>
         </label>`;
       }).join('');
+      const workDoneFill = document.getElementById('workGroupPlanWorkDoneFill');
+      const workDoneSelect = document.getElementById('workGroupPlanWorkDoneThrough');
+      const workDoneMessage = document.getElementById('workGroupPlanWorkDoneMessage');
+      const canFillWorkDone = isPerformanceAvailable() && cutoffPeriod > 0;
+      if (workDoneSelect) {
+        workDoneSelect.innerHTML = Array.from({ length: cutoffPeriod }, (_, i) => `<option value="${i + 1}">P${i + 1}</option>`).join('');
+        workDoneSelect.value = String(cutoffPeriod);
+        workDoneSelect.disabled = !canFillWorkDone;
+      }
+      if (workDoneFill) workDoneFill.disabled = !canFillWorkDone;
+      if (workDoneMessage) workDoneMessage.textContent = canFillWorkDone
+        ? `Copies actual Work Done into V1 for P1–P${cutoffPeriod} (you can choose an earlier end period). Review before saving.`
+        : 'Upload Work Done and select a completed reporting period before using this option.';
       modal.classList.add('open');
       grid.querySelectorAll('input[data-period]').forEach(input => input.addEventListener('input', () => {
         breakdownPlanEditContext.edits[input.dataset.period] = input.value;
@@ -3401,12 +3423,54 @@
       grid.querySelector('input')?.focus();
     }
 
+    function fillWorkGroupPlanFromWorkDone() {
+      const context = breakdownPlanEditContext;
+      const selection = document.getElementById('workGroupPlanWorkDoneThrough');
+      if (!context || !isPerformanceAvailable() || !selection) return;
+      const through = Number(selection.value);
+      if (!Number.isInteger(through) || through < 1 || through > context.cutoffPeriod) return;
+      // Explicit zeros matter: a completed period with zero Work Done must not inherit V0.
+      for (let i = 1; i <= through; i++) {
+        const period = `P${i}`;
+        const value = Number(context.workDonePeriods[period] || 0);
+        const input = document.querySelector(`#workGroupPlanEditGrid input[data-period="${period}"]`);
+        if (!input) continue;
+        input.value = String(value);
+        context.edits[period] = input.value;
+      }
+      updateBreakdownDraftStatus();
+    }
+
+    window.fillWorkGroupPlanFromWorkDone = fillWorkGroupPlanFromWorkDone;
+
+    function fillWorkGroupPlanUniformly() {
+      const context = breakdownPlanEditContext;
+      const uniform = document.getElementById('workGroupPlanUniformValue');
+      if (!context || !uniform || !uniform.checkValidity() || uniform.value.trim() === '') {
+        uniform?.reportValidity();
+        return;
+      }
+      const value = uniform.value;
+      for (let i = 1; i <= 13; i++) {
+        const period = `P${i}`;
+        const input = document.querySelector(`#workGroupPlanEditGrid input[data-period="${period}"]`);
+        if (!input) continue;
+        input.value = value;
+        context.edits[period] = value;
+      }
+      updateBreakdownDraftStatus();
+    }
+    window.fillWorkGroupPlanUniformly = fillWorkGroupPlanUniformly;
+
     function updateBreakdownDraftStatus() {
       const context = breakdownPlanEditContext;
       if (!context) return;
       const count = Object.entries(context.edits).filter(([p, value]) => String(context.raw[p] ?? '') !== value).length;
       const button = document.getElementById('saveWorkGroupPlanEdit');
-      if (button) button.textContent = 'Save (' + count + ' changed period' + (count === 1 ? '' : 's') + ')';
+      if (button) {
+        button.textContent = 'Save (' + count + ' changed period' + (count === 1 ? '' : 's') + ')';
+        button.disabled = count === 0;
+      }
       for (const [period, value] of Object.entries(context.edits)) {
         const label = document.querySelector('[data-provenance="' + period + '"]');
         if (label) label.textContent = value.trim() === '' ? 'From V0' : Number(value) === 0 ? 'Explicit zero' : 'V1 override';
@@ -3691,6 +3755,8 @@
       }), { f: 0, a: 0, wd: 0 });
       const variance = totals.a - totals.f;
       const { status } = getVarianceStatus(totals);
+      // Use the breakdown's own scoped figures for the same RAG shown in its metrics.
+      breakdownModal.dataset.rag = status === 'bad' ? 'red' : status === 'warning' ? 'amber' : status === 'good' ? 'green' : 'unavailable';
       const format = value => Number.isFinite(value)
         ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : 'Unavailable';
       const signed = value => Number.isFinite(value)
