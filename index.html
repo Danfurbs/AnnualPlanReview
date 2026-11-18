@@ -732,6 +732,13 @@
         <button type="button" class="close" onclick="closeWorkGroupPlanEditor()" aria-label="Close">&times;</button>
       </div>
       <p class="helper-text">Blank inherits V0; enter 0 to explicitly forecast zero. Using V0 retains your forecast comments.</p>
+      <p id="workGroupPlanV1State" class="wg-plan-v1-state" role="status"></p>
+      <div class="wg-plan-uniform-fill">
+        <label for="workGroupPlanUniformValue">Set each P1–P13 period to</label>
+        <input id="workGroupPlanUniformValue" type="number" min="0" step="0.01" placeholder="e.g. 60" aria-label="Volume to copy into all 13 forecast periods">
+        <button type="button" class="group-action-button" onclick="fillWorkGroupPlanUniformly()">Fill all 13 periods</button>
+        <small>Fills an editable draft only. Review the periods and save V1 to apply the values.</small>
+      </div>
       <div class="wg-plan-work-done-fill">
         <label for="workGroupPlanWorkDoneThrough">Set completed periods from Work Done, P1 through</label>
         <select id="workGroupPlanWorkDoneThrough" aria-label="Last completed period to copy from Work Done"></select>
