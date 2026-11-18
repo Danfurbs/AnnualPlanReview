@@ -213,6 +213,49 @@ const server = http.createServer((req, res) => {
     await clear('#forecastPreviewClearAll');
     assert.equal((await read()).wgs[fixture.a].P1, 21);
     await page.evaluate(() => { window.saveForecastToStorageAsync = window.smokeSave; });
+
+    const forecastInputs = page.getByRole('group', { name: 'Forecast inputs' });
+    assert.equal(await forecastInputs.getByRole('button').count(), 3);
+    await forecastInputs.getByRole('button', { name: 'OTM Shift Planner' }).click();
+    await page.locator('#otmPlanner[open]').waitFor();
+    assert.equal(await page.locator('#otmYear').textContent(), 'FY27 · V0');
+    await page.locator('#otmClose').click();
+
+    await page.evaluate(async ({ job, a, b }) => {
+      const snapshot = getForecastSnapshot('FY27', 'v0').data;
+      snapshot.get(job).sources = {
+        [a]: { mst: { P2: 5 }, waif: { P1: 2, P2: 8 }, applied: { P1: 2, P2: 5 } },
+        [b]: { waif: { P13: 15 }, applied: { P13: 15 } }
+      };
+      await saveForecastToStorageAsync(snapshot, snapshot.size, 'FY27', 'v0');
+      await closeForecastBuilderPreview(); await openForecastBuilderPreview();
+    }, fixture);
+    const expandJob = jobCard.locator('[data-expand-job]');
+    if (await expandJob.getAttribute('aria-expanded') === 'true') await expandJob.click();
+    const compare = jobCard.getByRole('button', { name: /Compare MST \/ WAIF.*1 overlap/ });
+    await compare.click();
+    const comparison = page.getByRole('dialog', { name: 'Compare MST / WAIF' });
+    assert.equal(await comparison.locator('tbody tr').count(), 2, 'comparison uses the selected Engineer’s source rows');
+    assert.match(await comparison.locator('tbody tr').first().textContent(), /P2.*Review overlap/);
+    await page.keyboard.press('Escape');
+    await comparison.waitFor({ state: 'hidden' });
+    assert.equal(await compare.evaluate(button => document.activeElement === button), true);
+    assert.equal(await expandJob.getAttribute('aria-expanded'), 'false');
+    await expandJob.click();
+    assert.equal(await jobCard.locator('.preview-wgs-grid').count(), 1);
+    assert.equal(await jobCard.getByRole('columnheader', { name: 'WAIF prediction' }).count(), 0);
+
+    await page.setViewportSize({ width: 1100, height: 500 });
+    await page.locator('.preview-evidence-upload summary').click();
+    const lastEngineer = page.locator('[data-engineer-id]').last();
+    await lastEngineer.click();
+    assert.equal(await lastEngineer.getAttribute('aria-pressed'), 'true');
+    assert.ok(await lastEngineer.evaluate(button => {
+      const sidebar = button.closest('.preview-engineer-sidebar').getBoundingClientRect();
+      const item = button.getBoundingClientRect();
+      return item.bottom <= Math.min(sidebar.bottom, window.innerHeight) + 1;
+    }), 'last Engineer card is reachable in a short viewport with evidence controls open');
+
     for (const width of [1280, 768, 390]) {
       await page.setViewportSize({ width, height: 900 });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `overflow at ${width}`);

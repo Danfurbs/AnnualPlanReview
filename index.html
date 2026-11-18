@@ -370,7 +370,7 @@
             <span id="forecastPreviewEvidenceStatus" role="status" aria-live="polite">No temporary evidence loaded.</span>
           </details>
         </div>
-        <div id="forecastPreviewEngineerList" class="preview-engineer-list" role="region" aria-label="Delivery Unit engineers; scroll horizontally to see more"></div>
+        <div id="forecastPreviewEngineerList" class="preview-engineer-list" role="region" aria-label="Delivery Unit engineers"></div>
       </aside>
 
       <main class="preview-builder-main">
@@ -387,12 +387,16 @@
               </div>
             </div>
             <div class="preview-engineer-actions">
-              <button type="button" class="group-action-button" id="forecastPreviewOtm">OTM Shift Planner</button>
-              <button type="button" class="group-action-button" id="forecastPreviewFutureWork">Upload MST forecast</button>
-              <button type="button" class="group-action-button" id="forecastPreviewWaif">Upload WAIF forecast</button>
-              <button type="button" class="group-action-button" id="forecastPreviewPrevious">← Previous Engineer</button>
-              <button type="button" class="group-action-button" id="forecastPreviewNext">Next Engineer →</button>
-              <button type="button" class="primary-button" id="forecastPreviewAddJob">+ Add Standard Job</button>
+              <div class="preview-forecast-inputs" role="group" aria-label="Forecast inputs">
+                <button type="button" class="group-action-button" id="forecastPreviewFutureWork">Upload MST forecast</button>
+                <button type="button" class="group-action-button" id="forecastPreviewWaif">Upload WAIF forecast</button>
+                <button type="button" class="group-action-button" id="forecastPreviewOtm">OTM Shift Planner</button>
+              </div>
+              <div class="preview-engineer-navigation" role="group" aria-label="Engineer and job navigation">
+                <button type="button" class="group-action-button" id="forecastPreviewPrevious">← Previous Engineer</button>
+                <button type="button" class="group-action-button" id="forecastPreviewNext">Next Engineer →</button>
+                <button type="button" class="primary-button" id="forecastPreviewAddJob">+ Add Standard Job</button>
+              </div>
             </div>
           </div>
           <details class="forecast-card preview-bulk-actions"><summary>V0 import, export and Clear All</summary>
@@ -451,6 +455,18 @@
       </main>
     </div>
   </div>
+
+  <dialog class="preview-source-dialog" id="forecastPreviewSources" aria-labelledby="forecastPreviewSourcesTitle">
+    <header class="preview-source-header">
+      <div>
+        <h2 id="forecastPreviewSourcesTitle">Compare MST / WAIF</h2>
+        <p id="forecastPreviewSourcesContext"></p>
+      </div>
+      <form method="dialog"><button class="group-action-button" autofocus>Close</button></form>
+    </header>
+    <p class="preview-source-note">WAIF predicts total workload. Suggested extra is the amount by which WAIF exceeds MST. Use the job grid to adjust the forecast.</p>
+    <div class="preview-source-scroll" id="forecastPreviewSourcesTable" tabindex="0" role="region" aria-label="Saved forecast source values"></div>
+  </dialog>
 
   <div class="modal" id="forecastPreviewWaifModal" role="dialog" aria-modal="true" aria-labelledby="forecastPreviewWaifTitle">
     <div class="modal-content preview-future-work-modal">
