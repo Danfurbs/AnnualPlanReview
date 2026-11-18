@@ -23,8 +23,12 @@
     const c = root.APRReview.context(), node = $('aprReportingDetails');
     if (!node) return;
     root.APRDashboard?.update(c);
-    node.innerHTML = `<div><strong>Your Work Done</strong><span>${esc(c.file || 'No file uploaded')} · private to this session</span></div>
-      <div><strong>Shared data</strong><span>${c.error ? 'Unavailable — retry loading' : c.loadedAt ? 'Loaded ' + esc(new Date(c.loadedAt).toLocaleString()) : 'Not loaded'}</span></div>`;
+    const versions = c.revisions?.v0 != null && c.revisions?.v1 != null ? `V0 r${c.revisions.v0} · V1 r${c.revisions.v1}` : '';
+    const fileId = (c.fingerprint ? ` · File ID ${esc(c.fingerprint.slice(0, 12))}` : '') +
+      (c.headerRow ? ` · Header row ${esc(c.headerRow)}` : '');
+    const corrections = c.correctionsFingerprint ? ' · Corrections ID ' + esc(c.correctionsFingerprint.slice(0, 12)) : '';
+    node.innerHTML = `<div><strong>Your Work Done</strong><span title="${esc(c.fingerprint || '')}">${esc(c.file || 'No file uploaded')}${fileId} · This session</span></div>
+      <div><strong>Shared data</strong><span>${c.error ? 'Unavailable. Retry loading.' : c.loadedAt ? 'Loaded ' + esc(new Date(c.loadedAt).toLocaleString()) : 'Not loaded'}${versions && !c.error ? ' · ' + esc(versions) + corrections : ''}</span></div>`;
     $('aprFilterDetails').textContent = c.filters.join(' · ');
     $('aprRefreshShared').disabled = Boolean(c.refreshing);
     $('aprRefreshShared').textContent = c.refreshing ? 'Refreshing…' : 'Refresh shared data';

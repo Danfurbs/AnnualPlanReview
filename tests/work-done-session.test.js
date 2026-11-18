@@ -8,7 +8,8 @@ const { createWorkDoneSession } = require('../work-done-session');
 function uploadHarness() {
   const source = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
   const functions = source.slice(source.indexOf('    async function loadWorkDone(file)'), source.indexOf('    async function uploadSelectedWorkDoneFile'));
-  const loader = source.slice(source.indexOf('    async function loadWorkDoneStoreAsync'), source.indexOf('    function getSelectedWorkDoneYear'));
+  const loader = source.slice(source.indexOf('    let workDoneLoadSerial'), source.indexOf('    function getSelectedWorkDoneYear'));
+  const extractJob = source.slice(source.indexOf('    function extractJob('), source.indexOf('    function normalizeWorkGroupSet('));
   const session = createWorkDoneSession();
   const state = { selected: 'FY27', rows: [], statuses: [], corrections: { '123456-WO1-1': { units: 9 } } };
   const context = vm.createContext({ Map, window: { WorkDoneSession: session, stdJobs: new Map() },
@@ -16,7 +17,7 @@ function uploadHarness() {
     document: { getElementById: () => ({ value: '2' }) },
     XLSX: { read: () => ({ Sheets: { Detail: {} } }), utils: { sheet_to_json: () => state.rows } },
     getSelectedWorkDoneYear: () => state.selected,
-    extractJob: value => value, extractWorkOrderNumber: row => row.order,
+    getReportingJobNumber: value => value.padStart(6, '0'), extractWorkOrderNumber: row => row.order,
     normalizeWorkGroupSet: value => value,
     getWorkOrderAmendment: id => state.corrections[id],
     loadWorkOrderAmendmentsAsync: async () => true,
@@ -27,7 +28,7 @@ function uploadHarness() {
     runInChunks: async (rows, handler) => rows.forEach(handler),
     updateWorkGroupFilterOptions() {}, render() {}
   });
-  vm.runInContext(`let workDoneUploadInProgress = false, workDoneUploadSerial = 0, currentFinancialYear = 'FY27', workDoneUploadedAt = null, currentWorkOrders = []; ${loader} ${functions}`, context);
+  vm.runInContext(`let workDoneUploadInProgress = false, workDoneUploadSerial = 0, currentFinancialYear = 'FY27', workDoneUploadedAt = null, currentWorkOrders = []; ${extractJob} ${loader} ${functions}`, context);
   return { state, session, context, upload: file => context.loadWorkDone(file || { arrayBuffer: async () => new ArrayBuffer(0) }) };
 }
 
@@ -90,6 +91,20 @@ test('Work Done resolves code-only reports and reports rows excluded from Engine
   assert.match(upload.unmappedWorkGroups, /no Engineer allocation: 1 \(UNKNOWN\)/);
 });
 
+test('Work Done uses the same job and period for leading zeros and reports excluded rows', async () => {
+  const h = uploadHarness();
+  h.state.rows = [
+    { 'Standard Job No': '9045', 'Work Order Closed Period': 'P01', 'Units Complete': 7, 'Work Group Set': 'WG', order: 'WO2' },
+    { 'Standard Job No': '009045', 'Work Order Closed Period': '01', 'Units Complete': 3, 'Work Group Set': 'WG', order: 'WO3' },
+    { 'Standard Job No': '009045', 'Work Order Closed Period': 'P14', 'Units Complete': 99, 'Work Group Set': 'WG', order: 'WO4' }
+  ];
+  await h.upload();
+  const entry = h.session.get('FY27');
+  assert.deepEqual([...entry.data.keys()], ['009045']);
+  assert.equal(entry.data.get('009045').wgs.WG.P1, 10);
+  assert.match(entry.skippedRowsNote, /1 with invalid closed periods/);
+});
+
 test('session uploads replace only their FY; invalid replacement retains valid data; new sessions start empty', () => {
   const session = createWorkDoneSession();
   const first = new Map([['123456', { periods: { P1: 5 } }]]);
@@ -108,6 +123,17 @@ test('session uploads replace only their FY; invalid replacement retains valid d
   assert.ok(session.get('FY28'));
   session.clear();
   assert.equal(session.get('FY28'), null);
+});
+
+test('file identity compares exact upload bytes independently of the filename', async () => {
+  const one = createWorkDoneSession();
+  const two = createWorkDoneSession();
+  const original = Uint8Array.of(1, 2, 3);
+  const changed = Uint8Array.of(1, 2, 4);
+  const hash = await one.fingerprint(original);
+  assert.match(hash, /^[0-9a-f]{64}$/);
+  assert.equal(await two.fingerprint(original), hash);
+  assert.notEqual(await two.fingerprint(changed), hash);
 });
 
 test('startup deletes only the legacy Work Done cache and never persists session data', () => {

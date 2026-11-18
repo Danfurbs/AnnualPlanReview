@@ -185,7 +185,7 @@ test('older Planning Context loads lazily one FY at a time with stale-response p
   const source = fs.readFileSync(path.join(root, 'forecast-builder-preview.js'), 'utf8');
   assert.match(source, /async function ensurePlanningHistoryLoaded/);
   assert.match(source, /for \(const year of olderYears\)/);
-  assert.match(source, /Promise\.all\(\[\s*window\.getForecastSnapshotAsync\(year, 'v0'\), window\.getForecastSnapshotAsync\(year, 'v1'\), loadWorkDone\(year\)/s);
+  assert.match(source, /Promise\.all\(\[window\.readForecastPairAsync\(year\), loadWorkDone\(year\)\]/);
   assert.match(source, /if \(!requestIsCurrent\(requestId, requestedYear\)\) return false/);
 });
 

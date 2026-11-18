@@ -45,6 +45,29 @@ function successfulResponse(revision) {
   };
 }
 
+test('read-only report requests cannot advance forecast or review editor revisions', async () => {
+  const attempted = [];
+  let revision = 7;
+  const client = loadApiClient(async (url, options) => {
+    if (options.body) {
+      attempted.push(JSON.parse(options.body).expectedRevision);
+      return successfulResponse(8);
+    }
+    assert.equal(options.cache, 'no-store');
+    const plan = { data: {}, revision };
+    const data = url.endsWith('/reporting') ? { v0: plan, v1: plan } : {};
+    return { ok: true, json: async () => ({ success: true, data, revision }) };
+  });
+  await client.loadReportingForecastsFromApi('FY27', { trackRevision: true });
+  await client.loadReviewsFromApi();
+  revision = 9;
+  assert.equal((await client.loadReportingForecastsFromApi('FY27')).v1.revision, 9);
+  await client.loadReviewsFromApi({ trackRevision: false });
+  assert.equal(await client.saveForecastToApi(new Map(), 0, 'FY27', 'v1'), true);
+  assert.equal(await client.saveReviewsToApi({}), true);
+  assert.deepEqual(attempted, [7, 7]);
+});
+
 test('automatic resolutions use the confirmed revision, serialize with saves, and never prompt over conflicts', async () => {
   const requests = [];
   let confirms = 0;

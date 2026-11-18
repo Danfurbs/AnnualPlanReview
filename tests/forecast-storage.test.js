@@ -72,6 +72,31 @@ test('v1 code and v0 description aliases replace rather than add together', () =
   assert.equal(forecast.recalculatePeriodsFromWgs(result).P1, 3);
 });
 
+test('conflicting alias cells are resolved independently of row order', () => {
+  const label = 'Preston SM(OFFTRACK)';
+  const forecast = loadForecastStorage(new Map([['DBPREOTA', label]]));
+  const rows = [['DBPREOTA', { P1: 4 }], [label, { P1: 9, P2: 3 }]];
+  for (const entries of [rows, rows.slice().reverse()]) {
+    const result = forecast.mergeForecastWorkGroups(Object.fromEntries(entries), {});
+    assert.deepEqual({ ...result[label] }, { P1: 4, P2: 3 });
+  }
+});
+
+test('a late failed request for an older year cannot replace a loaded dashboard', async () => {
+  let finishOld;
+  const older = new Promise(resolve => { finishOld = resolve; });
+  const newer = { v0: { data: new Map([['009045', { wgs: { Track: { P1: 7 } } }]]) }, v1: { data: new Map() } };
+  const forecast = loadForecastStorage(new Map(), {
+    isApiEnabled: () => true, loadReportingForecastsFromApi: async year => year === 'FY27' ? older : newer
+  });
+  const pending = forecast.loadDashboardForecastAsync('FY27', 'v1');
+  assert.equal((await forecast.loadDashboardForecastAsync('FY28', 'v1')).data.get('009045').periods.P1, 7);
+  finishOld(null);
+  await pending;
+  assert.equal(forecast.forecastLoadError, null);
+  assert.equal(forecast.getEffectiveForecastJob('FY28', '009045').periods.P1, 7);
+});
+
 test('legacy job and work group aliases resolve to one scoped latest forecast', () => {
   const code = 'DBPREOTA';
   const label = 'Preston SM(OFFTRACK)';
@@ -210,15 +235,18 @@ test('connected dashboard ignores different browser caches and loads both stored
     const calls = [];
     const forecast = loadForecastStorage(new Map(), {
       isApiEnabled: () => true,
-      loadForecastFromApi: async (year, version) => {
-        calls.push(version);
-        return { data: new Map([['000123', { wgs: { Track: version === 'v0' ? { P1: 10, P2: 20 } : { P2: 0 } } }]]) };
+      loadReportingForecastsFromApi: async (year, options) => {
+        calls.push([year, options.trackRevision]);
+        return {
+          v0: { data: new Map([['000123', { wgs: { Track: { P1: 10, P2: 20 } } }]]) },
+          v1: { data: new Map([['000123', { wgs: { Track: { P2: 0 } } }]]) }
+        };
       }
     });
     forecast.localStorage.setItem(forecast.getForecastStorageKey('FY27', 'v0'), JSON.stringify({ data: { '000123': { wgs: { Track: { P1: localValue } } } } }));
     assert.equal(forecast.getForecastSnapshot('FY27', 'v0'), null);
     const result = await forecast.loadDashboardForecastAsync('FY27', 'v1');
-    assert.deepEqual(calls, ['v0', 'v1']);
+    assert.deepEqual(calls, [['FY27', true]]);
     assert.equal(result.data.get('000123').periods.P1, 10);
     assert.equal(result.data.get('000123').periods.P2, 0);
     assert.equal(forecast.forecastLoadError, null);
@@ -229,12 +257,16 @@ test('a failed server refresh clears both old snapshots and blocks local fallbac
   let failed = false;
   const forecast = loadForecastStorage(new Map(), {
     isApiEnabled: () => true,
-    loadForecastFromApi: async (year, version) => failed && version === 'v1' ? null : { data: new Map([['000123', { wgs: { Track: { P1: 10 } } }]]) }
+    loadReportingForecastsFromApi: async () => failed ? null : {
+      v0: { data: new Map([['000123', { wgs: { Track: { P1: 10 } } }]]) },
+      v1: { data: new Map() }
+    },
+    loadForecastFromApi: async () => null
   });
   await forecast.loadDashboardForecastAsync('FY27', 'v0');
   failed = true;
   assert.equal(await forecast.loadDashboardForecastAsync('FY27', 'v0'), null);
-  assert.match(forecast.forecastLoadError, /Reporting is paused/);
+  assert.match(forecast.forecastLoadError, /could not be loaded together/);
   assert.equal(forecast.getForecastSnapshot('FY27', 'v0'), null);
   assert.equal(forecast.getForecastSnapshot('FY27', 'v1'), null);
   await assert.rejects(forecast.getForecastSnapshotAsync('FY27', 'v1'), /Unable to load stored forecast/);
@@ -243,7 +275,9 @@ test('a failed server refresh clears both old snapshots and blocks local fallbac
 test('an empty stored V1 inherits V0 without resurrecting old local amendments', async () => {
   const forecast = loadForecastStorage(new Map(), {
     isApiEnabled: () => true,
-    loadForecastFromApi: async (year, version) => ({ data: version === 'v1' ? new Map() : new Map([['000123', { wgs: { Track: { P1: 7 } } }]]) })
+    loadReportingForecastsFromApi: async () => ({
+      v0: { data: new Map([['000123', { wgs: { Track: { P1: 7 } } }]]) }, v1: { data: new Map() }
+    })
   });
   const result = await forecast.loadDashboardForecastAsync('FY27', 'v1');
   assert.equal(result.data.get('000123').periods.P1, 7);

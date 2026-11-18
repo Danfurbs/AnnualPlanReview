@@ -36,6 +36,32 @@ function serviceWithClient(handler) {
   return { service, calls, wasReleased: () => released };
 }
 
+test('the reporting forecast pair and both revisions share one database snapshot', async () => {
+  const fixture = serviceWithClient((sql, params) => ({
+    rows: sql.includes('FROM forecasts') ? [{ job_number: '009045', work_group: 'DBPREOTA', period: 'P1', value: params[1] === 'v0' ? 8 : 0 }]
+      : sql.includes('SELECT revision') ? [{ revision: params[1] === 'FY27:v0' ? 3 : 5 }] : []
+  }));
+  const plans = await fixture.service.getReportingForecastSnapshot('FY27');
+  assert.equal(plans.v0.data['009045'].periods.P1, 8);
+  assert.equal(plans.v1.data['009045'].periods.P1, 0);
+  assert.deepEqual([plans.v0.revision, plans.v1.revision], [3, 5]);
+  assert.deepEqual(fixture.calls.filter(call => /^(BEGIN|COMMIT)/.test(call.sql)).map(call => call.sql),
+    ['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT']);
+  assert.equal(fixture.wasReleased(), true);
+});
+
+test('review rows and their write revision are read in the same transaction', async () => {
+  const fixture = serviceWithClient(sql => ({
+    rows: sql.includes('FROM review_statuses') ? [{ job_number: '009045', fiscal_year: 'FY27', rf_stage: 'RF9', reviewed_at: 'confirmed' }]
+      : sql.includes('SELECT revision') ? [{ revision: 9 }] : []
+  }));
+  const snapshot = await fixture.service.getReviewSnapshot();
+  assert.equal(snapshot.data['009045'].FY27.RF9.reviewedAt, 'confirmed');
+  assert.equal(snapshot.revision, 9);
+  assert.match(fixture.calls[0].sql, /^BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY/);
+  assert.equal(fixture.calls.at(-1).sql, 'COMMIT');
+});
+
 test('OTM inputs and derived outputs share the PostgreSQL transaction and reload intact',async()=>{
  const otm=require('../../otm-forecast');
  const shifts=Object.fromEntries(Array.from({length:13},(_,i)=>['P'+(i+1),i]));

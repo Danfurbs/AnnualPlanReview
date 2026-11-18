@@ -19,14 +19,17 @@ const server = http.createServer(async (req, res) => {
     let data = {};
     if (url.pathname.startsWith('/api/forecasts/FY27/')) {
       if (fixture.failForecast) { res.writeHead(503); res.end(JSON.stringify({ success: false })); return; }
-      data = forecast(url.pathname.split('/').at(-1));
+      const version = url.pathname.split('/').at(-1);
+      data = version === 'reporting' ? {
+        v0: { data: forecast('v0'), revision: 1 }, v1: { data: forecast('v1'), revision: 1 }
+      } : forecast(version);
     } else if (url.pathname === '/api/work-order-amendments') {
       if (fixture.failCorrection) { res.writeHead(503); res.end(JSON.stringify({ success: false })); return; }
       data = { '009001-WO1-1': { units: fixture.correction } };
     } else if (url.pathname.startsWith('/api/reviews')) {
       if (req.method === 'POST') {
         if (fixture.failReview) { res.writeHead(503); res.end(JSON.stringify({ success: false })); return; }
-        fixture.reviews = JSON.parse(body).data || JSON.parse(body);
+        fixture.reviews = JSON.parse(body).reviewStore;
       }
       data = fixture.reviews;
     } else if (url.pathname.includes('change-history')) {
@@ -88,7 +91,10 @@ const server = http.createServer(async (req, res) => {
     assert.match(await page.locator('#breakdownMetrics').innerText(), /Latest forecast\s+40\.0[\s\S]*Work Done to P1\s+9[\s\S]*Expected year-end total\s+39/);
     assert.equal(await page.locator('#reviewPeriodTab').getAttribute('aria-selected'), 'true');
     assert.equal(await page.locator('#periodGrid tbody tr').count(), 13);
-    assert.match(await page.locator('#periodGrid').innerText(), /Expected volume/);
+    assert.match(await page.locator('#periodGrid').innerText(), /Work Done \(up to P1\)/);
+    const period2 = page.locator('#periodGrid tbody tr').nth(1);
+    assert.match(await period2.locator('td').first().innerText(), /30/);
+    assert.equal(await period2.locator('td').nth(1).innerText(), '—');
     const chart = await page.evaluate(() => testChart.data.datasets);
     assert.deepEqual(chart.slice(0,2).map(d => d.data[12]), [40,30]);
     assert.equal(chart[0].label, 'Latest forecast');
@@ -124,7 +130,7 @@ const server = http.createServer(async (req, res) => {
     assert.equal(await page.locator('#wgTable button.forecast-value').count(), 0);
     assert.equal(await page.evaluate(() => testChart.data.datasets.find(d => d.label === 'Latest forecast').data[12]), 10);
     assert.equal(await page.evaluate(() => testChart.data.datasets.some(d => d.label === 'Original plan (V0)')), false);
-    await page.evaluate(() => showBreakdown(currentJobsMap.get('Inspection group')));
+    await page.evaluate(() => showBreakdown(currentJobsMap.get('GRP-test')));
     assert.deepEqual(await page.evaluate(() => testChart.data.datasets.slice(0,2).map(d => d.data[12])), [50,40]);
     assert.match(await page.locator('#wgTable [data-detail-total="f"] button').getAttribute('data-forecast-tip'), /Latest forecast.*50.0/);
     await page.evaluate(() => showBreakdown(currentJobsMap.get('009001')));

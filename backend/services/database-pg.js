@@ -321,19 +321,32 @@ class DatabaseServicePG {
     return data;
   }
 
-  async getForecastSnapshot(fiscalYear, planVersion) {
+  async readReportingSnapshot(read) {
     await this.ready;
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      const data = await this.getForecastData(fiscalYear, planVersion, client);
-      const result = await client.query('SELECT revision FROM revisions WHERE scope = $1 AND data_key = $2', ['forecast', `${fiscalYear}:${planVersion}`]);
+      const result = await read(client);
       await client.query('COMMIT');
-      return { data, revision: result.rows[0]?.revision || 0 };
+      return result;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally { client.release(); }
+  }
+
+  async getForecastSnapshot(fiscalYear, planVersion, connection) {
+    if (!connection) return this.readReportingSnapshot(client => this.getForecastSnapshot(fiscalYear, planVersion, client));
+    const data = await this.getForecastData(fiscalYear, planVersion, connection);
+    const revision = await this.getRevision('forecast', `${fiscalYear}:${planVersion}`, connection);
+    return { data, revision };
+  }
+
+  getReportingForecastSnapshot(fiscalYear) {
+    return this.readReportingSnapshot(async client => ({
+      v0: await this.getForecastSnapshot(fiscalYear, 'v0', client),
+      v1: await this.getForecastSnapshot(fiscalYear, 'v1', client)
+    }));
   }
 
   /**
@@ -924,9 +937,9 @@ class DatabaseServicePG {
     }
   }
 
-  async getAllReviewStatuses() {
+  async getAllReviewStatuses(connection = this.pool) {
     await this.ready;
-    const result = await this.pool.query('SELECT * FROM review_statuses');
+    const result = await connection.query('SELECT * FROM review_statuses');
     const out = {};
     result.rows.forEach(row => {
       if (!out[row.job_number]) out[row.job_number] = {};
@@ -935,9 +948,16 @@ class DatabaseServicePG {
     });
     return out;
   }
-  async getRevision(scope, dataKey) {
+  getReviewSnapshot() {
+    return this.readReportingSnapshot(async client => ({
+      data: await this.getAllReviewStatuses(client),
+      revision: await this.getRevision('reviews', 'all', client)
+    }));
+  }
+
+  async getRevision(scope, dataKey, connection = this.pool) {
     await this.ready;
-    const result = await this.pool.query('SELECT revision FROM revisions WHERE scope = $1 AND data_key = $2', [scope, dataKey]);
+    const result = await connection.query('SELECT revision FROM revisions WHERE scope = $1 AND data_key = $2', [scope, dataKey]);
     return result.rows[0]?.revision || 0;
   }
   async getForecastPlanningMetadata(fiscalYear) {

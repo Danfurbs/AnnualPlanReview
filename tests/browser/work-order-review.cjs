@@ -48,7 +48,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname.startsWith('/api/forecasts/FY27/')) {
       if (fixture.failForecast) { res.writeHead(503); res.end(JSON.stringify({ success: false })); return; }
-      data = forecast(url.pathname.split('/').at(-1));
+      const version = url.pathname.split('/').at(-1);
+      data = version === 'reporting' ? {
+        v0: { data: forecast('v0'), revision: 1 }, v1: { data: forecast('v1'), revision: 1 }
+      } : forecast(version);
     } else if (url.pathname === '/api/work-order-amendments') {
       if (fixture.failCorrection) { res.writeHead(503); res.end(JSON.stringify({ success: false })); return; }
       data = { '009001-WO1-1': { units: fixture.correction } };
@@ -56,7 +59,7 @@ const server = http.createServer(async (req, res) => {
     } else if (url.pathname.startsWith('/api/reviews')) {
       if (req.method === 'POST') {
         if (fixture.failReview) { res.writeHead(503); res.end(JSON.stringify({ success: false })); return; }
-        fixture.reviews = JSON.parse(body).data || JSON.parse(body);
+        fixture.reviews = JSON.parse(body).reviewStore;
       }
       data = fixture.reviews;
     } else if (url.pathname.includes('change-history')) {

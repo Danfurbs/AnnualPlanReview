@@ -26,7 +26,11 @@
       ['', context.rf ? 'RF stage: ' + context.stage + ' | Work Done cutoff: P' + context.cutoff + ' | Previous RF comments: ' + (context.previousRF || 'Not included') : 'Plan version: ' + context.title + (context.filterContext ? ' | ' + context.filterContext : '')],
       ['', 'Job filters: ' + context.filters + (context.rf ? ' | Total RAG versus latest forecast: Green <10%; Amber 10% to <50%; Red ≥50% (absolute variance).' : '')],
       ['', 'Basis: ' + context.basis],
-      ['', 'Generated: ' + context.capturedAt + (context.rf ? ' | Work Done file: ' + context.file + ' | Uploaded: ' + (context.uploadedAt || 'Not recorded') : '')],
+      ['', 'Generated: ' + context.capturedAt +
+        (context.revisions?.v0 != null && context.revisions?.v1 != null ? ` | Forecast revisions: V0 r${context.revisions.v0}, V1 r${context.revisions.v1}` : '') +
+        (context.rf ? ' | Work Done file: ' + context.file + ' | Uploaded: ' + (context.uploadedAt || 'Not recorded') +
+           (context.headerRow ? ' | Header row: ' + context.headerRow : '') + (context.fingerprint ? ' | Work Done SHA-256: ' + context.fingerprint : '') +
+           (context.correctionsFingerprint ? ' | Corrections SHA-256: ' + context.correctionsFingerprint : '') : '')],
       ['', 'All standard jobs included; blank plan cells mean no forecast in this scope. Totals stay separate by unit. Comments ' + (context.rf ? 'are for the selected RF stage.' : 'include all RF stages in the selected financial year.')], [],
       ['', 'Activity Information', '', '', '', '', '', 'Direct Volumes'],
       ['', 'Discipline', 'MNT Code', 'Standard Job No.', 'Standard Job Description', 'Unit of Measure', '', ...periods, context.year + ' Total', context.year + ' Comments', ...(previous ? ['Previous RF Comments'] : [])]

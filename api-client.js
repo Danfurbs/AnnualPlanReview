@@ -384,21 +384,25 @@ function validateSerializedForecastData(serialized) {
  * @param {string} planVersion - Plan version (v0, v1)
  * @returns {Promise<Object|null>} - { data: Map, rowCount, savedAt } or null
  */
-async function loadForecastFromApi(year, planVersion) {
+function hydrateApiForecast(year, planVersion, snapshot, trackRevision) {
+  const revision = snapshot.revision ?? 0;
+  if (trackRevision) {
+    const key = `${year}:${planVersion}`;
+    forecastRevisions.set(key, revision);
+    forecastBases.set(key, structuredClone(snapshot.data));
+  }
+  const data = window.hydrateForecastData(snapshot.data);
+  return { data, revision, rowCount: snapshot.rowCount ?? data.size, savedAt: snapshot.savedAt };
+}
+
+async function loadForecastFromApi(year, planVersion, { trackRevision = true } = {}) {
   if (!isApiEnabled()) return null;
 
   try {
     const response = await apiRequest(`/forecasts/${year}/${planVersion}`, { cache: 'no-store' });
 
     if (response.success && response.data) {
-      forecastRevisions.set(`${year}:${planVersion}`, response.revision || 0);
-      forecastBases.set(`${year}:${planVersion}`, structuredClone(response.data));
-      const hydrated = window.hydrateForecastData(response.data);
-      return {
-        data: hydrated,
-        rowCount: response.rowCount || hydrated.size,
-        savedAt: response.savedAt || new Date().toISOString()
-      };
+      return hydrateApiForecast(year, planVersion, response, trackRevision);
     }
 
     return null;
@@ -407,6 +411,26 @@ async function loadForecastFromApi(year, planVersion) {
     return null;
   }
 }
+
+async function loadReportingForecastsFromApi(year, { trackRevision = false } = {}) {
+  if (!isApiEnabled()) return null;
+  try {
+    const response = await apiRequest(`/forecasts/${year}/reporting`, { cache: 'no-store' });
+    const plans = response.data;
+    const versions = ['v0', 'v1'];
+    if (!response.success || versions.some(version => {
+      const plan = plans?.[version];
+      return !plan?.data || typeof plan.data !== 'object' || Array.isArray(plan.data) || !Number.isInteger(plan.revision) || plan.revision < 0 ||
+        (trackRevision && plan.revision < (forecastRevisions.get(`${year}:${version}`) ?? 0));
+    })) return null;
+    return Object.fromEntries(versions.map(version => [version, hydrateApiForecast(year, version, plans[version], trackRevision)]));
+  } catch (error) {
+    console.warn('Failed to load shared forecast pair:', error);
+    return null;
+  }
+}
+window.loadReportingForecastsFromApi = loadReportingForecastsFromApi;
+window.getConfirmedForecastRevision = (year, version) => forecastRevisions.get(`${year}:${version}`) ?? null;
 
 /**
  * Save forecast to API
@@ -715,7 +739,7 @@ async function loadJobCommentsFromApi() {
   if (!isApiEnabled()) return null;
 
   try {
-    const response = await apiRequest('/comments');
+    const response = await apiRequest('/comments', { cache: 'no-store' });
 
     if (response.success && response.data) {
       return response.data;
@@ -807,7 +831,7 @@ async function deleteCommentFromApi(commentId) {
 }
 
 
-function loadWorkOrderAmendmentsFromApi() {
+function loadWorkOrderAmendmentsFromApi({ trackRevision = true, includeSource = false } = {}) {
   // Serialize reads with writes so a late GET cannot replace newer revision tokens.
   const operation = amendmentQueue.then(async () => {
     if (!isApiEnabled()) return null;
@@ -815,8 +839,8 @@ function loadWorkOrderAmendmentsFromApi() {
       const response = await apiRequest('/work-order-amendments', { cache: 'no-store' });
       if (!response.success || !response.data || typeof response.data !== 'object' || Array.isArray(response.data)) return null;
       if (Object.values(response.data).some(value => !value || typeof value.units !== 'number' || !Number.isFinite(value.units))) return null;
-      amendmentRevisions = response.revisions || {};
-      return response.data;
+      if (trackRevision) amendmentRevisions = response.revisions || {};
+      return includeSource ? { data: response.data, fingerprint: response.fingerprint || '' } : response.data;
     } catch (err) {
       console.warn('Failed to load work order amendments from API:', err);
       return null;
@@ -886,11 +910,11 @@ window.saveWorkOrderAmendmentToApi = saveWorkOrderAmendmentToApi;
 async function loadPublicGroupsFromApi() {
   if (!isApiEnabled()) return [];
   try {
-    const response = await apiRequest('/groups');
-    return response.success && Array.isArray(response.data) ? response.data : [];
+    const response = await apiRequest('/groups', { cache: 'no-store' });
+    return response.success && Array.isArray(response.data) ? response.data : null;
   } catch (err) {
     console.warn('Failed to load public groups from API:', err);
-    return [];
+    return null;
   }
 }
 
@@ -952,11 +976,12 @@ async function deleteForecastPlanningMetadataFromApi(item) {
   }
 }
 
-async function loadReviewsFromApi() {
+async function loadReviewsFromApi({ trackRevision = true } = {}) {
   if (!isApiEnabled()) return null;
   try {
-    const response = await apiRequest('/reviews');
-    if (response.success) reviewRevision = response.revision || 0;
+    if (trackRevision) await reviewSaveQueue;
+    const response = await apiRequest('/reviews', { cache: 'no-store' });
+    if (trackRevision && response.success) reviewRevision = response.revision || 0;
     return response.success && response.data ? response.data : null;
   } catch (err) {
     console.warn('Failed to load reviews from API:', err);

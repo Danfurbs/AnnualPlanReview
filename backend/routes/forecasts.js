@@ -90,6 +90,20 @@ function validateForecastEntry(jobNumber, forecastData) {
 }
 
 function createForecastRoutes(db) {
+  router.get('/:fiscalYear/reporting', async (req, res, next) => {
+    try {
+      const { fiscalYear } = req.params;
+      if (!isValidFiscalYear(fiscalYear)) {
+        return res.status(400).json({ success: false, error: 'Invalid fiscal year format' });
+      }
+      const plans = await db.getReportingForecastSnapshot(fiscalYear);
+      res.set('Cache-Control', 'no-store');
+      return res.json({ success: true, data: plans });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   /**
    * GET /api/forecasts/:fiscalYear/:planVersion
    * Get all forecasts for a fiscal year and plan version

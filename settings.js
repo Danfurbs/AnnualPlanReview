@@ -533,7 +533,7 @@ async function downloadSettingsForecastExport() {
 
   // Load forecast data for the selected year and plan version
   try {
-    const snapshot = window.isApiEnabled?.() ? await window.loadForecastFromApi(year, planVersion) : await window.getForecastSnapshotAsync(year, planVersion);
+    const snapshot = window.isApiEnabled?.() ? await window.loadForecastFromApi(year, planVersion, { trackRevision: false }) : await window.getForecastSnapshotAsync(year, planVersion);
 
     if (!snapshot || !snapshot.data || !snapshot.data.size) {
       alert(`No forecast data found for ${year} ${planVersion}`);
@@ -581,10 +581,7 @@ async function downloadSettingsExcelExport() {
 
   // Load forecast data for the selected year and plan version
   try {
-    const read = version => window.isApiEnabled?.() ? window.loadForecastFromApi(year, version) : window.getForecastSnapshotAsync(year, version);
-    const original = await read('v0');
-    const overrides = planVersion === 'v1' ? await read('v1') : null;
-    if (window.isApiEnabled?.() && (!original || planVersion === 'v1' && !overrides)) throw new Error('Saved forecast data could not be read.');
+    const { v0: original, v1: overrides } = await window.readForecastPairAsync(year);
     const data = planVersion === 'v1'
       ? window.buildEffectiveForecastData(original?.data, overrides?.data)
       : window.getReportingForecastData(original?.data);

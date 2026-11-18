@@ -6,8 +6,8 @@ module.exports = function createReviewRoutes(db) {
 
   router.get('/', async (req, res) => {
     try {
-      const data = await db.getAllReviewStatuses();
-      const revision = await db.getRevision('reviews', 'all');
+      const { data, revision } = await db.getReviewSnapshot();
+      res.set('Cache-Control', 'no-store');
       res.json({ success: true, data, revision });
     } catch (error) {
       console.error('Error fetching review statuses:', error);

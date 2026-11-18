@@ -521,7 +521,8 @@ function rememberForecastSnapshot(forecastData, rowCount, year, planVersion) {
   window.forecastMemorySnapshots.set(`${year}:${planVersion}`, {
     data: cloneForecastData(forecastData),
     rowCount: rowCount ?? forecastData?.size ?? 0,
-    source: 'memory'
+    source: 'memory',
+    revision: window.isApiEnabled?.() ? window.getConfirmedForecastRevision?.(year, planVersion) ?? null : null
   });
 }
 
@@ -693,9 +694,15 @@ function getForecastWorkGroupIdentity(workGroup) {
 function mergeForecastWorkGroups(v0Wgs, v1Wgs) {
   const merged = {};
   const keysByIdentity = new Map();
+  const isCatalogueCode = key => Number(window.workGroupSets?.has(key) || false);
 
   [v0Wgs, v1Wgs].forEach(groups => {
-    Object.entries(groups || {}).forEach(([workGroup, periods]) => {
+    // Prefer a catalogue code over its aliases within the same plan. Use a fixed
+    // ordering for remaining aliases so database and import order cannot change totals.
+    const entries = Object.entries(groups || {}).sort(([a], [b]) =>
+      isCatalogueCode(a) - isCatalogueCode(b) || (a < b ? -1 : a > b ? 1 : 0)
+    );
+    entries.forEach(([workGroup, periods]) => {
       const identity = getForecastWorkGroupIdentity(workGroup);
       const outputKey = keysByIdentity.get(identity) || workGroup;
       merged[outputKey] = { ...(merged[outputKey] || {}), ...(periods || {}) };
@@ -1166,27 +1173,36 @@ window.checkV0ConflictsWithV1 = checkV0ConflictsWithV1;
 window.clearAllForecastDataForYear = clearAllForecastDataForYear;
 window.__verifyForecastDeepClone = __verifyForecastDeepClone; // DEV ONLY sanity check
 
-/** Load both plan inputs before any dashboard, chart or rollup reads them. */
+async function readForecastPairAsync(year, { trackRevision = false } = {}) {
+  if (window.isApiEnabled?.()) {
+    const plans = await window.loadReportingForecastsFromApi(year, { trackRevision });
+    if (!plans) throw new Error('Could not read both saved forecasts together for ' + year + '.');
+    return plans;
+  }
+  return { v0: await getForecastSnapshotAsync(year, 'v0'), v1: await getForecastSnapshotAsync(year, 'v1') };
+}
+window.readForecastPairAsync = readForecastPairAsync;
+
+let dashboardForecastRead = 0;
+
+/** Install both plan inputs before any dashboard, chart or rollup reads them. */
 async function loadDashboardForecastAsync(year, planVersion) {
+  const request = ++dashboardForecastRead;
   try {
-    if (window.isApiEnabled?.()) {
-      const snapshots = await Promise.all(['v0', 'v1'].map(version => window.loadForecastFromApi(year, version)));
-      if (snapshots.some(snapshot => !snapshot)) throw new Error('Incomplete server response');
-      snapshots.forEach((snapshot, index) => rememberForecastSnapshot(snapshot.data, snapshot.rowCount, year, ['v0', 'v1'][index]));
-    } else {
-      for (const version of ['v0', 'v1']) {
-        const snapshot = await getForecastSnapshotAsync(year, version);
-        if (snapshot) rememberForecastSnapshot(snapshot.data, snapshot.rowCount, year, version);
-      }
+    const plans = await readForecastPairAsync(year, { trackRevision: true });
+    if (request !== dashboardForecastRead) return null;
+    for (const [version, snapshot] of Object.entries(plans)) {
+      if (snapshot) rememberForecastSnapshot(snapshot.data, snapshot.rowCount, year, version);
     }
     window.forecastLoadError = null;
     window.forecastLoadedAt = new Date().toISOString();
     return planVersion === 'v1' ? getEffectiveForecastSnapshot(year) : getForecastSnapshot(year, 'v0');
   } catch (error) {
+    if (request !== dashboardForecastRead) return null;
     window.forecastMemorySnapshots?.delete(year + ':v0');
     window.forecastMemorySnapshots?.delete(year + ':v1');
     window.fData = null;
-    window.forecastLoadError = 'Stored forecasts could not be loaded for ' + year + '. Reporting is paused to avoid showing stale or incomplete totals. Reload the page to retry.';
+    window.forecastLoadError = 'Stored forecasts could not be loaded together for ' + year + '. Use Refresh shared data to retry.';
     return null;
   }
 }

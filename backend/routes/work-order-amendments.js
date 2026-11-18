@@ -1,4 +1,5 @@
 const express = require('express');
+const { createHash } = require('node:crypto');
 const { isPlainObject } = require('./validators');
 const review = require('../../work-order-review');
 
@@ -8,7 +9,14 @@ module.exports = (db) => {
   router.get('/', async (req, res) => {
     try {
       const { data, revisions } = await db.getWorkOrderAmendmentSnapshot();
-      res.json({ success: true, data: data || {}, revisions });
+      const keys = [...new Set([...Object.keys(data || {}), ...Object.keys(revisions || {})])].sort();
+      const state = keys.map(id => {
+        const value = data?.[id];
+        return [id, revisions?.[id] ?? 0, value?.units, value?.status, value?.identity?.jobNumber,
+          value?.identity?.number, value?.identity?.workGroup];
+      });
+      const fingerprint = createHash('sha256').update(JSON.stringify(state)).digest('hex');
+      res.json({ success: true, data: data || {}, revisions, fingerprint });
     } catch (error) {
       console.error('Error fetching work order amendments:', error);
       res.status(500).json({ success: false, error: 'Failed to fetch work order amendments' });

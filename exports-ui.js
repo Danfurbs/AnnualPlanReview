@@ -101,8 +101,17 @@
     $('exportsStatus').textContent = 'Reading saved report data…';
     try {
       snapshot = await window.APRExportSource.capture($('exportsYear').value, $('exportsStage').value, $('exportsCutoff').value === '' ? null : Number($('exportsCutoff').value));
-      $('exportsSource').textContent = `${snapshot.year} · ${snapshot.stage} · Work Done: ${snapshot.file} · Report data read ${new Date(snapshot.capturedAt).toLocaleString()}`;
-      $('exportsStatus').textContent = snapshot.correctionsError || 'Report data ready. Blank performance cells mean unavailable; zeros are real values.';
+      const revisions = snapshot.revisions;
+      const forecast = revisions?.v0 != null && revisions?.v1 != null ? ` · V0 r${revisions.v0} · V1 r${revisions.v1}` : '';
+      const fileId = snapshot.fingerprint ? ' · File ID ' + snapshot.fingerprint.slice(0, 12) : '';
+      const corrections = snapshot.correctionsFingerprint ? ' · Corrections ID ' + snapshot.correctionsFingerprint.slice(0, 12) : '';
+      const dashboard = window.APRReview?.context();
+      const sourcesDiffer = dashboard?.year === snapshot.year && (['v0', 'v1'].some(version =>
+        revisions?.[version] != null && dashboard.revisions?.[version] != null && revisions[version] !== dashboard.revisions[version]) ||
+        Boolean(snapshot.correctionsFingerprint && dashboard.correctionsFingerprint && snapshot.correctionsFingerprint !== dashboard.correctionsFingerprint));
+      const sourceWarning = sourcesDiffer ? ' · Different from dashboard revisions. Refresh shared data before comparing.' : '';
+      $('exportsSource').textContent = `${snapshot.year} · ${snapshot.stage}${forecast}${corrections} · Work Done: ${snapshot.file}${fileId} · Report data read ${new Date(snapshot.capturedAt).toLocaleString()}${sourceWarning}`;
+      $('exportsStatus').textContent = snapshot.correctionsError || 'Report data ready. Blank performance cells mean unavailable.';
       updateCounts();
     } catch (error) { $('exportsStatus').textContent = error.message; $('exportsSource').textContent = ''; }
     finally { setBusy(false); }
@@ -114,7 +123,9 @@
       scope: scopeLabel(card), stage: snapshot.stage, cutoff: snapshot.cutoff, rf: id === 'rf',
       filters: 'All standard jobs — dashboard job filters ignored',
       basis: id === 'v0' ? 'Original saved V0 plan. No Work Done included.' : id === 'v1' ? 'Current saved V1 amendments over V0; explicit zero replaces V0. No Work Done included.' : 'Current corrected Work Done through P' + snapshot.cutoff + ', then current V1 forecast with V0 inheritance. Not a historical RF snapshot.',
-      capturedAt: snapshot.capturedAt, file: snapshot.file, uploadedAt: snapshot.uploadedAt, previousRF: id === 'rf' ? filters().previousRF : '' };
+      capturedAt: snapshot.capturedAt, file: snapshot.file, uploadedAt: snapshot.uploadedAt, fingerprint: snapshot.fingerprint,
+      headerRow: snapshot.headerRow, revisions: snapshot.revisions, correctionsFingerprint: snapshot.correctionsFingerprint,
+      previousRF: id === 'rf' ? filters().previousRF : '' };
   }
   function validateRF(card) {
     if (card.dataset.report !== 'rf') return;
@@ -127,7 +138,7 @@
   }
   async function preview(card, printing = false) {
     if (busy) return false;
-    if (!snapshot || card.dataset.report === 'rf') await refresh();
+    await refresh();
     if (!snapshot) return false;
     setBusy(true);
     $('exportsStatus').textContent = 'Preparing report…';

@@ -139,49 +139,29 @@
       }
     }
 
-    async function loadCommentStoreAsync() {
-      // Try API first if enabled
-      if (window.isApiEnabled && window.isApiEnabled() && window.loadJobCommentsFromApi) {
-        try {
-          const apiData = await window.loadJobCommentsFromApi();
-          if (apiData) {
-            commentStore = apiData;
-            // Cache in localStorage for offline access
-            localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
-            return;
-          }
-        } catch (err) {
-          console.warn('Failed to load comments from API, falling back to localStorage:', err);
-        }
-      }
+    let commentReadError = '', reviewReadError = '', groupReadError = '';
+    let reviewChanges = Promise.resolve();
 
-      // Fall back to localStorage
-      loadCommentStore();
+    async function loadCommentStoreAsync() {
+      if (!window.isApiEnabled?.()) { commentReadError = ''; loadCommentStore(); return; }
+      const data = await window.loadJobCommentsFromApi();
+      commentReadError = data ? '' : 'Shared comments could not be read. Use Refresh shared data to retry.';
+      if (data) commentStore = data;
     }
 
     async function loadReviewStoreAsync() {
-      if (window.isApiEnabled && window.isApiEnabled() && window.loadReviewsFromApi) {
-        try {
-          const apiData = await window.loadReviewsFromApi();
-          if (apiData) {
-            reviewStore = apiData;
-            migrateLegacyReviewStore();
-            localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(reviewStore));
-            return;
-          }
-        } catch (err) {
-          console.warn('Failed to load reviews from API, falling back to localStorage:', err);
-        }
+      await reviewChanges;
+      if (window.isApiEnabled?.()) {
+        const data = await window.loadReviewsFromApi();
+        reviewReadError = data ? '' : 'Shared review statuses could not be read. Use Refresh shared data to retry.';
+        if (!data) return;
+        reviewStore = data;
+      } else {
+        reviewReadError = '';
+        try { reviewStore = JSON.parse(localStorage.getItem(REVIEW_STORAGE_KEY) || '{}'); }
+        catch (error) { console.warn('Failed to load local review statuses:', error); reviewStore = {}; }
       }
-
-      try {
-        const raw = localStorage.getItem(REVIEW_STORAGE_KEY);
-        reviewStore = raw ? JSON.parse(raw) : {};
-        migrateLegacyReviewStore();
-      } catch (err) {
-        console.warn('Failed to load review store:', err);
-        reviewStore = {};
-      }
+      migrateLegacyReviewStore();
     }
 
     function migrateLegacyReviewStore() {
@@ -211,20 +191,6 @@
       localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(reviewStore));
     }
 
-    async function saveReviewStoreAsync() {
-      saveReviewStore();
-      if (window.isApiEnabled && window.isApiEnabled() && window.saveReviewsToApi) {
-        try {
-          const ok = await window.saveReviewsToApi(reviewStore);
-          if (!ok && window.API_CONFIG?.forceServerPersistence) {
-            alert('Server review sync failed. Local cache updated, but Render database did not confirm the write.');
-          }
-        } catch (err) {
-          console.warn('Failed to save review store to API (saved locally):', err);
-        }
-      }
-    }
-
     function updateReviewContextDisplay() {
       const stageDisplay = document.getElementById('reviewStageDisplay');
       if (stageDisplay) stageDisplay.textContent = currentReviewStage || 'RF';
@@ -239,6 +205,18 @@
     function getDeliveryUnitLabel(id) {
       if (!id) return 'Choose a Delivery Unit';
       return window.getDeliveryUnitById?.(id)?.name || id;
+    }
+
+    let reportingContextLoad = 0;
+
+    async function loadSelectedReviewData() {
+      const request = ++reportingContextLoad;
+      const year = currentFinancialYear;
+      const [forecast] = await Promise.all([loadDashboardForecastAsync(year, 'v1'), loadWorkDoneStoreAsync(year)]);
+      if (request !== reportingContextLoad || year !== currentFinancialYear) return false;
+      fData = forecast?.data || null;
+      updateWorkGroupFilterOptions();
+      return true;
     }
 
     async function setReviewContext(stage, year, { persist = true, deliveryUnit = currentDeliveryUnit } = {}) {
@@ -263,11 +241,7 @@
       updateContextControls();
       updateEngineerFilterOptions();
       refreshWorkDoneYearSelector();
-      await loadWorkDoneStoreAsync(currentFinancialYear);
-      fData = null;
-      const forecastCache = await loadDashboardForecastAsync(currentFinancialYear, 'v1');
-      fData = forecastCache?.data || null;
-      updateWorkGroupFilterOptions();
+      if (!await loadSelectedReviewData()) return;
       closeStageModal();
       render();
     }
@@ -310,11 +284,7 @@
       updateContextControls();
       updateEngineerFilterOptions();
       refreshWorkDoneYearSelector();
-      await loadWorkDoneStoreAsync(currentFinancialYear);
-      fData = null;
-      const forecastCache = await loadDashboardForecastAsync(currentFinancialYear, 'v1');
-      fData = forecastCache?.data || null;
-      updateWorkGroupFilterOptions();
+      if (!await loadSelectedReviewData()) return;
       render();
     }
 
@@ -374,25 +344,37 @@
       return status === 'reviewed';
     }
 
+    function changeJobReview(jobNumber, stage, year, reviewed) {
+      if (reviewReadError || aprRefreshing) return Promise.resolve(false);
+      const operation = reviewChanges.then(async () => {
+        const next = structuredClone(reviewStore);
+        if (reviewed) {
+          next[jobNumber] ||= {};
+          next[jobNumber][year] ||= {};
+          next[jobNumber][year][stage] = { reviewedAt: new Date().toISOString(), reviewedBy: '' };
+        } else {
+          getReportingJobAliases(jobNumber).forEach(key => {
+            if (!next[key]?.[year]?.[stage]) return;
+            delete next[key][year][stage];
+            if (!Object.keys(next[key][year]).length) delete next[key][year];
+            if (!Object.keys(next[key]).length) delete next[key];
+          });
+        }
+        if (window.isApiEnabled?.() && !await window.saveReviewsToApi(next)) return false;
+        reviewStore = next;
+        try { saveReviewStore(); } catch (error) { console.warn('Could not cache confirmed review statuses:', error); }
+        return true;
+      });
+      reviewChanges = operation.catch(error => console.warn('Review state could not be saved:', error));
+      return operation;
+    }
+
     function markJobReviewed(jobNumber, stage = currentReviewStage, year = currentFinancialYear) {
-      if (!reviewStore[jobNumber]) reviewStore[jobNumber] = {};
-      if (!reviewStore[jobNumber][year]) reviewStore[jobNumber][year] = {};
-      reviewStore[jobNumber][year][stage] = {
-        reviewedAt: new Date().toISOString(),
-        reviewedBy: ''
-      };
-      saveReviewStoreAsync();
+      return changeJobReview(jobNumber, stage, year, true);
     }
 
     function reopenJobReview(jobNumber, stage = currentReviewStage, year = currentFinancialYear) {
-      const keys = getReportingJobAliases(jobNumber).filter(key => reviewStore[key]?.[year]?.[stage]);
-      if (!keys.length) return;
-      keys.forEach(key => {
-        delete reviewStore[key][year][stage];
-        if (!Object.keys(reviewStore[key][year]).length) delete reviewStore[key][year];
-        if (!Object.keys(reviewStore[key]).length) delete reviewStore[key];
-      });
-      saveReviewStoreAsync();
+      return changeJobReview(jobNumber, stage, year, false);
     }
 
     window.getJobReviewStatus = getJobReviewStatus;
@@ -435,44 +417,32 @@
       localStorage.setItem(COMMENT_STORAGE_KEY, JSON.stringify(commentStore));
     }
 
-    async function saveCommentStoreAsync() {
-      // Save to localStorage first (always)
-      saveCommentStore();
-
-      // Also save to API if enabled
-      if (window.isApiEnabled && window.isApiEnabled() && window.saveCommentsToApi) {
-        try {
-          const apiSaved = await window.saveCommentsToApi(commentStore);
-          if (!apiSaved && window.API_CONFIG?.forceServerPersistence) {
-            alert('Server comment sync failed. Local cache updated, but Render database did not confirm the write.');
-          }
-        } catch (err) {
-          console.warn('Failed to save comments to API (data saved locally):', err);
-          if (window.API_CONFIG?.forceServerPersistence) {
-            alert('Server comment sync failed. Local cache updated, but Render database did not confirm the write.');
-          }
-        }
-      }
+    function cacheComments() {
+      try { saveCommentStore(); } catch (error) { console.warn('Could not cache confirmed comments:', error); }
     }
+
+    let correctionsFingerprint = '';
 
     async function loadWorkOrderAmendmentsAsync() {
       try {
         if (!window.isApiEnabled?.()) throw new Error('Server connection required');
-        const data = await window.loadWorkOrderAmendmentsFromApi();
-        if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Corrections unavailable');
-        workOrderAmendments = data;
+        const source = await window.loadWorkOrderAmendmentsFromApi({ includeSource: true });
+        if (!source?.data || typeof source.data !== 'object' || Array.isArray(source.data)) throw new Error('Corrections unavailable');
+        workOrderAmendments = source.data;
+        correctionsFingerprint = source.fingerprint;
         window.workOrderCorrectionsError = null;
         return true;
       } catch (error) {
         workOrderAmendments = {};
+        correctionsFingerprint = '';
         window.workOrderCorrectionsError = 'Stored Work Order corrections could not be loaded. Reporting is paused. Connect to the server and use Retry corrections.';
         return false;
       }
     }
 
     // Rebuild from the uploaded originals so retries and server deletions cannot compound edits.
-    function applyStoredWorkOrderCorrections(data) {
-      window.WorkOrderReview.apply(data, workOrderAmendments, value => window.resolveWorkGroupCode?.(value) || String(value || '').trim().toUpperCase());
+    function applyStoredWorkOrderCorrections(data, amendments = workOrderAmendments) {
+      window.WorkOrderReview.apply(data, amendments, value => window.resolveWorkGroupCode?.(value) || String(value || '').trim().toUpperCase());
     }
 
     async function reconcileUploadedWorkOrders(data) {
@@ -509,15 +479,14 @@
 
     async function loadGroupStoreAsync() {
       loadGroupStore();
-      if (window.isApiEnabled && window.isApiEnabled() && window.loadPublicGroupsFromApi) {
-        try {
-          const publicGroups = await window.loadPublicGroupsFromApi();
-          publicGroupStore = Array.isArray(publicGroups) ? publicGroups : [];
-        } catch (err) {
-          console.warn('Failed to load public groups from API:', err);
-          publicGroupStore = [];
-        }
-      }
+      await loadPublicGroupsAsync();
+    }
+
+    async function loadPublicGroupsAsync() {
+      if (!window.isApiEnabled?.()) { groupReadError = ''; publicGroupStore = []; return; }
+      const groups = await window.loadPublicGroupsFromApi();
+      groupReadError = groups ? '' : 'Shared groups could not be read. Use Refresh shared data to retry.';
+      if (groups) publicGroupStore = groups;
     }
 
     async function runInChunks(items, handler, chunkSize = 300, onProgress = null) {
@@ -530,8 +499,12 @@
       }
     }
 
+    let workDoneLoadSerial = 0;
+
     async function loadWorkDoneStoreAsync(year) {
+      const request = ++workDoneLoadSerial;
       const ready = await loadWorkOrderAmendmentsAsync();
+      if (request !== workDoneLoadSerial) return;
       const entry = window.WorkDoneSession.get(year);
       if (ready) applyStoredWorkOrderCorrections(entry?.data);
       const stale = [...entry?.data?.values() || []].some(job => job.workOrders?.some(order => order.correctionSourceStale));
@@ -621,7 +594,7 @@
       const allGroups = getAllGroups();
       const options = [
         '<option value="all">All Standard Jobs</option>',
-        ...allGroups.map(group => `<option value="${escapeHtml(group.id)}">${escapeHtml(getGroupName(group))}${group.scope === 'public' ? ' (Public)' : ''}</option>`)
+        ...allGroups.map(group => `<option value="${escapeHtml(group.id)}">${escapeHtml(getGroupName(group))} (${group.scope === 'public' ? 'Public' : 'Private'})</option>`)
       ];
       select.innerHTML = options.join('');
       select.value = allGroups.some(group => group.id === current) ? current : 'all';
@@ -826,8 +799,9 @@
       const confirmed = confirm(`Delete group "${getGroupName(group)}"?`);
       if (!confirmed) return;
       if (group.scope === 'public') {
-        if (window.isApiEnabled && window.isApiEnabled() && window.deletePublicGroupFromApi) {
-          await window.deletePublicGroupFromApi(groupId);
+        if (!window.isApiEnabled?.() || !await window.deletePublicGroupFromApi(groupId)) {
+          window.Toast?.error('The shared group deletion could not be confirmed.');
+          return;
         }
         publicGroupStore = publicGroupStore.filter(entry => entry.id !== groupId);
       } else {
@@ -1000,7 +974,6 @@
     async function addJobComment(jobNumber, category, value, details = {}) {
       const trimmed = value.trim();
       if (!trimmed) return;
-      if (!commentStore[jobNumber]) commentStore[jobNumber] = [];
       const newComment = {
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         jobNumber,
@@ -1021,45 +994,19 @@
         filteredEngineerId: String(details.filteredEngineerId || '').trim(),
         filteredEngineerName: String(details.filteredEngineerName || '').trim()
       };
-      commentStore[jobNumber].unshift(newComment);
-
-      // Save to localStorage
-      saveCommentStore();
-
-      // Save single comment to API if enabled
-      if (window.isApiEnabled?.() && window.saveCommentToApi) {
-        try {
-          return Boolean(await window.saveCommentToApi({ ...newComment, jobNumber }));
-        } catch (err) {
-          console.warn('Failed to save comment to API (saved locally):', err);
-          return false;
-        }
-      }
+      if (window.isApiEnabled?.() && !await window.saveCommentToApi(newComment)) return false;
+      (commentStore[jobNumber] ||= []).unshift(newComment);
+      cacheComments();
       return true;
     }
 
     async function deleteJobComment(jobNumber, id) {
       const keys = getReportingJobAliases(jobNumber).filter(key => commentStore[key]?.some(entry => entry.id === id));
-      if (!keys.length) return;
+      if (!keys.length) return false;
+      if (window.isApiEnabled?.() && !await window.deleteCommentFromApi(id)) return false;
       keys.forEach(key => { commentStore[key] = commentStore[key].filter(entry => entry.id !== id); });
-
-      // Save to localStorage first
-      saveCommentStore();
-
-      // Delete from API if enabled
-      if (window.isApiEnabled && window.isApiEnabled() && window.deleteCommentFromApi) {
-        try {
-          const deleted = await window.deleteCommentFromApi(id);
-          if (!deleted && window.API_CONFIG?.forceServerPersistence) {
-            alert('Server comment delete failed. Local cache changed, but Render database delete was not confirmed.');
-          }
-        } catch (err) {
-          console.warn('Failed to delete comment from API (deleted locally):', err);
-          if (window.API_CONFIG?.forceServerPersistence) {
-            alert('Server comment delete failed. Local cache changed, but Render database delete was not confirmed.');
-          }
-        }
-      }
+      cacheComments();
+      return true;
     }
 
     async function init() {
@@ -1137,8 +1084,8 @@
     function extractJob(txt) {
       if (!txt) return null;
       const s = String(txt).trim().split('-')[0].trim();
-      const m = s.match(/(\d{6})/);
-      return m ? m[1] : null;
+      const match = s.match(/^\d{1,6}\b|\b\d{6}\b/);
+      return match && Number(match[0]) ? getReportingJobNumber(match[0]) : null;
     }
 
     function normalizeWorkGroupSet(raw) {
@@ -1824,46 +1771,23 @@
         const nextWorkDoneData = new Map();
         const unmappedGroups = new Map();
         let matched = 0;
-        let sampleUnmatched = [];
+        let unmatchedJobs = 0, invalidPeriods = 0;
         
         await runInChunks(rows, r => {
           const jobText = r['Standard Job Number & Desc'] || r['Standard Job No'] || '';
           const jn = extractJob(jobText);
           
-          // Get period and normalize it
-          let per = String(r['Work Order Closed Period']||'').trim();
-          
-          // If it's just a number like "8", convert to "P8"
-          if (per && /^\d+$/.test(per)) {
-            per = 'P' + per;
-          }
-          per = per.toUpperCase();
-          
-          const units = r['Units Complete'];
-          
-          // Debug first few rows
-          if (sampleUnmatched.length < 3) {
-            sampleUnmatched.push({
-              raw: jobText,
-              extracted: jn,
-              periodRaw: r['Work Order Closed Period'],
-              periodNormalized: per,
-              units: units
-            });
-          }
-          
-          if (!jn) return;
-          
-          // If no standard jobs loaded, accept all jobs
-          if (window.stdJobs.size > 0 && !window.stdJobs.has(jn)) return;
-          
-          if (!/^P([1-9]|1[0-3])$/.test(per)) return;
-          if (!Number.isFinite(Number(units)) || Number(units) < 0) throw new Error('Work Done units must be finite and non-negative.');
+          if (!jn || (window.stdJobs.size && !window.stdJobs.has(jn))) { unmatchedJobs++; return; }
+          const periodText = String(r['Work Order Closed Period'] ?? '').trim();
+          const period = Number(/^P?\s*0*(\d{1,2})$/i.exec(periodText)?.[1]);
+          if (!(period >= 1 && period <= 13)) { invalidPeriods++; return; }
+          const per = 'P' + period;
+          const rawUnits = Number(r['Units Complete']);
+          if (!Number.isFinite(rawUnits) || rawUnits < 0) throw new Error('Work Done units must be finite and non-negative.');
           matched++;
           if (!nextWorkDoneData.has(jn)) nextWorkDoneData.set(jn, {periods:{}, wgs:{}});
           const job = nextWorkDoneData.get(jn);
           if (!job.workOrders) job.workOrders = [];
-          const rawUnits = parseFloat(units || 0);
           const workOrderNumber = extractWorkOrderNumber(r);
           const workOrderId = `${jn}-${workOrderNumber || 'unknown'}-${job.workOrders.length + 1}`;
           const amendedUnits = rawUnits;
@@ -1916,6 +1840,7 @@
         });
 
         if (!matched) throw new Error('No valid Work Done rows matched the loaded standard jobs and period format. The current session data was not changed.');
+        const fingerprint = await window.WorkDoneSession.fingerprint(ab);
         if (uploadSerial !== workDoneUploadSerial || selectedYear !== getSelectedWorkDoneYear()) {
           throw new Error('Upload cancelled because its financial-year context changed. Please upload again.');
         }
@@ -1926,11 +1851,16 @@
         const unmappedNotice = unmappedCount
           ? `Work Done rows outside Engineer and Delivery Unit totals because they have no Engineer allocation: ${unmappedCount.toLocaleString()} (${groupSample}${unmappedGroups.size > 5 ? ', and others' : ''}).`
           : '';
-        window.WorkDoneSession.replace(selectedYear, nextWorkDoneData, file.name, unmappedNotice);
+        const skippedRows = unmatchedJobs + invalidPeriods;
+        const skippedRowsNote = skippedRows
+          ? `Skipped ${skippedRows.toLocaleString()} Work Done rows, including ${unmatchedJobs.toLocaleString()} with unmatched Standard Jobs and ${invalidPeriods.toLocaleString()} with invalid closed periods.`
+          : '';
+        window.WorkDoneSession.replace(selectedYear, nextWorkDoneData, file.name, unmappedNotice, { fingerprint, headerRow, skippedRowsNote });
         await loadWorkDoneStoreAsync(currentFinancialYear);
         updateWorkGroupFilterOptions();
         render();
-        setWorkDoneUploadState('success', 'Upload complete', `${matched.toLocaleString()} valid rows loaded for ${selectedYear}, for this session only.${resolvedCount ? ` ${resolvedCount} corrections confirmed in ELLIPSE and resolved.` : ''}${unmappedNotice ? ' ' + unmappedNotice : ''}`);
+        const notes = [unmappedNotice, skippedRowsNote].filter(Boolean).join(' ');
+        setWorkDoneUploadState('success', 'Upload complete', `${matched.toLocaleString()} valid rows loaded for ${selectedYear}, for this session only.${resolvedCount ? ` ${resolvedCount} corrections confirmed in ELLIPSE and resolved.` : ''}${notes ? ' ' + notes : ''}`);
         const input = document.getElementById('wFile');
         if (input) input.value = '';
         uploadComplete = true;
@@ -1978,6 +1908,7 @@
           alert(`Missing required columns: ${missing.join(', ')}`);
           return;
         }
+        const imported = {};
         let added = 0;
         rows.forEach(r => {
           const rawJob = String(r['Standard Job Number'] || '').trim();
@@ -1992,8 +1923,7 @@
           if (!deliveryUnit) {
             throw new Error(`Unknown Delivery Unit: ${importedDeliveryUnit || '(blank)'}`);
           }
-          if (!commentStore[jn]) commentStore[jn] = [];
-          commentStore[jn].unshift({
+          (imported[jn] ||= []).unshift({
             id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
             jobNumber: jn,
             category,
@@ -2011,7 +1941,9 @@
           });
           added += 1;
         });
-        await saveCommentStoreAsync();
+        if (added && window.isApiEnabled?.() && !await window.saveCommentsToApi(imported)) throw new Error('The server did not confirm the imported comments.');
+        Object.entries(imported).forEach(([job, entries]) => { commentStore[job] = [...entries, ...(commentStore[job] || [])]; });
+        cacheComments();
         if (currentCommentJob) {
           renderCommentsTable(currentCommentJob);
         }
@@ -2175,11 +2107,9 @@
           (engineerGroups === null || permitted.has(normalizeWorkGroupSet(code))));
         const snapshots = {};
         for (const year of fiscalYears) {
-          for (const version of ['v0', 'v1']) {
-            const snapshot = window.isApiEnabled?.() ? await window.loadForecastFromApi(year, version) : await getForecastSnapshotAsync(year, version);
-            if (window.isApiEnabled?.() && !snapshot) throw new Error('Could not load ' + year + ' ' + version + '. Export cancelled.');
-            snapshots[year + version] = snapshot?.data || new Map();
-          }
+          const plans = await readForecastPairAsync(year);
+          snapshots[year + 'v0'] = getReportingForecastData(plans.v0?.data);
+          snapshots[year + 'v1'] = buildEffectiveForecastData(plans.v0?.data, plans.v1?.data);
         }
         const rows = workGroups.map(([code, description]) => {
           const row = { 'Work Group Code': code, 'Work Group Description': description, 'Scope': currentDeliveryUnit + ' / ' + (document.getElementById('engineerFilter')?.selectedOptions[0]?.textContent || 'All engineers') };
@@ -2188,7 +2118,7 @@
             let original = 0, effective = 0;
             const hasDefined = groups => Object.entries(groups || {}).some(([key, values]) => normalizeWorkGroupSet(key) === normalizeWorkGroupSet(code) && window.FORECAST_PERIODS.some(p => Object.hasOwn(values, p)));
             for (const job of v0.values()) if (hasDefined(job.wgs)) original++;
-            for (const number of new Set([...v0.keys(), ...v1.keys()])) if (hasDefined(mergeForecastWorkGroups(v0.get(number)?.wgs, v1.get(number)?.wgs))) effective++;
+            for (const job of v1.values()) if (hasDefined(job.wgs)) effective++;
             row[year + ' V0 jobs'] = original;
             row[year + ' Effective Reforecast jobs'] = effective;
           }
@@ -2203,12 +2133,11 @@
     async function exportForecastSummary() {
       const year = currentFinancialYear;
       try {
-        const loaded = {};
-        for (const version of ['v0', 'v1']) {
-          const snapshot = window.isApiEnabled?.() ? await window.loadForecastFromApi(year, version) : await getForecastSnapshotAsync(year, version);
-          if (window.isApiEnabled?.() && !snapshot) throw new Error('Could not load ' + year + ' ' + version + '. Export cancelled.');
-          loaded[version] = snapshot?.data || new Map();
-        }
+        const plans = await readForecastPairAsync(year);
+        const loaded = {
+          v0: getReportingForecastData(plans.v0?.data),
+          v1: buildEffectiveForecastData(plans.v0?.data, plans.v1?.data)
+        };
         const selectedGroup = normalizeWorkGroupSet(document.getElementById('wgFilter')?.value || 'all');
         const engineerGroups = getSelectedEngineerWorkGroups();
         const allowed = new Set((engineerGroups || []).map(normalizeWorkGroupSet));
@@ -2218,12 +2147,12 @@
         const workbook = XLSX.utils.book_new();
         for (const version of ['v0', 'v1']) {
           const rows = [];
-          const numbers = version === 'v0' ? [...loaded.v0.keys()] : [...new Set([...loaded.v0.keys(), ...loaded.v1.keys()])];
+          const numbers = loaded[version].keys();
           for (const number of numbers) {
             const metadata = window.stdJobs.get(String(number).padStart(6, '0')) || {};
             if (query && ![number, metadata.desc, metadata.disc].some(value => String(value || '').toLowerCase().includes(query))) continue;
             if (groupId !== 'all' && !customGroup?.jobNumbers.includes(number)) continue;
-            const groups = version === 'v0' ? loaded.v0.get(number)?.wgs : mergeForecastWorkGroups(loaded.v0.get(number)?.wgs, loaded.v1.get(number)?.wgs);
+            const groups = loaded[version].get(number)?.wgs;
             for (const [key, values] of Object.entries(groups || {})) {
               const code = normalizeWorkGroupSet(key);
               if (selectedGroup !== 'all' && code !== selectedGroup) continue;
@@ -2295,7 +2224,7 @@
       const groupJobs = jobs.filter(job => group.jobNumbers.includes(job.jn));
       if (!groupJobs.length) return null;
       const rollup = {
-        jn: group.name || `GRP-${group.id}`,
+        jn: `GRP-${group.id}`,
         disc: 'Group Rollups',
         desc: group.description || getGroupName(group),
         unit: getGroupUnitLabel(group),
@@ -2607,7 +2536,7 @@
     function render() {
       window.APRFeatures?.context();
       refreshCorrectionRetry();
-      const reportingError = window.forecastLoadError || window.workOrderCorrectionsError;
+      const reportingError = window.forecastLoadError || window.workOrderCorrectionsError || reviewReadError || commentReadError || groupReadError;
       const forecastStatus = document.getElementById('forecastLoadStatus');
       if (forecastStatus) {
         forecastStatus.hidden = !reportingError;
@@ -2628,7 +2557,7 @@
         : 'Work Done not uploaded for ' + currentFinancialYear + '. Required for completed-period reporting.';
       const workDoneGroupNotice = document.getElementById('workDoneGroupNotice');
       if (workDoneGroupNotice) {
-        workDoneGroupNotice.textContent = evidence?.unmappedWorkGroups || '';
+        workDoneGroupNotice.textContent = [evidence?.unmappedWorkGroups, evidence?.skippedRowsNote].filter(Boolean).join(' ');
         workDoneGroupNotice.hidden = !workDoneGroupNotice.textContent;
       }
       const exportYears = document.getElementById('summaryExportYears');
@@ -3179,7 +3108,7 @@
           `;
 
           card.querySelectorAll('button').forEach(button => {
-            button.addEventListener('click', event => {
+            button.addEventListener('click', async event => {
               event.stopPropagation();
               const action = button.dataset.action;
               if (action === 'details') {
@@ -3199,13 +3128,15 @@
               if (action === 'manage-group' && j.groupId) {
                 openGroupModal(j.groupId);
               }
-              if (action === 'reviewed' && !isReviewed) {
-                markJobReviewed(j.jn, reviewStage);
-                triggerReviewCelebration(j.jn);
-                renderPreservingScroll();
-              }
-              if (action === 'reopen' && isReviewed) {
-                reopenJobReview(j.jn, reviewStage);
+              if (action === 'reviewed' || action === 'reopen') {
+                button.disabled = true;
+                const saved = action === 'reviewed' ? await markJobReviewed(j.jn, reviewStage) : await reopenJobReview(j.jn, reviewStage);
+                if (!saved) {
+                  button.disabled = false;
+                  window.Toast?.error('Review change could not be confirmed. Refresh shared data before retrying.');
+                  return;
+                }
+                if (action === 'reviewed') triggerReviewCelebration(j.jn);
                 renderPreservingScroll();
               }
             });
@@ -3708,7 +3639,7 @@
 
     function showBreakdown(job, options = {}) {
       document.querySelectorAll('.forecast-value-tip').forEach(tip => tip.remove());
-      if (window.workOrderCorrectionsError || window.forecastLoadError) return;
+      if (aprRefreshing || window.workOrderCorrectionsError || window.forecastLoadError || reviewReadError || commentReadError || groupReadError) return;
       const wgFilter = document.getElementById('wgFilter')?.value || 'all';
       const engineerFilter = document.getElementById('engineerFilter')?.value || 'all';
       const breakdownModal = document.getElementById('breakdown');
@@ -3735,7 +3666,15 @@
         ? (job.groupName || job.jn) : `${job.jn} · ${job.desc}`;
       document.getElementById('bdMeta').textContent = [scopeLabel, job.disc, job.unit, `${currentFinancialYear} / ${currentReviewStage}`].filter(Boolean).join(' · ');
       document.getElementById('reviewCommentaryContext').textContent = `${scopeLabel} · ${currentReviewStage}`;
+      const reviewSource = window.APRReview.context();
+      const { revisions, fingerprint } = reviewSource;
+      document.getElementById('reviewDataBasis').textContent = [
+        revisions.v0 !== null && revisions.v1 !== null ? `Forecast V0 r${revisions.v0} / V1 r${revisions.v1}` : '',
+        fingerprint ? `Work Done file ID ${fingerprint.slice(0, 12)}` : '',
+        reviewSource.correctionsFingerprint ? `Corrections ID ${reviewSource.correctionsFingerprint.slice(0, 12)}` : ''
+      ].filter(Boolean).join(' · ');
       const cutoff = getEffectiveForecastCutoffPeriod();
+      const workDoneLabel = cutoff === null ? 'Work Done' : 'Work Done (up to P' + cutoff + ')';
       const performanceAvailable = isPerformanceAvailable();
       window.APRFeatures?.breakdown(job, getAPRGroupMembers(job, dashboardScopeWorkGroups), job.unit, cutoff);
       const latestPeriods = getForecastPeriodsForScope(job, dashboardScopeWorkGroups, 'v1');
@@ -3772,7 +3711,7 @@
       const sourceLabel = latestPeriods ? '' : 'No forecast available for this selection.';
       document.getElementById('wgCompareBadge').textContent = sourceLabel;
       document.getElementById('periodForecastSource').textContent = sourceLabel ||
-        (cutoff === null ? 'Select a reporting period to see Work Done and expected volume.' : '');
+        (cutoff === null ? 'Select a reporting period to see Work Done and variance.' : '');
 
       // Set work group display mode selector
       const wgDisplaySelect = document.getElementById('wgDisplayMode');
@@ -4035,7 +3974,7 @@
 
             const detailRows = [
               { shortLabel: 'F', label: 'Latest forecast', key: 'f' },
-              { shortLabel: 'E', label: 'Expected volume', key: 'a' },
+              { shortLabel: 'WD', label: workDoneLabel, key: 'wd' },
               { shortLabel: 'V', label: 'Variance', key: 'v' }
             ];
             detailRows.forEach(({ shortLabel, label, key }) => {
@@ -4043,11 +3982,11 @@
               tableHTML += `<tr class="wg-detail engineer-row${summaryOpen ? ' open' : ''}" data-wg="${idx}" data-eng="${engineer.id}"><td><span class="wg-detail-label"><span class="wg-detail-pill">${shortLabel}</span><span class="wg-detail-text">${label}</span></span></td>`;
               for(let i=1; i<=13; i++) {
                 const p = `P${i}`;
-                const d = data.periods[p] || {f: 0, a: 0, v: 0};
-                const val = d[key] || 0;
-                detailTotal += val;
+                const d = data.periods[p] || {};
+                const val = key === 'wd' && (cutoff === null || i > cutoff) ? null : d[key] || 0;
+                detailTotal += val || 0;
                 const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
-                tableHTML += `<td class="${cl}" data-detail-key="${key}" data-period="${p}">${key === 'f' ? renderPlannedCell(wg, p, val) : `${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}`}</td>`;
+                tableHTML += `<td class="${cl}" data-detail-key="${key}" data-period="${p}">${key === 'f' ? renderPlannedCell(wg, p, val) : val === null ? '—' : `${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}`}</td>`;
               }
               const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
               tableHTML += `<td class="${tcl}" data-detail-total="${key}"><strong>${key === 'f' ? renderPlannedCell(wg, null, detailTotal) : (key === 'v' && detailTotal > 0 ? '+' : '') + detailTotal.toFixed(1)}</strong></td></tr>`;
@@ -4099,7 +4038,7 @@
 
             const detailRows = [
               { shortLabel: 'F', label: 'Latest forecast', key: 'f' },
-              { shortLabel: 'E', label: 'Expected volume', key: 'a' },
+              { shortLabel: 'WD', label: workDoneLabel, key: 'wd' },
               { shortLabel: 'V', label: 'Variance', key: 'v' }
             ];
             detailRows.forEach(({ shortLabel, label, key }) => {
@@ -4107,11 +4046,11 @@
               tableHTML += `<tr class="wg-detail${engRowClass}${summaryOpen ? ' open' : ''}" data-wg="${idx}" data-eng="ungrouped"><td><span class="wg-detail-label"><span class="wg-detail-pill">${shortLabel}</span><span class="wg-detail-text">${label}</span></span></td>`;
               for(let i=1; i<=13; i++) {
                 const p = `P${i}`;
-                const d = data.periods[p] || {f: 0, a: 0, v: 0};
-                const val = d[key] || 0;
-                detailTotal += val;
+                const d = data.periods[p] || {};
+                const val = key === 'wd' && (cutoff === null || i > cutoff) ? null : d[key] || 0;
+                detailTotal += val || 0;
                 const cl = key === 'v' ? (val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral') : '';
-                tableHTML += `<td class="${cl}" data-detail-key="${key}" data-period="${p}">${key === 'f' ? renderPlannedCell(wg, p, val) : `${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}`}</td>`;
+                tableHTML += `<td class="${cl}" data-detail-key="${key}" data-period="${p}">${key === 'f' ? renderPlannedCell(wg, p, val) : val === null ? '—' : `${key === 'v' && val > 0 ? '+' : ''}${val.toFixed(1)}`}</td>`;
               }
               const tcl = key === 'v' ? (detailTotal > 0 ? 'positive' : detailTotal < 0 ? 'negative' : 'neutral') : '';
               tableHTML += `<td class="${tcl}" data-detail-total="${key}"><strong>${key === 'f' ? renderPlannedCell(wg, null, detailTotal) : (key === 'v' && detailTotal > 0 ? '+' : '') + detailTotal.toFixed(1)}</strong></td></tr>`;
@@ -4123,7 +4062,7 @@
       wgTable.innerHTML = tableHTML;
       bindForecastValueTips(wgTable);
       if (!isPerformanceAvailable()) {
-        wgTable.querySelectorAll('[data-detail-key="a"], [data-detail-key="v"], [data-detail-total="a"], [data-detail-total="v"]').forEach(cell => cell.textContent = '—');
+        wgTable.querySelectorAll('[data-detail-key="wd"], [data-detail-key="v"], [data-detail-total="wd"], [data-detail-total="v"]').forEach(cell => cell.textContent = '—');
         if (!showForecast) wgTable.querySelectorAll('td:not(:first-child)').forEach(cell => cell.textContent = '—');
       }
 
@@ -4138,6 +4077,7 @@
       const reviewed = isJobReviewed(job.jn);
       reviewStatus.hidden = Boolean(job.isGroupRollup);
       reviewStatus.textContent = reviewed ? 'Reviewed' : 'Needs review';
+      reviewStatus.title = 'Review status applies to this Standard Job for the selected financial year and RF stage.';
       reviewStatus.className = 'job-pill ' + (reviewed ? 'reviewed' : 'needs-review');
 
       // Engineer header click to expand/collapse
@@ -4252,13 +4192,12 @@
       const periodGrid = document.getElementById('periodGrid');
       const periodCell = value => Number.isFinite(value) ? format(value) : '—';
       periodGrid.innerHTML = `
-        <thead><tr><th scope="col">Period</th><th scope="col">Latest forecast</th><th scope="col">Work Done</th>
-        <th scope="col">Expected volume</th><th scope="col">Variance</th></tr></thead>
-        <tbody>${periodRows.map(({ p, f, a, wd, v }) => `
+        <thead><tr><th scope="col">Period</th><th scope="col">Latest forecast</th><th scope="col">${workDoneLabel}</th><th scope="col">Variance</th></tr></thead>
+        <tbody>${periodRows.map(({ p, f, wd, v }) => `
           <tr><th scope="row">${p}</th><td>${forecastGroups.length
             ? renderPlannedCell(forecastGroups, p, f) : latestPeriods && Object.hasOwn(latestPeriods, p) ? format(f) : '—'}</td>
-          <td>${periodCell(wd)}</td><td>${periodCell(a)}</td>
-          <td>${Number.isFinite(v) ? signed(v) : '—'}</td></tr>`).join('')}</tbody>`;
+          <td>${periodCell(wd)}</td>
+          <td>${wd !== null && Number.isFinite(v) ? signed(v) : '—'}</td></tr>`).join('')}</tbody>`;
       bindForecastValueTips(periodGrid);
 
       // Work orders
@@ -4348,9 +4287,11 @@
             filteredEngineerName: taggedEngineer?.name
           });
           if (currentCommentJob === job.jn) {
-            commentText.value = '';
-            commentStatus.textContent = saved ? 'Commentary saved.' : 'Saved on this device. The server did not confirm the save.';
-            renderCommentsTable(job.jn);
+            commentStatus.textContent = saved ? 'Commentary saved.' : 'The server did not confirm the save. Your draft is ready to retry.';
+            if (saved) {
+              commentText.value = '';
+              renderCommentsTable(job.jn);
+            }
           }
           renderPreservingScroll();
         } catch (error) {
@@ -4422,8 +4363,13 @@
       }).join('');
       commentList.innerHTML = cards;
       commentList.querySelectorAll('.comment-delete').forEach(btn => {
-        btn.addEventListener('click', () => {
-          deleteJobComment(jobNumber, btn.dataset.id);
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          if (!await deleteJobComment(jobNumber, btn.dataset.id)) {
+            btn.disabled = false;
+            window.Toast?.error('The comment deletion could not be confirmed.');
+            return;
+          }
           renderCommentsTable(jobNumber);
           render();
         });
@@ -4526,7 +4472,12 @@
         const search = document.getElementById('search')?.value;
         if (search) filters.push('Search: ' + search);
         filters.push(document.getElementById('hideZeroVolume')?.checked ? 'Zero volume hidden' : 'Zero volume included');
-        return { year: currentFinancialYear, stage: currentReviewStage, plan: 'Latest forecast', cutoff: getEffectiveForecastCutoffPeriod(), deliveryUnit: window.getDeliveryUnitById?.(currentDeliveryUnit)?.name || currentDeliveryUnit, file: entry?.fileName, loadedAt: window.forecastLoadedAt, refreshing: aprRefreshing, error: window.forecastLoadError || window.workOrderCorrectionsError, filters };
+        const revisions = Object.fromEntries(['v0', 'v1'].map(version => [version, getForecastSnapshot(currentFinancialYear, version)?.revision ?? null]));
+        return { year: currentFinancialYear, stage: currentReviewStage, plan: 'Latest forecast', cutoff: getEffectiveForecastCutoffPeriod(),
+          deliveryUnit: window.getDeliveryUnitById?.(currentDeliveryUnit)?.name || currentDeliveryUnit,
+          file: entry?.fileName, fingerprint: entry?.fingerprint, headerRow: entry?.headerRow, revisions, correctionsFingerprint,
+          loadedAt: window.forecastLoadedAt, refreshing: aprRefreshing,
+          error: window.forecastLoadError || window.workOrderCorrectionsError || reviewReadError || commentReadError || groupReadError, filters };
       },
       hasDrafts() {
         const modal = document.getElementById('breakdown');
@@ -4536,29 +4487,19 @@
       reviewed: isJobReviewed,
       render: renderPreservingScroll,
       open(job) { const found = window.currentJobsMap.get(job); if (found) showBreakdown(found); },
-      async markReviewed(job) {
-        const year = currentFinancialYear, stage = currentReviewStage;
-        const next = structuredClone(reviewStore);
-        next[job] ||= {}; next[job][year] ||= {};
-        const record = { reviewedAt: new Date().toISOString(), reviewedBy: '' };
-        next[job][year][stage] = record;
-        if (!window.isApiEnabled?.() || !await window.saveReviewsToApi(next)) return false;
-        reviewStore[job] ||= {}; reviewStore[job][year] ||= {}; reviewStore[job][year][stage] = record;
-        try { saveReviewStore(); } catch (error) { console.warn('Optional review cache unavailable', error); }
-        return true;
-      },
+      markReviewed: markJobReviewed,
       async refresh() {
         if (aprRefreshing) return;
         if (this.hasDrafts()) throw new Error('Save or discard edits before refreshing.');
         if (!window.isApiEnabled?.()) throw new Error('Connect to the server to refresh shared data.');
         aprRefreshing = true; window.APRFeatures.context();
         try {
-          const year = currentFinancialYear;
-          const loaded = await loadDashboardForecastAsync(year, 'v1');
-          await loadWorkDoneStoreAsync(currentFinancialYear);
-          if (year === currentFinancialYear) fData = loaded?.data || null;
-          updateWorkGroupFilterOptions(); renderPreservingScroll();
-          if (window.forecastLoadError || window.workOrderCorrectionsError) throw new Error(window.forecastLoadError || window.workOrderCorrectionsError);
+          const [isCurrent] = await Promise.all([loadSelectedReviewData(), loadCommentStoreAsync(), loadReviewStoreAsync(), loadPublicGroupsAsync()]);
+          updateGroupFilterOptions();
+          if (!isCurrent) return;
+          renderPreservingScroll();
+          const error = window.forecastLoadError || window.workOrderCorrectionsError || reviewReadError || commentReadError || groupReadError;
+          if (error) throw new Error(error);
         } finally { aprRefreshing = false; window.APRFeatures.context(); }
       }
     };
@@ -4579,18 +4520,19 @@
       async capture(year, stage, cutoff) {
         if (window.APRReview.hasDrafts()) throw new Error('Save or discard your edits before exporting.');
         const connected = Boolean(window.isApiEnabled?.());
-        const results = await Promise.all([
-          connected ? window.loadForecastFromApi(year, 'v0') : getForecastSnapshotAsync(year, 'v0'),
-          connected ? window.loadForecastFromApi(year, 'v1') : getForecastSnapshotAsync(year, 'v1'),
-          connected ? window.loadJobCommentsFromApi() : structuredClone(commentStore),
-          connected ? window.loadReviewsFromApi() : structuredClone(reviewStore)
-        ]);
-        if (connected && results.some(result => !result)) throw new Error('Shared data could not be read. Retry before exporting.');
         const entry = window.WorkDoneSession.get(year);
-        const correctionsReady = !entry || await loadWorkOrderAmendmentsAsync();
+        const [plans, comments, reviews, correctionSource] = await Promise.all([
+          readForecastPairAsync(year),
+          connected ? window.loadJobCommentsFromApi() : structuredClone(commentStore),
+          connected ? window.loadReviewsFromApi({ trackRevision: false }) : structuredClone(reviewStore),
+          connected ? window.loadWorkOrderAmendmentsFromApi({ trackRevision: false, includeSource: true }) : null
+        ]);
+        const amendments = correctionSource?.data;
+        if (connected && (!comments || !reviews)) throw new Error('Shared comments or review statuses could not be read. Retry before exporting.');
+        if (entry !== window.WorkDoneSession.get(year)) throw new Error('The Work Done upload changed while the report was loading. Refresh the report.');
         if (window.APRReview.hasDrafts()) throw new Error('Save or discard your edits before exporting.');
         const done = structuredClone(entry?.data || new Map());
-        if (correctionsReady) applyStoredWorkOrderCorrections(done);
+        if (amendments) applyStoredWorkOrderCorrections(done, amendments);
         const staleSource = [...done.values()].some(job => job.workOrders?.some(order => order.correctionSourceStale));
         // Build scope lookups once per capture instead of rescanning the catalogue per cell.
         const aliasKey = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\s*\(/g, '(');
@@ -4601,11 +4543,14 @@
         const organisations = new Map();
         window.getEngineers().forEach(engineer => engineer.workGroupSets.forEach(code => organisations.set(normalise(code), { engineer, deliveryUnit: units.get(engineer.deliveryUnitId) })));
         return {
-          year, stage, cutoff, v0: structuredClone(getReportingForecastData(results[0]?.data)), v1: structuredClone(getReportingForecastData(results[1]?.data)),
-          comments: structuredClone(results[2] || {}), reviews: structuredClone(results[3] || {}), done,
+          year, stage, cutoff, v0: structuredClone(getReportingForecastData(plans.v0?.data)), v1: structuredClone(getReportingForecastData(plans.v1?.data)),
+          comments: structuredClone(comments || {}), reviews: structuredClone(reviews || {}), done,
           hasWorkDone: Boolean(entry), file: entry?.fileName || 'Not uploaded', uploadedAt: entry?.uploadedAt || '',
-          capturedAt: new Date().toISOString(), correctionsError: staleSource ? 'Upload fresh Work Done: a correction was resolved after this report was loaded.' : correctionsReady ? '' : window.workOrderCorrectionsError || 'Work Order corrections unavailable',
-          catalogue: structuredClone(window.stdJobs), amendments: structuredClone(workOrderAmendments), groupCodes: [...window.workGroupSets.keys()],
+          fingerprint: entry?.fingerprint || '', headerRow: entry?.headerRow ?? null,
+          correctionsFingerprint: correctionSource?.fingerprint || '',
+          revisions: { v0: plans.v0?.revision ?? null, v1: plans.v1?.revision ?? null },
+          capturedAt: new Date().toISOString(), correctionsError: staleSource ? 'Upload fresh Work Done: a correction was resolved after this report was loaded.' : entry && !amendments ? 'Work Order corrections could not be read. Refresh the report.' : '',
+          catalogue: structuredClone(window.stdJobs), amendments: structuredClone(amendments || {}), groupCodes: [...window.workGroupSets.keys()],
           normalise, organisation: code => organisations.get(normalise(code)),
           commentOrganisation: window.getCommentOrganisation, commentScope: window.commentMatchesOrganisationScope,
           groupDescription: code => window.workGroupSets.get(code) || code,

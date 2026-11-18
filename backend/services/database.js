@@ -373,9 +373,20 @@ class DatabaseService {
    * @returns {Object} - Structured forecast data
    */
   getForecastSnapshot(fiscalYear, planVersion) {
-    return this.db.transaction(() => ({
+    return this.db.transaction(() => this.readForecastVersion(fiscalYear, planVersion))();
+  }
+
+  readForecastVersion(fiscalYear, planVersion) {
+    return {
       data: this.getForecastData(fiscalYear, planVersion),
       revision: this.getRevision('forecast', `${fiscalYear}:${planVersion}`)
+    };
+  }
+
+  getReportingForecastSnapshot(fiscalYear) {
+    return this.db.transaction(() => ({
+      v0: this.readForecastVersion(fiscalYear, 'v0'),
+      v1: this.readForecastVersion(fiscalYear, 'v1')
     }))();
   }
 
@@ -799,6 +810,13 @@ class DatabaseService {
       out[row.job_number][row.fiscal_year][row.rf_stage] = { reviewedAt: row.reviewed_at };
     });
     return out;
+  }
+
+  getReviewSnapshot() {
+    return this.db.transaction(() => ({
+      data: this.getAllReviewStatuses(),
+      revision: this.getRevision('reviews', 'all')
+    }))();
   }
 
   getRevision(scope, dataKey) {

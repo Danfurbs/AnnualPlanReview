@@ -15,7 +15,7 @@ function harness() {
   const state = { server: { [correctionId]: { units: 9 } }, enabled: true, failSave: false, requests: 0 };
   const window = { WorkOrderReview: review, WorkDoneSession: session, currentJobsMap: new Map(), addEventListener() {}, Toast: { error() {} },
     isApiEnabled: () => state.enabled,
-    loadWorkOrderAmendmentsFromApi: async () => state.server && structuredClone(state.server),
+    loadWorkOrderAmendmentsFromApi: async () => state.server && { data: structuredClone(state.server), fingerprint: 'test' },
     saveWorkOrderAmendmentToApi: async (id, value) => {
       state.requests++;
       if (state.saveGate) await state.saveGate;
@@ -29,8 +29,8 @@ function harness() {
     render() {}, showBreakdown() {}
   });
   vm.runInContext("let workOrderAmendments = {}, currentFinancialYear = 'FY27', currentWorkOrders = [], workDoneUploadedAt = null, currentBreakdownJobNumber = null;" +
-    block('    async function loadWorkOrderAmendmentsAsync()', '    function getAllGroups()') +
-    block('    async function loadWorkDoneStoreAsync(year)', '    function getSelectedWorkDoneYear()') +
+    block('    let correctionsFingerprint', '    function getAllGroups()') +
+    block('    let workDoneLoadSerial', '    function getSelectedWorkDoneYear()') +
     block('    function getWorkOrderAmendment(orderId)', '    function getJobComments(jobNumber)'), context);
   return { context, state, window, order, data, session, pending: () => vm.runInContext('pendingCorrections.size', context) };
 }

@@ -10,7 +10,7 @@
     workDoneUploadedByYear: {}, jobComments: {},
     historyLoadedForYear: '', futureWorkParseSerial: 0, temporaryEvidenceByYear: new Map(), evidenceParseSerial: 0,
     selectedCatalogueJob: '', selectedWgs: '', addWgsJob: '', lastAddJobTrigger: null,
-    busy: false, futureWorkReview: null, futureWorkFileName: '', refreshDashboardOnClose: false
+    busy: false, futureWorkReview: null, futureWorkFileName: ''
   };
   const byId = id => document.getElementById(id);
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
@@ -125,7 +125,22 @@
   }
   function ensureSelectedEngineer() { const engineers = getScopedEngineers(); if (!engineers.some(item => item.id === state.selectedEngineerId)) state.selectedEngineerId = engineers[0]?.id || ''; return engineers; }
   const requestIsCurrent = (id, year) => id === state.requestSerial && year === state.selectedYear;
-  async function loadPlanningEvidence(year, id) { const years = [year, ...window.getPlanningHistoryYears(year)], result = { v0ForecastsByYear: {}, v1ForecastsByYear: {}, effectiveForecastsByYear: {}, workDoneByYear: {}, workDoneUploadedByYear: {} }; for (let i = 0; i < years.length; i += 1) { const fy = years[i]; if (!requestIsCurrent(id, year)) return null; setLoadingProgress('Loading planning evidence', `Reading V0, V1 and Work Done for ${fy} (${i + 1} of ${years.length})`, i / years.length * 80); const [v0, v1, wd] = await Promise.all([window.getForecastSnapshotAsync(fy, 'v0'), window.getForecastSnapshotAsync(fy, 'v1'), loadWorkDone(fy)]); if (!requestIsCurrent(id, year)) return null; if (window.isApiEnabled?.() && (!(v0?.data instanceof Map) || !(v1?.data instanceof Map))) throw new Error('Forecast evidence could not be loaded for ' + fy + '. Retry when connected.'); result.v0ForecastsByYear[fy] = v0?.data || new Map(); result.v1ForecastsByYear[fy] = v1?.data || new Map(); result.effectiveForecastsByYear[fy] = (v0 || v1) ? window.getEffectiveForecastSnapshot(fy).data : new Map(); result.workDoneByYear[fy] = wd.data; result.workDoneUploadedByYear[fy] = wd.uploadedAt; } return result; }
+  async function loadPlanningEvidence(year, id) {
+    const years = [year, ...window.getPlanningHistoryYears(year)];
+    const result = { v0ForecastsByYear: {}, v1ForecastsByYear: {}, effectiveForecastsByYear: {}, workDoneByYear: {}, workDoneUploadedByYear: {} };
+    for (const [index, fy] of years.entries()) {
+      if (!requestIsCurrent(id, year)) return null;
+      setLoadingProgress('Loading planning evidence', 'Reading forecasts and Work Done for ' + fy, index / years.length * 80);
+      const [{ v0, v1 }, workDone] = await Promise.all([window.readForecastPairAsync(fy), loadWorkDone(fy)]);
+      if (!requestIsCurrent(id, year)) return null;
+      result.v0ForecastsByYear[fy] = v0?.data || new Map();
+      result.v1ForecastsByYear[fy] = v1?.data || new Map();
+      result.effectiveForecastsByYear[fy] = window.buildEffectiveForecastData(v0?.data, v1?.data);
+      result.workDoneByYear[fy] = workDone.data;
+      result.workDoneUploadedByYear[fy] = workDone.uploadedAt;
+    }
+    return result;
+  }
   function discoveryOptions(engineerId = state.selectedEngineerId) { return { selectedYear: state.selectedYear, engineerId, engineers: getScopedEngineers(), planningMetadata: state.metadata, effectiveForecastsByYear: state.effectiveForecastsByYear, v0ForecastsByYear: state.v0ForecastsByYear, workDoneByYear: state.workDoneByYear, resolveWorkGroupCode: window.resolveWorkGroupCode }; }
   function rebuildJobCache() { const next = new Map(); getScopedEngineers().forEach(engineer => next.set(engineer.id, window.getStandardJobsForEngineer(discoveryOptions(engineer.id)))); state.jobsByEngineer = next; }
   function rebuildEngineerJobCache(engineerId = state.selectedEngineerId) {
@@ -307,7 +322,18 @@
   function renderAll() { refreshClearWorkGroups(); const engineers = ensureSelectedEngineer(), engineer = engineers.find(item => item.id === state.selectedEngineerId); renderEngineerList(); if (!engineer) return; const progress = getEngineerProgress(); byId('forecastPreviewEngineerTitle').textContent = engineer.name; byId('forecastPreviewProgressText').textContent = `${progress.reviewed} of ${progress.total} jobs reviewed · ${progress.withVolume} with volume`; byId('forecastPreviewProgressBar').style.width = `${progress.percent}%`; renderJobList(); scrollActiveEngineerIntoView(); }
   async function refreshPreview() { const id = ++state.requestSerial, year = state.selectedYear; state.loading = true; byId('forecastPreviewLoading').hidden = false; byId('forecastPreviewContent').hidden = true; try { const metadataPromise = loadMetadata(year), commentsPromise = loadHistoricalComments(), evidence = await loadPlanningEvidence(year, id); if (!evidence || !requestIsCurrent(id, year)) return; [state.metadata, state.jobComments] = await Promise.all([metadataPromise, commentsPromise]); if (!requestIsCurrent(id, year)) return; Object.assign(state, evidence); state.historyLoadedForYear = ''; if (state.contextExpanded.size || state.showAllHistory.size) { if (await ensurePlanningHistoryLoaded() === false) return; } rebuildJobCache(); if (!ensureSelectedEngineer().length) throw new Error('Select a Delivery Unit before opening the Forecast Builder.'); renderAll(); byId('forecastPreviewLoading').hidden = true; byId('forecastPreviewContent').hidden = false; byId('forecastPreviewState').textContent = 'V0 planning workspace loaded'; } catch (error) { if (requestIsCurrent(id, year)) byId('forecastPreviewLoading').textContent = error.message; } finally { if (requestIsCurrent(id, year)) state.loading = false; } }
   async function openForecastBuilderPreview() { if (!getScopedEngineers().length) return window.Toast?.error('Select a Delivery Unit before opening the Forecast Builder.'); byId('dashboardPage')?.classList.add('is-hidden'); byId('forecastPage')?.classList.add('is-hidden'); byId('forecastBuilderPreviewPage')?.classList.remove('is-hidden'); const years = window.getFinancialYearOptions?.() || window.DEFAULT_FINANCIAL_YEARS || []; byId('forecastPreviewYear').innerHTML = years.map(year => `<option value="${escapeHtml(year)}">${escapeHtml(year)} — Original Approved Plan</option>`).join(''); state.selectedYear = window.currentFinancialYear || years[0]; byId('forecastPreviewYear').value = state.selectedYear; syncEvidenceYearOptions(); await refreshPreview(); }
-  function closeForecastBuilderPreview() { if (!confirmDiscard()) return; state.requestSerial += 1; state.evidenceParseSerial += 1; clearTemporaryEvidence({ render: false, all: true }); state.drafts.clear(); byId('forecastBuilderPreviewPage')?.classList.add('is-hidden'); byId('dashboardPage')?.classList.remove('is-hidden'); if (state.refreshDashboardOnClose) { state.refreshDashboardOnClose = false; window.renderPreservingScroll?.(); } }
+  async function closeForecastBuilderPreview() {
+    if (!confirmDiscard()) return;
+    state.requestSerial += 1;
+    state.evidenceParseSerial += 1;
+    clearTemporaryEvidence({ render: false, all: true });
+    state.drafts.clear();
+    byId('forecastBuilderPreviewPage')?.classList.add('is-hidden');
+    byId('dashboardPage')?.classList.remove('is-hidden');
+    if (window.isApiEnabled?.() && window.APRReview) {
+      try { await window.APRReview.refresh(); } catch (error) { window.Toast?.error(error.message); }
+    } else window.renderPreservingScroll?.();
+  }
   async function toggleForecasted(button) {
     if (state.busy) return;
     const jobNumber = normalizeJob(button.dataset.jobNumber), markingComplete = button.dataset.forecasted !== 'true';
@@ -499,13 +525,11 @@
       .filter(year => !state.effectiveForecastsByYear[year]);
     for (const year of olderYears) {
       byId('forecastPreviewState').textContent = `Loading Planning Context for ${year}…`;
-      const [v0, v1, workDone] = await Promise.all([
-        window.getForecastSnapshotAsync(year, 'v0'), window.getForecastSnapshotAsync(year, 'v1'), loadWorkDone(year)
-      ]);
+      const [{ v0, v1 }, workDone] = await Promise.all([window.readForecastPairAsync(year), loadWorkDone(year)]);
       if (!requestIsCurrent(requestId, requestedYear)) return false;
       state.v0ForecastsByYear[year] = v0?.data || new Map();
       state.v1ForecastsByYear[year] = v1?.data || new Map();
-      state.effectiveForecastsByYear[year] = (v0 || v1) ? window.getEffectiveForecastSnapshot(year).data : new Map();
+      state.effectiveForecastsByYear[year] = window.buildEffectiveForecastData(v0?.data, v1?.data);
       const temporaryEvidence = state.temporaryEvidenceByYear.get(year);
       if (temporaryEvidence) {
         temporaryEvidence.originalData = window.WorkDoneSession.get(year)?.data || new Map();
@@ -738,7 +762,6 @@
           state.v0ForecastsByYear[state.selectedYear] = data;
           state.effectiveForecastsByYear[state.selectedYear] = window.getEffectiveForecastSnapshot(state.selectedYear).data;
           state.selectedEngineerId = engineerId;
-          state.refreshDashboardOnClose = true;
           state.drafts.clear(); rebuildJobCache(); renderAll();
         }
       });
