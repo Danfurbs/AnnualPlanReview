@@ -2309,3 +2309,11 @@ button:disabled { cursor: default; }
 .wg-plan-work-done-fill label { font-weight: 650; }
 .wg-plan-work-done-fill select { padding: 7px 9px; border: 1px solid #94a3b8; border-radius: 6px; }
 .wg-plan-work-done-fill small { flex-basis: 100%; }
+
+.wg-plan-v1-state { margin: 10px 0; padding: 11px 13px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; font-weight: 600; }
+.wg-plan-v1-state[data-state="missing"] { border-left: 5px solid #d97706; }
+.wg-plan-v1-state[data-state="saved"] { border-left: 5px solid #16a34a; }
+.wg-plan-uniform-fill { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0; padding: 12px 14px; border-radius: 10px; border: 1px solid #cbd5e1; }
+.wg-plan-uniform-fill label { font-weight: 650; }
+.wg-plan-uniform-fill input { width: 100px; padding: 7px 9px; border: 1px solid #94a3b8; border-radius: 6px; }
+.wg-plan-uniform-fill small { flex-basis: 100%; color: #64748b; }
