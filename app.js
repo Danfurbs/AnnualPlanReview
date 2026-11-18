@@ -3697,13 +3697,6 @@
       document.getElementById('bdTitle').textContent = job.isGroupRollup
         ? (job.groupName || job.jn) : `${job.jn} · ${job.desc}`;
       document.getElementById('bdMeta').textContent = [scopeLabel, job.disc, job.unit, `${currentFinancialYear} / ${currentReviewStage}`].filter(Boolean).join(' · ');
-      // Colour the full breakdown shell by current delivery-performance RAG;
-      // review completion is shown separately and does not imply green performance.
-      const breakdownDisplay = getJobDisplayData(job);
-      const selectedPeriod = document.getElementById('periodFilter')?.value || 'all';
-      const ragInput = selectedPeriod === 'all' ? breakdownDisplay.tot : (breakdownDisplay.periods[selectedPeriod] || breakdownDisplay.tot);
-      const ragStatus = getVarianceStatus(ragInput).status;
-      breakdownModal.dataset.rag = ragStatus === 'bad' ? 'red' : ragStatus === 'warning' ? 'amber' : ragStatus === 'good' ? 'green' : 'unavailable';
       document.getElementById('reviewCommentaryContext').textContent = `${scopeLabel} · ${currentReviewStage}`;
       const reviewSource = window.APRReview.context();
       const { revisions, fingerprint } = reviewSource;
@@ -3730,6 +3723,8 @@
       }), { f: 0, a: 0, wd: 0 });
       const variance = totals.a - totals.f;
       const { status } = getVarianceStatus(totals);
+      // Use the breakdown's own scoped figures for the same RAG shown in its metrics.
+      breakdownModal.dataset.rag = status === 'bad' ? 'red' : status === 'warning' ? 'amber' : status === 'good' ? 'green' : 'unavailable';
       const format = value => Number.isFinite(value)
         ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : 'Unavailable';
       const signed = value => Number.isFinite(value)
