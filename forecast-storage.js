@@ -456,9 +456,13 @@ async function saveForecastJobToStorageAsync(jobNumber, forecastJob, snapshot, y
   if (!jobNumber || !forecastJob || !snapshot?.data || !year || !planVersion) return false;
 
   if (window.isApiEnabled?.() && window.saveForecastJobToApi) {
-    const savedToApi = await window.saveForecastJobToApi(jobNumber, forecastJob, year, planVersion);
+    let confirmedData = snapshot.data;
+    const savedToApi = await window.saveForecastJobToApi(jobNumber, forecastJob, year, planVersion, true, latest => {
+      confirmedData = latest;
+    });
     if (savedToApi) {
-      rememberForecastSnapshot(snapshot.data, snapshot.data.size, year, planVersion);
+      confirmedData.set(jobNumber, forecastJob);
+      rememberForecastSnapshot(confirmedData, confirmedData.size, year, planVersion);
       return true;
     }
 
@@ -486,9 +490,17 @@ async function deleteForecastJobFromStorageAsync(jobNumber, snapshot, year, plan
   snapshot.data.delete(jobNumber);
   if (window.isApiEnabled?.() && window.saveForecastJobToApi) {
     const emptyForecastJob = { periods: {}, wgs: {}, comments: {}, amendments: {} };
-    const savedToApi = await window.saveForecastJobToApi(jobNumber, emptyForecastJob, year, planVersion);
+    let confirmedData = snapshot.data;
+    const savedToApi = await window.saveForecastJobToApi(jobNumber, emptyForecastJob, year, planVersion, true, latest => {
+      confirmedData = latest;
+    });
     if (savedToApi) {
-      rememberForecastSnapshot(snapshot.data, snapshot.data.size, year, planVersion);
+      if (Object.keys(emptyForecastJob.wgs || {}).length || Object.keys(emptyForecastJob.comments || {}).length) {
+        confirmedData.set(jobNumber, emptyForecastJob);
+      } else {
+        confirmedData.delete(jobNumber);
+      }
+      rememberForecastSnapshot(confirmedData, confirmedData.size, year, planVersion);
       return true;
     }
 
@@ -659,6 +671,8 @@ function getForecastWorkGroupIdentity(workGroup) {
     .trim();
   const code = text.split(/\s+/)[0].toUpperCase();
   const workGroupSets = window.workGroupSets;
+  const resolvedCode = window.resolveWorkGroupCode?.(text);
+  if (resolvedCode && workGroupSets?.has(resolvedCode)) return normalize(workGroupSets.get(resolvedCode));
   if (workGroupSets?.has(code)) return normalize(workGroupSets.get(code));
   if (workGroupSets?.has(text.toUpperCase())) return normalize(workGroupSets.get(text.toUpperCase()));
 
@@ -680,26 +694,55 @@ function mergeForecastWorkGroups(v0Wgs, v1Wgs) {
   const merged = {};
   const keysByIdentity = new Map();
 
-  Object.entries(v0Wgs || {}).forEach(([workGroup, periods]) => {
-    merged[workGroup] = { ...(periods || {}) };
-    keysByIdentity.set(getForecastWorkGroupIdentity(workGroup), workGroup);
-  });
-
-  Object.entries(v1Wgs || {}).forEach(([workGroup, periods]) => {
-    const identity = getForecastWorkGroupIdentity(workGroup);
-    const existingKey = keysByIdentity.get(identity);
-    const outputKey = existingKey || workGroup;
-    merged[outputKey] = { ...(merged[outputKey] || {}), ...(periods || {}) };
-    keysByIdentity.set(identity, outputKey);
+  [v0Wgs, v1Wgs].forEach(groups => {
+    Object.entries(groups || {}).forEach(([workGroup, periods]) => {
+      const identity = getForecastWorkGroupIdentity(workGroup);
+      const outputKey = keysByIdentity.get(identity) || workGroup;
+      merged[outputKey] = { ...(merged[outputKey] || {}), ...(periods || {}) };
+      keysByIdentity.set(identity, outputKey);
+    });
   });
 
   return merged;
 }
 
+function getReportingJobNumber(value) {
+  const number = String(value ?? '').trim();
+  return /^\d{1,6}$/.test(number) ? number.padStart(6, '0') : number;
+}
+
+function getReportingJobAliases(jobNumber) {
+  const canonical = getReportingJobNumber(jobNumber);
+  const short = canonical.replace(/^0+(?=\d)/, '');
+  return /^\d{6}$/.test(canonical)
+    ? Array.from({ length: 7 - short.length }, (_, index) => short.padStart(short.length + index, '0'))
+    : [canonical];
+}
+
+function getStoredForecastJobKeys(data, jobNumber) {
+  return getReportingJobAliases(jobNumber).filter(key => data?.has(key));
+}
+
+function getReportingForecastJob(data, jobNumber) {
+  const keys = getStoredForecastJobKeys(data, jobNumber);
+  if (!keys.length) return undefined;
+  // Retain non-overlapping legacy cells and prefer the canonical row for overlaps.
+  const merged = keys.reduce((result, key) => {
+    const job = data.get(key);
+    return { wgs: mergeForecastWorkGroups(result.wgs, job.wgs), comments: { ...result.comments, ...job.comments } };
+  }, { wgs: {}, comments: {} });
+  const periods = Object.keys(merged.wgs).length
+    ? recalculatePeriodsFromWgs(merged.wgs) : data.get(keys.at(-1)).periods;
+  return { ...merged, periods };
+}
+
+function getReportingForecastData(data) {
+  const jobs = new Set(Array.from(data?.keys() || [], getReportingJobNumber));
+  return new Map([...jobs].map(job => [job, getReportingForecastJob(data, job)]));
+}
+
 /** Resolve the complete Plan v1 view by layering its sparse WG/period overrides on v0. */
-function getEffectiveForecastJob(year, jobNumber) {
-  const v0Job = getForecastSnapshot(year, 'v0')?.data.get(jobNumber);
-  const v1Job = getForecastSnapshot(year, 'v1')?.data.get(jobNumber);
+function combineForecastJobs(v0Job, v1Job) {
   if (!v0Job && !v1Job) return null;
 
   const wgs = mergeForecastWorkGroups(v0Job?.wgs, v1Job?.wgs);
@@ -707,17 +750,26 @@ function getEffectiveForecastJob(year, jobNumber) {
   return { periods: recalculatePeriodsFromWgs(wgs), wgs, comments };
 }
 
+function getEffectiveForecastJob(year, jobNumber) {
+  return combineForecastJobs(
+    getReportingForecastJob(getForecastSnapshot(year, 'v0')?.data, jobNumber),
+    getReportingForecastJob(getForecastSnapshot(year, 'v1')?.data, jobNumber)
+  );
+}
+
+function buildEffectiveForecastData(v0Data, v1Data) {
+  const jobNumbers = new Set([
+    ...Array.from(v0Data?.keys() || [], getReportingJobNumber),
+    ...Array.from(v1Data?.keys() || [], getReportingJobNumber)
+  ]);
+  return new Map([...jobNumbers].map(jobNumber => [jobNumber, combineForecastJobs(
+    getReportingForecastJob(v0Data, jobNumber), getReportingForecastJob(v1Data, jobNumber)
+  )]));
+}
+
 /** Return the complete, read-time Plan v1 projection for every v0/v1 job. */
 function getEffectiveForecastSnapshot(year) {
-  const v0Snapshot = getForecastSnapshot(year, 'v0');
-  const v1Snapshot = getForecastSnapshot(year, 'v1');
-  const jobNumbers = new Set([
-    ...(v0Snapshot?.data.keys() || []),
-    ...(v1Snapshot?.data.keys() || [])
-  ]);
-  const data = new Map();
-  jobNumbers.forEach(jobNumber => data.set(jobNumber, getEffectiveForecastJob(year, jobNumber)));
-  return { data };
+  return { data: buildEffectiveForecastData(getForecastSnapshot(year, 'v0')?.data, getForecastSnapshot(year, 'v1')?.data) };
 }
 
 /**
@@ -1090,6 +1142,9 @@ window.getForecastSnapshotAsync = getForecastSnapshotAsync;
 window.recalculatePeriodsFromWgs = recalculatePeriodsFromWgs;
 window.getForecastWorkGroupIdentity = getForecastWorkGroupIdentity;
 window.mergeForecastWorkGroups = mergeForecastWorkGroups;
+window.getReportingForecastData = getReportingForecastData;
+window.getReportingForecastJob = getReportingForecastJob;
+window.buildEffectiveForecastData = buildEffectiveForecastData;
 window.getEffectiveForecastJob = getEffectiveForecastJob;
 window.getEffectiveForecastSnapshot = getEffectiveForecastSnapshot;
 window.exportForecastFile = exportForecastFile;

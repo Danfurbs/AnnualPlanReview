@@ -21,7 +21,8 @@
   const groups = Array.from(controls.children);
   const context = make('div', 'dashboard-context');
   header.append(context);
-  groups.slice(0, 3).forEach(group => {
+  const contextGroups = groups.filter(group => group.querySelector('#reviewStageButton, #reportingPeriodSelect'));
+  contextGroups.forEach(group => {
     context.append(group);
     const help = group.querySelector('.helper-text');
     if (help) {
@@ -30,7 +31,6 @@
       group.append(details);
     }
   });
-  context.querySelector('label[for="dashboardPlanVersion"]').textContent = 'Compare against';
   context.querySelector('label[for="reportingPeriodSelect"]').textContent = 'Work Done through';
   const grid = make('div', 'dashboard-layout');
   const sidebar = make('aside', 'dashboard-sidebar');
@@ -105,15 +105,15 @@
   main.append(toolbar, meta, notice, $('forecastLoadStatus'), $('retryCorrections'), $('jobs'));
   grid.append(sidebar, main);
   page.append(grid);
-  groups.slice(3).forEach(group => {
-    if (group === searchGroup) return;
+  groups.forEach(group => {
+    if (group === searchGroup || contextGroups.includes(group)) return;
     if (group.querySelector('[onclick="openGroupModal()"]')) sections.manage.append(group);
     else sections.filters.append(group);
   });
   controls.remove();
   sections.filters.append($('aprFilterDetails').parentElement);
   const contextBar = page.querySelector('.apr-context-bar');
-  sections.data.append($('workDoneSessionStatus'), contextBar);
+  sections.data.append($('workDoneSessionStatus'), $('workDoneGroupNotice'), contextBar);
   sections.overview.append($('performanceSummary'), page.querySelector('.forecast-health'), $('reviewProgressCard'));
   sections.overview.querySelector('.health-header h3').textContent = 'Delivery variance';
   sections.workdone.append($('workOrderActivityCard'));

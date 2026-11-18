@@ -161,7 +161,7 @@ const server = http.createServer(async (req, res) => {
     assert.equal(await page.locator('#dashboard-accordion-data').evaluate(el => el.open), true);
     assert.equal(await page.locator('#dashboard-accordion-filters').evaluate(el => el.open), true);
     // Every original control has one live instance after the layout move.
-    for (const id of ['reviewStageButton', 'dashboardPlanVersion', 'reportingPeriodSelect', 'wgFilter', 'engineerFilter', 'groupFilter', 'reviewStatusFilter', 'varianceFilter', 'hideZeroVolume', 'search', 'aprRefreshShared', 'aprStartReview', 'exportsCommentType']) {
+    for (const id of ['reviewStageButton', 'reportingPeriodSelect', 'wgFilter', 'engineerFilter', 'groupFilter', 'reviewStatusFilter', 'varianceFilter', 'hideZeroVolume', 'search', 'aprRefreshShared', 'aprStartReview', 'exportsCommentType']) {
       assert.equal(await page.locator('#' + id).count(), 1, id);
     }
     const savedContext = await page.evaluate(() => ({

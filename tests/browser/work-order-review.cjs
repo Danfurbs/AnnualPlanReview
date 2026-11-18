@@ -144,8 +144,12 @@ const server = http.createServer(async (req, res) => {
       const input=await APRExportSource.capture('FY27','RF9',1);
       return APRExportData.prepare(input,{du:'all',scale:'du'},{orders:'corrected'},'orders').datasets.orders;
     });
+    const openWorkOrders = async () => {
+      await page.evaluate(() => showBreakdown(currentJobsMap.get('009001')));
+      await page.locator('#reviewWorkOrdersTab').click();
+    };
     await upload([row('WO-A',0),row('WO-B',5)]);
-    await page.evaluate(()=>showBreakdown(currentJobsMap.get('009001')));
+    await openWorkOrders();
     const amended=await page.evaluate(async()=>{
       const order=currentWorkOrders.find(order=>order.number==='WO-A');
       const saved=await applyWorkOrderUnitAmendment(order.id,9,'Corrected units in ELLIPSE');
@@ -160,7 +164,7 @@ const server = http.createServer(async (req, res) => {
     assert.equal(service.getWorkOrderAmendments()[amended.id].status,'resolved','fresh corrected source retires the override');
     assert.equal((await outstanding()).length,0);
     assert.equal(await page.locator('#workOrderAmended').textContent(),'0');
-    await page.evaluate(()=>showBreakdown(currentJobsMap.get('009001')));
+    await openWorkOrders();
     assert.equal(await page.locator('#woFlagOnly').isChecked(),true);
     assert.match(await page.locator('#woTable').innerText(),/No outstanding/);
     await page.locator('#woFlagOnly').uncheck();
@@ -169,7 +173,7 @@ const server = http.createServer(async (req, res) => {
     await upload([row('WO-A',12),row('WO-B',5)]);
     assert.equal(await page.evaluate(()=>wData.get('009001').workOrders.find(order=>order.number==='WO-A').units),12,'retired overrides never replace later source values');
     // Explicit zero is a valid correction, and its old zero-unit warning must disappear after confirmation.
-    await page.evaluate(()=>showBreakdown(currentJobsMap.get('009001')));
+    await openWorkOrders();
     assert.equal(await page.evaluate(async()=>{
       const order=currentWorkOrders.find(order=>order.number==='WO-A');
       return applyWorkOrderUnitAmendment(order.id,0,'Confirmed zero');
@@ -177,17 +181,17 @@ const server = http.createServer(async (req, res) => {
     await page.evaluate(()=>closeBreakdown());
     await upload([row('WO-A',0),row('WO-B',5)]);
     assert.equal((await outstanding()).length,0);
-    await page.evaluate(()=>showBreakdown(currentJobsMap.get('009001')));
+    await openWorkOrders();
     assert.match(await page.locator('#woTable').innerText(),/No outstanding/);
     assert.equal(await page.evaluate(()=>currentWorkOrders.find(order=>order.number==='WO-A').correctionResolved),true);
     await page.evaluate(()=>closeBreakdown());
     // A missing row and duplicate rows are not proof of completion.
-    await page.evaluate(()=>showBreakdown(currentJobsMap.get('009001')));
+    await openWorkOrders();
     await page.evaluate(async()=>{const order=currentWorkOrders.find(order=>order.number==='WO-A');await applyWorkOrderUnitAmendment(order.id,10,'Next correction');closeBreakdown();});
     await upload([row('WO-B',5)]);
     assert.equal(service.getWorkOrderAmendments()[amended.id].status,'active');
     assert.match((await outstanding())[0]['Review status'],/Missing from current upload/);
-    await page.evaluate(()=>showBreakdown(currentJobsMap.get('009001')));
+    await openWorkOrders();
     assert.match(await page.locator('#woTable').innerText(),/Missing from current upload/);
     assert.equal(await page.locator('#woTable .wo-amend:disabled').count(),1);
     assert.equal(await page.locator('#workOrderAmended').textContent(),'1');
@@ -195,7 +199,7 @@ const server = http.createServer(async (req, res) => {
     await upload([row('WO-A',10),row('WO-A',10),row('WO-B',5)]);
     assert.equal(service.getWorkOrderAmendments()[amended.id].status,'active');
     assert.equal((await outstanding()).length,2);
-    await page.evaluate(()=>showBreakdown(currentJobsMap.get('009001')));
+    await openWorkOrders();
     assert.match(await page.locator('#woTable').innerText(),/Duplicate work order rows/);
     assert.equal(await page.locator('#woTable .wo-amend:disabled').count(),2);
     await page.evaluate(()=>closeBreakdown());

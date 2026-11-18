@@ -42,7 +42,12 @@ test('work groups resolve from codes, descriptions, and combined labels', () => 
   assert.equal(window.resolveWorkGroupCode('DBCANOFT'), 'DBCANOFT');
   assert.equal(window.resolveWorkGroupCode('Carnforth SM Drainage'), 'DBCANOFT');
   assert.equal(window.resolveWorkGroupCode('DBCANOFT Carnforth SM Drainage'), 'DBCANOFT');
+  assert.equal(window.resolveWorkGroupCode('dbcanoft—Carnforth SM Drainage'), 'DBCANOFT');
   assert.equal(window.getOrganisationForWorkGroup('Carnforth SM Drainage').engineer.id, 'preston');
+  assert.equal(window.getOrganisationForWorkGroup('DBCAROTA').engineer.id, 'carnforth');
+  const prestonOffTrack = window.getOrganisationForWorkGroup('Preston SM (Off Track)');
+  assert.equal(prestonOffTrack.engineer.id, 'blackburn');
+  assert.equal(prestonOffTrack.deliveryUnit.id, 'lancs-cumbria');
 });
 
 test('Delivery Units resolve from stable IDs and display names', () => {

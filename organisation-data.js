@@ -394,25 +394,23 @@ function getEngineerWorkGroups(engineerId) {
 }
 
 function normalizeOrganisationLabel(value) {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\s*\(/g, '(');
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\s*\(/g, '(').replace(/\(off track\)/g, '(offtrack)');
 }
 
 function getWorkGroupCatalogue() {
   return new Map(WORK_GROUP_SETS_RAW.split('\n').slice(1).map(line => line.split('\t')));
 }
 
+const workGroupCodes = getWorkGroupCatalogue();
+const workGroupCodesByLabel = new Map(Array.from(workGroupCodes, ([code, label]) => [normalizeOrganisationLabel(label), code]));
+
 /** Resolve a WGS code from a code, description, or "code description" value. */
 function resolveWorkGroupCode(value) {
   const text = String(value || '').trim();
   if (!text) return '';
-  const catalogue = getWorkGroupCatalogue();
-  const candidateCode = text.split(/\s+/)[0].toUpperCase();
-  if (catalogue.has(candidateCode)) return candidateCode;
-  const normalized = normalizeOrganisationLabel(text);
-  for (const [code, description] of catalogue) {
-    if (normalizeOrganisationLabel(description) === normalized) return code;
-  }
-  return '';
+  const candidateCode = text.match(/^[A-Z0-9&]+(?=$|[\s:–—-])/i)?.[0].toUpperCase();
+  if (workGroupCodes.has(candidateCode)) return candidateCode;
+  return workGroupCodesByLabel.get(normalizeOrganisationLabel(text)) || '';
 }
 
 /**

@@ -59,7 +59,7 @@ const server = http.createServer(async (req, res) => {
     fixture.group = await page.evaluate(() => [...window.workGroupSets.keys()][0]);
     await page.evaluate(group => {
       requiresContextSelection = false;
-      currentFinancialYear = 'FY27'; currentReviewStage = 'RF9'; currentPlanVersion = 'v1'; currentDeliveryUnit = 'all';
+      currentFinancialYear = 'FY27'; currentReviewStage = 'RF9'; currentPlanVersion = 'v0'; currentDeliveryUnit = 'all';
       currentForecastCutoff = 'P1'; cutoffFinancialYear = 'FY27';
       document.getElementById('reportingPeriodSelect').value = 'P1';
       for (const el of document.querySelectorAll('.modal')) el.classList.remove('open');
@@ -83,11 +83,16 @@ const server = http.createServer(async (req, res) => {
     await page.locator('#aprStartReview').click();
     assert.equal(await page.locator('#breakdown').evaluate(el => el.classList.contains('open')), true);
 
-    assert.equal(await page.locator('#breakdownPlanVersion, #wgComparePlanVersion').count(), 0);
+    assert.equal(await page.locator('#dashboardPlanVersion, #breakdownPlanVersion, #wgComparePlanVersion').count(), 0);
     assert.equal(await page.locator('#wgDisplayMode').inputValue(), 'forecast');
-    assert.match(await page.locator('#wgCompareBadge').innerText(), /Latest forecast: V1/);
+    assert.match(await page.locator('#breakdownMetrics').innerText(), /Latest forecast\s+40\.0[\s\S]*Work Done to P1\s+9[\s\S]*Expected year-end total\s+39/);
+    assert.equal(await page.locator('#reviewPeriodTab').getAttribute('aria-selected'), 'true');
+    assert.equal(await page.locator('#periodGrid tbody tr').count(), 13);
+    assert.match(await page.locator('#periodGrid').innerText(), /Expected volume/);
     const chart = await page.evaluate(() => testChart.data.datasets);
-    assert.deepEqual(chart.slice(0,2).map(d => d.data[12]), [30,40]);
+    assert.deepEqual(chart.slice(0,2).map(d => d.data[12]), [40,30]);
+    assert.equal(chart[0].label, 'Latest forecast');
+    assert.deepEqual(chart[1].borderDash, [6, 5]);
     assert.equal(chart[2].data[12], 39);
     const detail = page.locator('#wgTable [data-detail-key="f"][data-period="P2"] button');
     assert.equal(await detail.count(), 1);
@@ -101,19 +106,31 @@ const server = http.createServer(async (req, res) => {
     assert.equal(await page.locator('.forecast-value-tip').count(), 0);
     await marker.click();
     assert.equal(await page.locator('.forecast-value-tip').isVisible(), true);
+    await page.locator('#reviewPeriodTab').focus();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.locator('#reviewWorkGroupPanel').isVisible(), true);
+    assert.equal(await page.locator('#reviewPeriodPanel').isVisible(), false);
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.locator('#reviewWorkOrdersPanel').isVisible(), true);
+    assert.equal(await page.locator('#woTotal').innerText(), '1');
+    await page.locator('#commentText').fill('Check access for the next reporting period.');
+    assert.equal(await page.evaluate(() => APRReview.hasDrafts()), true);
+    await page.locator('#commentAdd').click();
+    await page.waitForFunction(() => document.getElementById('reviewCommentStatus').textContent === 'Commentary saved.');
+    await page.locator('#reviewCommentsTab').click();
+    assert.match(await page.locator('#commentList').innerText(), /Check access/);
     assert.match(await page.locator('#wgTable [data-detail-total="f"] button').getAttribute('data-forecast-tip'), /Includes V1 updates/);
     await page.evaluate(() => showBreakdown(currentJobsMap.get('009002')));
-    assert.match(await page.locator('#wgCompareBadge').innerText(), /Forecast: V0/);
     assert.equal(await page.locator('#wgTable button.forecast-value').count(), 0);
-    assert.equal(await page.evaluate(() => testChart.data.datasets.filter(d => d.label === 'Latest forecast (V1)').length), 0);
+    assert.equal(await page.evaluate(() => testChart.data.datasets.find(d => d.label === 'Latest forecast').data[12]), 10);
+    assert.equal(await page.evaluate(() => testChart.data.datasets.some(d => d.label === 'Original plan (V0)')), false);
     await page.evaluate(() => showBreakdown(currentJobsMap.get('Inspection group')));
-    assert.deepEqual(await page.evaluate(() => testChart.data.datasets.slice(0,2).map(d => d.data[12])), [40,50]);
+    assert.deepEqual(await page.evaluate(() => testChart.data.datasets.slice(0,2).map(d => d.data[12])), [50,40]);
     assert.match(await page.locator('#wgTable [data-detail-total="f"] button').getAttribute('data-forecast-tip'), /Latest forecast.*50.0/);
-    await page.evaluate(group => {
-      breakdownChartScope = 'workgroup'; breakdownChartScopeTarget = group;
-      showBreakdown(currentJobsMap.get('009001'));
-    }, fixture.group);
-    assert.equal(await page.evaluate(() => testChart.data.datasets[1].data[12]), 40);
+    await page.evaluate(() => showBreakdown(currentJobsMap.get('009001')));
+    await page.selectOption('#breakdownChartScope', 'workgroup');
+    assert.equal(await page.evaluate(() => testChart.data.datasets[0].data[12]), 40);
+    await page.locator('#reviewWorkGroupTab').click();
     await page.selectOption('#wgDisplayMode', 'variance');
     assert.equal(await page.locator('#wgTable [data-detail-key="v"][data-period="P1"]').innerText(), '-1.0');
     await page.selectOption('#wgDisplayMode', 'forecast');
@@ -124,6 +141,8 @@ const server = http.createServer(async (req, res) => {
       await page.locator('#wgTable .forecast-value').first().click();
       const tip = await page.locator('.forecast-value-tip').boundingBox();
       assert.ok(tip.x >= 0 && tip.x + tip.width <= width, 'comparison fits viewport');
+      const footer = await page.locator('.review-breakdown-footer').boundingBox();
+      assert.ok(footer.y + footer.height <= 1000, 'review actions stay inside the viewport');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
     }
     await page.setViewportSize({width:1440,height:1000});
@@ -136,13 +155,13 @@ const server = http.createServer(async (req, res) => {
     }, { group: fixture.group, value });
     await change(0);
     assert.match(await detail.getAttribute('data-forecast-tip'), /Latest forecast \(V1\): 0.0/);
-    assert.equal(await page.evaluate(() => testChart.data.datasets[1].data[12]), 10);
+    assert.equal(await page.evaluate(() => testChart.data.datasets[0].data[12]), 10);
     await change(20);
     assert.match(await detail.getAttribute('data-forecast-tip'), /Unchanged from original/);
-    assert.match(await page.locator('#breakdownChartScopeBadge').innerText(), /V1 matches V0/);
+    assert.equal(await page.evaluate(() => testChart.data.datasets.some(d => d.label === 'Original plan (V0)')), false);
     await page.evaluate(() => { getForecastSnapshot('FY27', 'v0').data.delete('009001'); showBreakdown(currentJobsMap.get('009001')); });
     assert.match(await detail.getAttribute('data-forecast-tip'), /No original plan available/);
-    assert.equal(await page.evaluate(() => testChart.data.datasets.filter(d => d.label === 'Original approved plan (V0)').length), 0);
+    assert.equal(await page.evaluate(() => testChart.data.datasets.filter(d => d.label === 'Original plan (V0)').length), 0);
     await page.evaluate(() => { getForecastSnapshot('FY27', 'v1').data.delete('009001'); showBreakdown(currentJobsMap.get('009001')); });
     assert.match(await page.locator('#wgCompareBadge').innerText(), /No forecast available/);
     assert.equal(await page.locator('#wgTable button.forecast-value').count(), 0);

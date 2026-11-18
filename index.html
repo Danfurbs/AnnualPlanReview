@@ -43,16 +43,9 @@
         <span class="helper-text" id="reviewStageHelper"></span>
       </div>
       <div class="control-group">
-        <label for="dashboardPlanVersion">Plan version</label>
-        <select id="dashboardPlanVersion" onchange="handleDashboardPlanVersionChange()">
-          <option value="v0">V0 — Original Approved Plan</option>
-          <option value="v1">V1 / Reforecast</option>
-        </select>
-        <span class="helper-text">V1 amendments override V0; unchanged values continue to inherit V0.</span>
-      </div>
-      <div class="control-group">
 
         <p id="workDoneSessionStatus" role="status">Work Done not uploaded.</p>
+        <p id="workDoneGroupNotice" class="dashboard-data-notice" role="status" hidden></p>
         <label for="reportingPeriodSelect">Completed reporting period</label>
         <select id="reportingPeriodSelect"><option value="">Select reporting period…</option><option value="P0">P0 — no completed periods</option><option value="P1">P1</option><option value="P2">P2</option><option value="P3">P3</option><option value="P4">P4</option><option value="P5">P5</option><option value="P6">P6</option><option value="P7">P7</option><option value="P8">P8</option><option value="P9">P9</option><option value="P10">P10</option><option value="P11">P11</option><option value="P12">P12</option><option value="P13">P13</option></select>
         <span class="helper-text">Periods through this completed-period cutoff use corrected Work Done; later periods use the latest effective forecast.</span>
@@ -74,6 +67,7 @@
         <select id="groupFilter" onchange="render()">
           <option value="all">All Standard Jobs</option>
         </select>
+        <p class="helper-text" id="groupRollupNotice" hidden></p>
       </div>
       <div class="control-group">
         <label for="reviewStatusFilter">Review status</label>
@@ -167,7 +161,7 @@
           <span>Review stage</span>
           <span class="review-stage-chip" id="reviewStageDisplay">RF3</span>
           <span class="review-stage-chip" id="financialYearDisplay">FY</span>
-          <span class="review-stage-chip" id="planVersionDisplay">Plan v1</span>
+          <span class="review-stage-chip">Latest forecast</span>
         </div>
         <div class="card-meta" id="reviewPercent">0% jobs reviewed</div>
         <div class="progress-bar"><div class="progress-fill" id="reviewProgress"></div></div>
@@ -610,129 +604,120 @@
 
 
 
-  <div id="breakdown" class="modal">
-    <div class="modal-content modal-content--wide">
-      <div class="modal-header">
-        <div>
-          <h2 id="bdTitle">Job Breakdown</h2>
-          <p class="helper-text" id="bdMeta"></p>
-        </div>
-        <button class="close" onclick="closeBreakdown()" aria-label="Close Standard Job Breakdown">&times;</button>
-      </div>
-      <p class="helper-text" id="breakdownModeNote"></p>
-      <div id="aprReviewNavigation" class="apr-inline-actions"><button type="button" class="group-action-button" id="aprPreviousJob">Previous</button><span id="aprQueuePosition"></span><button type="button" class="group-action-button" id="aprNextJob">Next</button><button type="button" class="primary-button" id="aprReviewNext">Mark reviewed &amp; next</button></div>
-      <details class="apr-detail" id="aprRollupExplanation" hidden><summary>Explain this group total</summary><div id="aprRollupRows"></div></details>
-      <details class="apr-detail" id="aprJobHistory"><summary>Saved change history</summary></details>
 
+  <div id="breakdown" class="modal" role="dialog" aria-modal="true" aria-labelledby="bdTitle">
+    <div class="modal-content modal-content--wide review-breakdown">
+      <div class="review-breakdown-scroll">
+        <header class="review-breakdown-header">
+          <div>
+            <h2 id="bdTitle">Job breakdown</h2>
+            <p class="helper-text" id="bdMeta"></p>
+          </div>
+          <span id="breakdownReviewStatus" class="job-pill" aria-live="polite"></span>
+          <button type="button" class="close" onclick="closeBreakdown()" aria-label="Close Standard Job breakdown">&times;</button>
+        </header>
+        <div class="review-metrics" id="breakdownMetrics"></div>
 
-      <div class="breakdown-section">
-        <div class="discipline-header">
-          <h3>Cumulative Progress</h3>
-          <div class="header-actions">
-            <label for="breakdownChartScope" style="font-size: 0.85rem;">View:</label>
-            <select id="breakdownChartScope" onchange="handleBreakdownChartScopeChange()" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 0.85rem;">
-              <option value="overall">Overall</option>
-              <option value="workgroup">Work group set</option>
-              <option value="engineer">Engineer</option>
-            </select>
-            <select id="breakdownChartScopeTarget" aria-label="Cumulative progress selection" onchange="handleBreakdownChartScopeTargetChange()" hidden style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 0.85rem;"></select>
-            <button type="button" class="section-toggle" id="compareForecastButton" onclick="openForecastComparison()">Compare Plan v0 vs v1</button>
-          </div>
-        </div>
-        <div id="breakdownChartScopeBadge" class="wg-compare-badge" aria-live="polite"></div>
-        <canvas id="chart"></canvas>
-      </div>
-
-      <div class="breakdown-section">
-        <div class="discipline-header">
-          <h3>Work Group Performance by Period</h3>
-          <div class="header-actions">
-            <label style="font-size: 0.85rem; margin-right: 4px;">Display:</label>
-            <select id="wgDisplayMode" onchange="handleWgDisplayModeChange()" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 0.85rem; margin-right: 12px;">
-              <option value="variance">Variance</option>
-              <option value="forecast">Forecast</option>
-            </select>
-            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('wgTableContainer', this)">Collapse</button>
-          </div>
-        </div>
-        <div class="collapsible-content" id="wgTableContainer">
-          <div id="wgCompareBadge" class="wg-compare-badge"></div>
-          <p class="helper-text">V1 marks updated forecast values. Hover, focus or select to see the original. Variance uses the latest forecast.</p>
-          <div style="overflow-x: auto;">
-            <table class="wg-table" id="wgTable"></table>
-          </div>
-          <div class="breakdown-review-actions">
-            <span id="breakdownForecastStatus" class="breakdown-forecast-status" aria-live="polite"></span>
-            <span id="breakdownReviewStatus" class="job-pill" aria-live="polite"></span>
-            <button type="button" class="success" id="markBreakdownReviewed">Mark Reviewed</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="breakdown-section" id="forecastCommentsSection" style="display: none;">
-        <div class="discipline-header">
-          <h3>Forecast Comments</h3>
-          <div class="header-actions">
-            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('forecastCommentsContainer', this)">Collapse</button>
-          </div>
-        </div>
-        <div class="collapsible-content" id="forecastCommentsContainer"></div>
-      </div>
-
-      <div class="breakdown-section">
-        <div class="discipline-header">
-          <h3>Period Summary</h3>
-          <div class="header-actions">
-            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('periodGrid', this)">Collapse</button>
-          </div>
-        </div>
-        <p id="periodForecastSource" class="helper-text"></p>
-        <div class="breakdown-grid collapsible-content" id="periodGrid"></div>
-      </div>
-
-      <div class="breakdown-section">
-        <div class="discipline-header">
-          <h3>Work Orders (Work Done)</h3>
-          <div class="header-actions">
-            <button type="button" class="section-toggle" onclick="toggleBreakdownSection('workOrdersSection', this)">Collapse</button>
-          </div>
-        </div>
-        <div class="collapsible-content" id="workOrdersSection">
-          <div class="wo-controls">
-            <div class="wo-summary">
-              <span class="wo-pill">Work Orders: <strong id="woTotal">0</strong></span>
-              <span class="wo-pill">Units Complete: <strong id="woUnits">0</strong></span>
-              <span class="wo-pill">Flagged: <strong id="woFlagged">0</strong></span>
+        <div class="review-overview">
+          <section class="review-panel" aria-labelledby="breakdownProgressTitle">
+            <div class="review-panel-heading">
+              <h3 id="breakdownProgressTitle">Cumulative progress</h3>
+              <div class="review-chart-controls">
+                <select id="breakdownChartScope" aria-label="Chart scope" onchange="handleBreakdownChartScopeChange()">
+                  <option value="overall">Overall</option>
+                  <option value="workgroup">Work group set</option>
+                  <option value="engineer">Engineer</option>
+                </select>
+                <select id="breakdownChartScopeTarget" aria-label="Chart work group or Engineer" onchange="handleBreakdownChartScopeTargetChange()" hidden></select>
+              </div>
             </div>
-            <div class="wo-filters">
-              <input type="search" id="woSearch" placeholder="Search work orders...">
-              <label class="wo-flag-toggle"><input type="checkbox" id="woFlagOnly" checked> Needs review only</label>
+            <div id="breakdownChartScopeBadge" class="helper-text" aria-live="polite"></div>
+            <div class="review-chart"><canvas id="chart" role="img" aria-label="Cumulative latest forecast, original plan and expected total by period"></canvas></div>
+          </section>
+
+          <section class="review-panel" aria-labelledby="reviewCommentaryTitle">
+            <h3 id="reviewCommentaryTitle">Review commentary</h3>
+            <p class="helper-text" id="reviewCommentaryContext"></p>
+            <form id="reviewCommentForm" class="review-comment-form">
+              <label for="commentText">Commentary</label>
+              <textarea id="commentText" placeholder="Record what drove the variance or what needs to happen next." required></textarea>
+              <details class="review-comment-options">
+                <summary>Comment category and work group</summary>
+                <div class="comment-form-row">
+                  <select id="commentType" aria-label="Comment category"></select>
+                  <select id="commentWorkGroupTag" aria-label="Tag a work group"></select>
+                  <select id="commentEngineerTag" aria-label="Engineer for tagged work group" disabled></select>
+                </div>
+              </details>
+              <div class="comment-actions"><button type="submit" id="commentAdd">Save commentary</button></div>
+              <p class="helper-text" id="reviewCommentStatus" role="status"></p>
+            </form>
+          </section>
+        </div>
+
+        <div class="review-tabs" role="tablist" aria-label="Breakdown details">
+          <button type="button" role="tab" id="reviewPeriodTab" aria-controls="reviewPeriodPanel" aria-selected="true">Period summary</button>
+          <button type="button" role="tab" id="reviewWorkGroupTab" aria-controls="reviewWorkGroupPanel" aria-selected="false" tabindex="-1">Work group performance</button>
+          <button type="button" role="tab" id="reviewWorkOrdersTab" aria-controls="reviewWorkOrdersPanel" aria-selected="false" tabindex="-1">Work orders</button>
+          <button type="button" role="tab" id="reviewCommentsTab" aria-controls="reviewCommentsPanel" aria-selected="false" tabindex="-1">Comments</button>
+        </div>
+        <section class="review-tab-panel" id="reviewPeriodPanel" role="tabpanel" aria-labelledby="reviewPeriodTab" tabindex="0">
+          <p id="periodForecastSource" class="helper-text"></p>
+          <div class="apr-table-scroll">
+            <table class="wg-table review-period-table" id="periodGrid"></table>
+          </div>
+        </section>
+        <section class="review-tab-panel" id="reviewWorkGroupPanel" role="tabpanel" aria-labelledby="reviewWorkGroupTab" tabindex="0" hidden>
+          <div class="review-panel-heading" id="wgTableContainer">
+            <p id="wgCompareBadge" class="helper-text"></p>
+            <label class="review-chart-controls">Show
+              <select id="wgDisplayMode" onchange="handleWgDisplayModeChange()">
+                <option value="forecast">Latest forecast</option>
+                <option value="variance">Variance</option>
+              </select>
+            </label>
+          </div>
+          <div class="apr-table-scroll"><table class="wg-table" id="wgTable"></table></div>
+        </section>
+        <section class="review-tab-panel" id="reviewWorkOrdersPanel" role="tabpanel" aria-labelledby="reviewWorkOrdersTab" tabindex="0" hidden>
+          <div id="workOrdersSection">
+            <div class="wo-controls">
+              <div class="wo-summary">
+                <span class="wo-pill">Work Orders: <strong id="woTotal">0</strong></span>
+                <span class="wo-pill"><span id="woUnitsLabel">Work Done</span> <strong id="woUnits">Unavailable</strong></span>
+                <span class="wo-pill">Flagged: <strong id="woFlagged">0</strong></span>
+              </div>
+              <div class="wo-filters">
+                <input type="search" id="woSearch" aria-label="Search work orders" placeholder="Search work orders">
+                <label class="wo-flag-toggle"><input type="checkbox" id="woFlagOnly" checked> Needs review only</label>
+              </div>
+            </div>
+            <div class="apr-table-scroll">
+              <table class="wo-table" id="woTable"></table>
             </div>
           </div>
-          <div style="overflow-x: auto;">
-            <table class="wo-table" id="woTable"></table>
-          </div>
-        </div>
-      </div>
-
-      <div class="breakdown-section">
-        <h3>Comments</h3>
-        <div class="comment-panel">
+        </section>
+        <section class="review-tab-panel" id="reviewCommentsPanel" role="tabpanel" aria-labelledby="reviewCommentsTab" tabindex="0" hidden>
+          <h3>Review commentary</h3>
           <div class="comment-list" id="commentList"></div>
-          <div class="comment-form">
-            <div class="comment-form-header">Add New Comment</div>
-            <div class="comment-form-row">
-              <select id="commentType"></select>
-              <select id="commentWorkGroupTag"></select>
-              <select id="commentEngineerTag"></select>
-            </div>
-            <textarea id="commentText" placeholder="Enter your commentary..."></textarea>
-            <div class="comment-actions">
-              <button type="button" id="commentAdd">Add Comment</button>
-            </div>
+          <section id="forecastCommentsSection" hidden>
+            <h3>Forecast comments</h3>
+            <div id="forecastCommentsContainer"></div>
+          </section>
+        </section>
+        <details class="apr-detail" id="aprRollupExplanation" hidden><summary>Explain this group total</summary><div id="aprRollupRows"></div></details>
+        <details class="apr-detail" id="aprJobHistory"><summary>Saved change history</summary></details>
+      </div>
+      <footer class="review-breakdown-footer">
+        <span id="breakdownForecastStatus" class="breakdown-forecast-status" aria-live="polite"></span>
+        <div id="aprReviewNavigation">
+          <div class="review-queue"><button type="button" class="group-action-button" id="aprPreviousJob">Previous</button><span id="aprQueuePosition"></span></div>
+          <div class="review-footer-actions">
+            <button type="button" class="group-action-button" id="aprNextJob">Next job</button>
+            <button type="button" class="primary-button" id="aprReviewNext">Mark reviewed &amp; next</button>
           </div>
         </div>
-      </div>
+      </footer>
     </div>
   </div>
 
@@ -761,7 +746,7 @@
         <h2>Select review stage</h2>
       </div>
     <div class="stage-selection">
-        <p class="helper-text">Choose the financial year and RF stage to track review completion before continuing. Plan version will be auto-selected.</p>
+        <p class="helper-text">Choose the financial year and RF stage to track review completion. Reviews use the latest forecast.</p>
         <div class="file-input-group">
           <label for="financialYearSelect">Financial year</label>
           <select id="financialYearSelect"></select>
@@ -771,28 +756,6 @@
           <select id="deliveryUnitSelect"></select>
         </div>
         <div class="stage-selection-grid" id="stageSelectionGrid"></div>
-      </div>
-    </div>
-  </div>
-
-  <div id="forecastCompare" class="modal">
-    <div class="modal-content modal-content--wide">
-      <div class="modal-header">
-        <h2>Forecast comparison</h2>
-        <button class="close" onclick="closeForecastComparison()">&times;</button>
-      </div>
-      <p class="helper-text" id="forecastCompareMeta"></p>
-      <div class="wo-controls">
-        <div class="wo-filters">
-          <label class="wo-flag-toggle">
-            <input type="checkbox" id="compareChangedOnly">
-            Show changes only
-          </label>
-          <input type="search" id="compareSearch" placeholder="Search job number or description">
-        </div>
-      </div>
-      <div style="overflow-x: auto;">
-        <table class="wg-table" id="compareTable"></table>
       </div>
     </div>
   </div>

@@ -133,7 +133,12 @@ test('per-job conflict merges server comments and confirms only after successful
   let revision = 1;
   let job = { wgs: { WG: { P8: 10 } }, periods: {}, comments: { WG: 'Before' } };
   const client = loadApiClient(async (_url, options) => {
-    if (options.method === 'GET') return response({ success: true, data: { '000123': structuredClone(job) }, revision });
+    if (options.method === 'GET') {
+      assert.equal(options.cache, 'no-store');
+      return response({ success: true, data: {
+        '000123': structuredClone(job), '000456': { wgs: { WG: { P2: revision } } }
+      }, revision });
+    }
     const { expectedRevision, ...value } = JSON.parse(options.body);
     if (expectedRevision !== revision) return response({ error: 'Revision conflict' }, 409);
     job = value; return response({ success: true, revision: ++revision });
@@ -141,7 +146,9 @@ test('per-job conflict merges server comments and confirms only after successful
   const loaded = await client.loadForecastFromApi('FY27', 'v1');
   const draft = loaded.data.get('000123'); draft.wgs.WG.P8 = 0;
   job.comments.WG = 'Remote'; revision++;
-  assert.equal(await client.saveForecastJobToApi('000123', draft, 'FY27', 'v1'), true);
+  let confirmed;
+  assert.equal(await client.saveForecastJobToApi('000123', draft, 'FY27', 'v1', true, latest => { confirmed = latest; }), true);
+  assert.equal(confirmed.get('000456').wgs.WG.P2, 2);
   assert.equal(draft.comments.WG, 'Remote');
   assert.equal(job.wgs.WG.P8, 0);
 });

@@ -72,6 +72,51 @@ test('v1 code and v0 description aliases replace rather than add together', () =
   assert.equal(forecast.recalculatePeriodsFromWgs(result).P1, 3);
 });
 
+test('legacy job and work group aliases resolve to one scoped latest forecast', () => {
+  const code = 'DBPREOTA';
+  const label = 'Preston SM(OFFTRACK)';
+  const forecast = loadForecastStorage(new Map([[code, label]]));
+  const original = new Map([
+    ['9045', { wgs: { [label]: { P1: 10, P2: 20, P3: 5 } } }],
+    ['009045', { wgs: { [code]: { P4: 6 } } }]
+  ]);
+  const updates = new Map([
+    ['09045', { wgs: { [code]: { P2: 0 } } }],
+    ['009045', { wgs: { [label]: { P3: 30 } } }],
+    ['009280', { wgs: { [code]: { P5: 7 } } }]
+  ]);
+  forecast.saveForecastToStorage(original, original.size, 'FY27', 'v0', false);
+  forecast.saveForecastToStorage(updates, updates.size, 'FY27', 'v1', false);
+  const latest = forecast.getEffectiveForecastSnapshot('FY27').data;
+  assert.deepEqual([...latest.keys()], ['009045', '009280']);
+  assert.deepEqual({ ...latest.get('009045').wgs[label] }, { P1: 10, P2: 0, P3: 30, P4: 6 });
+  assert.equal(latest.get('009280').periods.P5, 7);
+
+  const { prepare } = require('../exports-data');
+  const output = prepare({
+    year: 'FY27', cutoff: 0, v0: forecast.getReportingForecastData(original), v1: forecast.getReportingForecastData(updates),
+    catalogue: new Map([['009045', { unit: 'Miles' }]]),
+    normalise: () => code, groupDescription: () => label,
+    organisation: () => ({ deliveryUnit: { id: 'lc' }, engineer: { id: 'blackburn' } })
+  }, { du: 'lc', scale: 'engineer', target: 'blackburn' }, {}, 'v1').datasets.v1;
+  assert.equal(output.find(row => row['Standard Job No'] === '009045')['Full year total'], 46);
+});
+
+test('saving a job after a conflict retains other confirmed server updates in the dashboard', async () => {
+  const forecast = loadForecastStorage(new Map(), {
+    isApiEnabled: () => true,
+    saveForecastJobToApi: async (jobNumber, job, year, version, canMerge, onMerged) => {
+      onMerged(new Map([['009045', { wgs: { Track: { P3: 33 } } }]]));
+      return true;
+    }
+  });
+  const job = { wgs: { Track: { P2: 17 } } };
+  const snapshot = { data: new Map([['009045', { wgs: { Track: { P3: 5 } } }]]) };
+  assert.equal(await forecast.saveForecastJobToStorageAsync('009280', job, snapshot, 'FY27', 'v1'), true);
+  assert.equal(forecast.getEffectiveForecastJob('FY27', '009045').periods.P3, 33);
+  assert.equal(forecast.getEffectiveForecastJob('FY27', '009280').periods.P2, 17);
+});
+
 test('existing explicit zeros, forecast comments, and amendment metadata survive a storage round trip', () => {
   const forecast = loadForecastStorage();
   const data = new Map([['000123', {
@@ -105,7 +150,7 @@ test('standard-job breakdown edits persist through the per-job API', async () =>
 
   assert.equal(saved, true);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0], ['000123', job, 'FY26', 'v1']);
+  assert.deepEqual(calls[0].slice(0, 4), ['000123', job, 'FY26', 'v1']);
   assert.equal(forecast.forecastMemorySnapshots.get('FY26:v1').data.get('000123').wgs.Track.P1, 7);
 });
 
@@ -143,7 +188,7 @@ test('deleting the last v1 work group removes and persists the sparse job entry'
   assert.deepEqual(JSON.parse(JSON.stringify(calls[0][1])), {
     periods: {}, wgs: {}, comments: {}, amendments: {}
   });
-  assert.deepEqual(calls[0].slice(2), ['FY26', 'v1']);
+  assert.deepEqual(calls[0].slice(2, 4), ['FY26', 'v1']);
 });
 
 test('deleting a sparse forecast job persists locally when the API is disabled', async () => {

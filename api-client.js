@@ -388,7 +388,7 @@ async function loadForecastFromApi(year, planVersion) {
   if (!isApiEnabled()) return null;
 
   try {
-    const response = await apiRequest(`/forecasts/${year}/${planVersion}`);
+    const response = await apiRequest(`/forecasts/${year}/${planVersion}`, { cache: 'no-store' });
 
     if (response.success && response.data) {
       forecastRevisions.set(`${year}:${planVersion}`, response.revision || 0);
@@ -473,7 +473,7 @@ async function saveForecastToApi(forecastData, rowCount, year, planVersion, canM
 }
 
 /** Save one edited job without replacing the entire financial-year snapshot. */
-async function saveForecastJobToApi(jobNumber, forecastData, year, planVersion, canMerge = true) {
+async function saveForecastJobToApi(jobNumber, forecastData, year, planVersion, canMerge = true, onMerged) {
   if (!isApiEnabled()) return false;
   const endpoint = `/forecasts/${year}/${planVersion}/job/${encodeURIComponent(jobNumber)}`;
   const validation = validateSerializedForecastData({ [jobNumber]: forecastData });
@@ -503,7 +503,11 @@ async function saveForecastJobToApi(jobNumber, forecastData, year, planVersion, 
         if (merged.value && (!merged.conflicts.length || window.confirm('This job changed in another session: ' + merged.conflicts.join(', ') + '. Keep your draft values for these conflicts?'))) {
           merged.value.periods = window.recalculatePeriodsFromWgs(merged.value.wgs);
           const ok = await saveForecastJobToApi(jobNumber, merged.value, year, planVersion, false);
-          if (ok) { Object.keys(forecastData).forEach(key => delete forecastData[key]); Object.assign(forecastData, merged.value); }
+          if (ok) {
+            Object.keys(forecastData).forEach(key => delete forecastData[key]);
+            Object.assign(forecastData, merged.value);
+            onMerged?.(latest.data);
+          }
           if (!ok) { forecastBases.set(key, originalBase); forecastRevisions.set(key, revision); }
           return ok;
         }

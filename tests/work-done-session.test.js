@@ -75,6 +75,21 @@ test('upload finishing after its selected FY changes cannot install stale eviden
   assert.equal(h.state.statuses.at(-1)[0], 'error');
 });
 
+test('Work Done resolves code-only reports and reports rows excluded from Engineer totals', async () => {
+  const h = uploadHarness();
+  h.context.window.resolveWorkGroupCode = input => input === 'DBCANOFT' ? input : '';
+  h.context.window.getEngineerForWorkGroup = code => code === 'DBCANOFT' ? { id: 'preston' } : null;
+  h.state.rows = [
+    { 'Standard Job No': '123456', 'Work Order Closed Period': 1, 'Units Complete': 5, 'Work Group Set Code': 'DBCANOFT', order: 'WO2' },
+    { 'Standard Job No': '123456', 'Work Order Closed Period': 1, 'Units Complete': 2, 'Work Group Set Code': 'UNKNOWN', order: 'WO3' }
+  ];
+  await h.upload();
+  const upload = h.session.get('FY27');
+  assert.equal(upload.data.get('123456').wgs.DBCANOFT.P1, 5);
+  assert.equal(upload.data.get('123456').wgs.UNKNOWN.P1, 2);
+  assert.match(upload.unmappedWorkGroups, /no Engineer allocation: 1 \(UNKNOWN\)/);
+});
+
 test('session uploads replace only their FY; invalid replacement retains valid data; new sessions start empty', () => {
   const session = createWorkDoneSession();
   const first = new Map([['123456', { periods: { P1: 5 } }]]);
