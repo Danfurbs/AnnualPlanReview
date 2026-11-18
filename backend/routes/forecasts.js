@@ -4,6 +4,7 @@
 
 const express = require('express');
 const router = express.Router();
+const otm = require('../../otm-forecast');
 const {
   isValidFiscalYear,
   isValidPlanVersion,
@@ -74,10 +75,14 @@ function validateForecastEntry(jobNumber, forecastData) {
     for (const [group, evidence] of Object.entries(forecastData.sources)) {
       if (!Object.hasOwn(forecastData.wgs, group) || !isPlainObject(evidence)) return `Job ${jobNumber}: source must match a Work Group Set`;
       for (const [name, values] of Object.entries(evidence)) {
-        if (!['mst', 'waif', 'applied'].includes(name)) return `Job ${jobNumber}: invalid source '${name}'`;
+        if (name === 'otmPlan') continue;
+        if (!['mst', 'waif', 'applied', 'otm', 'otmManual'].includes(name)) return `Job ${jobNumber}: invalid source '${name}'`;
         const error = validatePeriods(values, `Job ${jobNumber} source '${name}'`);
         if (error) return error;
       }
+      const otmError = otm.validateEvidence(evidence);
+      if (otmError) return `Job ${jobNumber}: ${otmError}`;
+      if (evidence.otm && (!otm.JOBS.includes(jobNumber.padStart(6, '0')) || Object.entries(evidence.otm).some(([p, v]) => forecastData.wgs[group][p] !== v))) return `Job ${jobNumber}: OTM outputs must match the saved forecast; edit shifts or output rates in OTM Shift Planner.`;
     }
   }
 

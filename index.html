@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Annual Plan Review</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="otm-planner.css">
 </head>
 <body>
   <div class="container page" id="dashboardPage">
@@ -386,6 +387,7 @@
               </div>
             </div>
             <div class="preview-engineer-actions">
+              <button type="button" class="group-action-button" id="forecastPreviewOtm">OTM Shift Planner</button>
               <button type="button" class="group-action-button" id="forecastPreviewFutureWork">Upload MST forecast</button>
               <button type="button" class="group-action-button" id="forecastPreviewWaif">Upload WAIF forecast</button>
               <button type="button" class="group-action-button" id="forecastPreviewPrevious">← Previous Engineer</button>
@@ -921,11 +923,13 @@
   <script src="forecast-state.js"></script>
   <script src="forecast-builder-data.js"></script>
   <script src="future-work-import.js"></script>
+  <script src="otm-forecast.js"></script>
   <script src="waif-forecast-import.js"></script>
   <script src="work-done-session.js"></script>
   <script src="work-order-review.js"></script>
   <script src="forecast-builder-actions.js"></script>
   <script src="forecast-builder-preview.js"></script>
+  <script src="otm-planner.js"></script>
   <script src="baseline-storage.js"></script>
   <script src="baseline-page.js"></script>
   <script src="dashboard-layout.js"></script>

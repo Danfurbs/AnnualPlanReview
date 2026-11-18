@@ -26,6 +26,16 @@ function loadForecastStorage(workGroupSets = new Map(), windowOverrides = {}, cl
   return window;
 }
 
+test('OTM save opts out of automatic source/input conflict merges and retains failed drafts',async()=>{
+ const calls=[];let fail=true;
+ const forecast=loadForecastStorage(new Map(),{isApiEnabled:()=>true,saveForecastToApi:async(...args)=>{calls.push(args);return !fail}});
+ const data=new Map([['009112',{wgs:{WG:{P1:1}}}]]);
+ assert.equal(await forecast.saveForecastToStorageAsync(data,1,'FY27','v0',{canMerge:false}),false);
+ assert.equal(calls[0][4],false);
+ fail=false;assert.equal(await forecast.saveForecastToStorageAsync(data,1,'FY27','v0',{canMerge:false}),true);
+ assert.equal(forecast.getForecastSnapshot('FY27','v0').data.get('009112').wgs.WG.P1,1);
+});
+
 test('historical prediction sources survive fallback cloning and local storage independently', () => {
   const storage = loadForecastStorage(new Map(), {}, null);
   const job = { periods: { P2: 6 }, wgs: { WG: { P2: 6 } }, sources: { WG: { mst: { P2: 0 }, waif: { P2: 6 }, applied: { P2: 6 } } } };

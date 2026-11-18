@@ -1,9 +1,10 @@
 /* Historical total predictions are evidence, never an additive forecast source. */
 (function (root, factory) {
-  const api = factory(typeof module === 'object' && module.exports ? require('./forecast-model') : root.ForecastModel);
+  const api = factory(typeof module === 'object' && module.exports ? require('./forecast-model') : root.ForecastModel,
+    typeof module === 'object' && module.exports ? require('./otm-forecast') : root.OtmForecast);
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.WaifForecastImport = api;
-})(typeof window === 'undefined' ? globalThis : window, function (model) {
+})(typeof window === 'undefined' ? globalThis : window, function (model, otm) {
   const text = value => String(value ?? '').trim();
   const clone = value => JSON.parse(JSON.stringify(value));
   function parseCsv(input, options = {}) {
@@ -91,10 +92,11 @@
       // Existing V0 values have no source provenance: protect them as planned work.
       if (!Object.hasOwn(evidence.mst, item.period)) evidence.mst[item.period] = current;
       evidence[type][item.period] = item.value;
-      const automatic = evidence.mst[item.period] > 0 ? evidence.mst[item.period] : (evidence.waif[item.period] || 0);
+      const controlled = evidence.otm && Object.hasOwn(evidence.otm, item.period);
+      const automatic = controlled ? evidence.otm[item.period] : evidence.mst[item.period] > 0 ? evidence.mst[item.period] : (evidence.waif[item.period] || 0);
       const manual = tracked && current !== evidence.applied[item.period];
-      const next = manual ? current : automatic;
-      evidence.applied[item.period] = manual ? evidence.applied[item.period] : next;
+      const next = controlled ? automatic : manual ? current : automatic;
+      evidence.applied[item.period] = manual && !controlled ? evidence.applied[item.period] : next;
       aliases.forEach(alias => { delete job.wgs[alias]; delete job.comments[alias]; delete job.sources[alias]; });
       job.sources[item.workGroup] = evidence;
       job.wgs[item.workGroup] = { ...existing.periods, [item.period]: next };
@@ -117,13 +119,17 @@
         if (!Object.hasOwn(job.wgs, canonical)) return;
         const clean = {};
         Object.entries(evidence).forEach(([name, periods]) => {
-          if (!['mst', 'waif', 'applied'].includes(name) || !periods || typeof periods !== 'object' || Array.isArray(periods)) throw new Error('Invalid source evidence in JSON.');
+          if (name === 'otmPlan') { clean[name] = clone(periods); return; }
+          if (!['mst', 'waif', 'applied', 'otm', 'otmManual'].includes(name) || !periods || typeof periods !== 'object' || Array.isArray(periods)) throw new Error('Invalid source evidence in JSON.');
           clean[name] = {};
           Object.entries(periods).forEach(([period, value]) => {
             if (!model.periods.includes(period) || typeof value !== 'number') throw new Error('Invalid source period or volume in JSON.');
             clean[name][period] = model.parseCell(value);
           });
         });
+        const error = otm?.validateEvidence(clean);
+        if (error) throw new Error(error);
+        if (clean.otm && (!otm?.JOBS.includes(model.extractJobNumber(key)) || Object.entries(clean.otm).some(([p, v]) => job.wgs[canonical][p] !== v))) throw new Error('OTM source does not match the exported job forecast.');
         (job.sources ||= {})[canonical] = clean;
       });
     });

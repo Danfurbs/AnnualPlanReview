@@ -422,13 +422,13 @@ function saveForecastToStorage(forecastData, rowCount, year, planVersion, syncSe
 /**
  * Save forecast to storage and API (async version)
  */
-async function saveForecastToStorageAsync(forecastData, rowCount, year, planVersion) {
+async function saveForecastToStorageAsync(forecastData, rowCount, year, planVersion, options = {}) {
   // In API mode the server is authoritative. Do not attempt to serialize the
   // same (often multi-megabyte) FY snapshot into localStorage first: a quota
   // exception there must never prevent or obscure the actual server save.
   if (window.isApiEnabled && window.isApiEnabled() && window.saveForecastToApi) {
     try {
-      const saved = await window.saveForecastToApi(forecastData, rowCount, year, planVersion);
+      const saved = await window.saveForecastToApi(forecastData, rowCount, year, planVersion, options.canMerge !== false);
       if (saved) rememberForecastSnapshot(forecastData, rowCount, year, planVersion);
       return saved;
     } catch (err) {

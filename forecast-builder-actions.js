@@ -10,6 +10,10 @@
     return JSON.stringify(value, function (key, item) { return item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(name => [name, item[name]])) : item; });
   }
   function total(job) {
+    // Source-controlled outputs cannot be changed through a generic V0 grid or profile copy.
+    Object.entries(job.sources || {}).forEach(([code, evidence]) => {
+      if (evidence.otm && job.wgs?.[code]) Object.assign(job.wgs[code], evidence.otm);
+    });
     job.periods = Object.fromEntries(periods.map(p => [p, Object.values(job.wgs || {}).reduce((n, row) => n + (Number(row[p]) || 0), 0)]));
     return job;
   }

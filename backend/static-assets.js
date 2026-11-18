@@ -6,7 +6,7 @@ const PUBLIC_ASSETS = new Set([
   'forecast-library.js', 'api-client.js', 'data-migration.js', 'forecast-globals.js',
   'forecast-model.js', 'forecast-storage.js', 'forecast-state.js',
   'forecast-builder-data.js', 'waif-forecast-import.js', 'future-work-import.js', 'work-done-session.js', 'work-order-review.js',
-  'forecast-builder-actions.js', 'forecast-builder-preview.js',
+  'forecast-builder-actions.js', 'forecast-builder-preview.js', 'otm-forecast.js', 'otm-planner.js', 'otm-planner.css',
   'dashboard-layout.js', 'review-enhancements.js', 'exports-data.js', 'export-layout.js', 'export-workbook.js', 'exports-ui.js', 'baseline-storage.js', 'baseline-page.js', 'app.js', 'settings.js'
 ]);
 function publicAsset(urlPath) {

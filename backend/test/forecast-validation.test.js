@@ -11,6 +11,25 @@ const createForecastRoutes = require('../routes/forecasts');
 Module._load = originalLoad;
 const { validateForecastEntry } = createForecastRoutes;
 
+test('OTM evidence requires complete inputs, consistent derived outputs and a supported job', () => {
+  const otm = require('../../otm-forecast');
+  const shifts = Object.fromEntries(Array.from({length:13},(_,i)=>['P'+(i+1),2]));
+  const data = otm.apply(new Map(),[{jobNumber:'009112',enabled:true,workGroup:'WG',rate:.5,shifts}],{engineerId:'eng',workGroups:['WG']});
+  const valid=data.get('009112');
+  assert.equal(validateForecastEntry('009112',valid),null);
+  const changes=[
+    j=>{j.sources.WG.otmPlan.rate=-1},
+    j=>{delete j.sources.WG.otmPlan.shifts.P13},
+    j=>{j.sources.WG.otmPlan.extra=true},
+    j=>{j.sources.WG.otm.P1=8},
+    j=>{j.wgs.WG.P1=8},
+    j=>{delete j.sources.WG.otmPlan},
+    j=>{j.sources.WG.otmManual={P14:2}}
+  ];
+  changes.forEach(change=>{const j=structuredClone(valid);change(j);assert.notEqual(validateForecastEntry('009112',j),null)});
+  assert.match(validateForecastEntry('009144',valid),/OTM/);
+});
+
 test('source evidence requires known groups, valid periods and non-negative volumes', () => {
   const entry = { wgs: { WG: { P2: 10 } }, sources: { WG: { mst: { P2: 10 }, waif: { P2: 14 }, applied: { P2: 10 } } } };
   assert.equal(validateForecastEntry('009144', entry), null);

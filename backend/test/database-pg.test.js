@@ -36,6 +36,20 @@ function serviceWithClient(handler) {
   return { service, calls, wasReleased: () => released };
 }
 
+test('OTM inputs and derived outputs share the PostgreSQL transaction and reload intact',async()=>{
+ const otm=require('../../otm-forecast');
+ const shifts=Object.fromEntries(Array.from({length:13},(_,i)=>['P'+(i+1),i]));
+ const data=Object.fromEntries(otm.apply(new Map(),[{jobNumber:'009112',enabled:true,workGroup:'WG',rate:.25,shifts}],{engineerId:'eng',workGroups:['WG']}));
+ const fixture=serviceWithClient(sql=>({rows:sql.includes('SELECT revision')?[{revision:0}]:[]}));
+ await fixture.service.saveAllForecasts(data,'FY27','v0',0);
+ const insert=fixture.calls.find(c=>c.sql.startsWith('INSERT INTO forecast_sources'));
+ assert.deepEqual(JSON.parse(insert.params[3][0]),data['009112'].sources);
+ assert.ok(fixture.calls.indexOf(insert)<fixture.calls.findIndex(c=>c.sql==='COMMIT'));
+ fixture.service.pool.query=async sql=>({rows:sql.includes('FROM forecast_sources')?[{job_number:'009112',data_json:insert.params[3][0]}]:sql.includes('FROM forecasts')?Object.entries(data['009112'].wgs.WG).map(([period,value])=>({job_number:'009112',work_group:'WG',period,value})):[]});
+ const restored=(await fixture.service.getForecastData('FY27','v0'))['009112'];
+ assert.deepEqual(restored.sources,data['009112'].sources);assert.equal(restored.wgs.WG.P1,0);assert.equal(restored.wgs.WG.P13,3);
+});
+
 test('PostgreSQL batches source evidence with the forecast transaction and restores it', async () => {
   const sources = { WG: { mst: { P2: 10 }, waif: { P2: 14 }, applied: { P2: 10 } } };
   const fixture = serviceWithClient(sql => ({ rows: sql.includes('SELECT revision') ? [{ revision: 0 }] : [] }));

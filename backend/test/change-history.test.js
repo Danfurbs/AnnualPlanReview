@@ -41,6 +41,21 @@ function sqlite() {
   return { db, service };
 }
 
+test('OTM inputs and outputs persist together in SQLite and remain isolated by FY/version',()=>{
+ const {db,service}=sqlite();
+ try{
+  const otm=require('../../otm-forecast');
+  const shifts=Object.fromEntries(Array.from({length:13},(_,i)=>['P'+(i+1),i]));
+  const data=Object.fromEntries(otm.apply(new Map(),[{jobNumber:'009112',enabled:true,workGroup:'WG',rate:.25,shifts}],{engineerId:'eng',workGroups:['WG']}));
+  service.saveAllForecasts(data,'FY27','v0',0);
+  const restored=service.getForecastSnapshot('FY27','v0').data['009112'];
+  assert.deepEqual(restored.sources,data['009112'].sources);assert.equal(restored.wgs.WG.P1,0);assert.equal(restored.wgs.WG.P13,3);
+  assert.deepEqual(service.getForecastByJob('009112','FY28','v0').wgs,{});assert.deepEqual(service.getForecastByJob('009112','FY27','v1').wgs,{});
+  assert.throws(()=>service.saveAllForecasts({},'FY27','v0',0),/Revision conflict/);
+  assert.deepEqual(service.getForecastByJob('009112','FY27','v0').sources,restored.sources);
+ }finally{db.close()}
+});
+
 test('MST and BI sources round-trip with forecasts, isolate years, and clear atomically', () => {
   const { db, service } = sqlite();
   try {
