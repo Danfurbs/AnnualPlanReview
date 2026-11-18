@@ -3370,6 +3370,16 @@
       document.getElementById('workGroupPlanEditMeta').textContent = `${job.jn} · Plan v1 override · Current Work Done ${workDoneCutoffLabel}: ${isPerformanceAvailable() ? currentWorkDoneTotal.toFixed(1) : 'Unavailable'}`;
       const resetButton = document.getElementById('resetWorkGroupPlanEdit');
       if (resetButton) resetButton.hidden = !hasOverride;
+      const stateLabel = document.getElementById('workGroupPlanV1State');
+      const overrideCount = Object.keys(breakdownPlanEditContext.raw).length;
+      const relatedComments = getJobComments(job.jn);
+      if (stateLabel) {
+        const commentNote = relatedComments.length ? ` There are ${relatedComments.length} comment(s) for this job in the selected FY/DU, which may cover other work groups. Comments do not change forecast volumes.` : '';
+        stateLabel.textContent = overrideCount
+          ? `${overrideCount} saved V1 period override(s) for this work group.${commentNote}`
+          : `No saved V1 period amendments for this work group; the figures currently inherit V0.${commentNote}`;
+        stateLabel.dataset.state = overrideCount ? 'saved' : 'missing';
+      }
       grid.innerHTML = Array.from({ length: 13 }, (_, index) => {
         const period = `P${index + 1}`;
         const value = Number(effectivePeriods[period] || 0);
@@ -3433,12 +3443,34 @@
 
     window.fillWorkGroupPlanFromWorkDone = fillWorkGroupPlanFromWorkDone;
 
+    function fillWorkGroupPlanUniformly() {
+      const context = breakdownPlanEditContext;
+      const uniform = document.getElementById('workGroupPlanUniformValue');
+      if (!context || !uniform || !uniform.checkValidity() || uniform.value.trim() === '') {
+        uniform?.reportValidity();
+        return;
+      }
+      const value = uniform.value;
+      for (let i = 1; i <= 13; i++) {
+        const period = `P${i}`;
+        const input = document.querySelector(`#workGroupPlanEditGrid input[data-period="${period}"]`);
+        if (!input) continue;
+        input.value = value;
+        context.edits[period] = value;
+      }
+      updateBreakdownDraftStatus();
+    }
+    window.fillWorkGroupPlanUniformly = fillWorkGroupPlanUniformly;
+
     function updateBreakdownDraftStatus() {
       const context = breakdownPlanEditContext;
       if (!context) return;
       const count = Object.entries(context.edits).filter(([p, value]) => String(context.raw[p] ?? '') !== value).length;
       const button = document.getElementById('saveWorkGroupPlanEdit');
-      if (button) button.textContent = 'Save (' + count + ' changed period' + (count === 1 ? '' : 's') + ')';
+      if (button) {
+        button.textContent = 'Save (' + count + ' changed period' + (count === 1 ? '' : 's') + ')';
+        button.disabled = count === 0;
+      }
       for (const [period, value] of Object.entries(context.edits)) {
         const label = document.querySelector('[data-provenance="' + period + '"]');
         if (label) label.textContent = value.trim() === '' ? 'From V0' : Number(value) === 0 ? 'Explicit zero' : 'V1 override';
